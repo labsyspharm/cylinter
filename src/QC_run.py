@@ -1,53 +1,70 @@
-import argparse
 import os
+import yaml
 import json
 
-from classQC import QC
+import fire
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--inDir', type=str, default=None)
-parser.add_argument('--outDir', type=str, default='QC_output')
-parser.add_argument('--markers', nargs='*', type=str, default=[])
-parser.add_argument('--samples', type=json.loads, default={})
-parser.add_argument('--replicates', type=json.loads, default={})
-parser.add_argument('--cycleConfig', type=str, default=None)
-parser.add_argument('--omeroSettings', type=str, default=None)
+from QC_class import QC
 
-args = parser.parse_args()
+def run(config_filepath: str):
+    with open(config_filepath, 'r') as f:
+        config = yaml.load(f, Loader=yaml.Loader)
 
-# assert(SOMETHING)  # placeholder for now
+    with open(config['markers_filepath'], 'r') as f:
+        config['markers'] = [line.strip() for line in f]
 
-if not os.path.exists(args.outDir):
-    os.makedirs(args.outDir)
+    with open(config['samples_filepath'], 'r') as f:
+        config['samples'] = yaml.load(f, Loader=yaml.Loader)
 
-df_dir = os.path.join(args.outDir, 'dataframe_archive')
-if not os.path.exists(df_dir):
-    os.makedirs(df_dir)
+    with open(config['replicates_filepath'], 'r') as f:
+        config['replicates'] = yaml.load(f, Loader=yaml.Loader)
 
-# make instance of the QC class
-qc = QC(
-    inDir=args.inDir,
-    outDir=args.outDir,
-    markers=args.markers,
-    samples=args.samples,
-    replicates=args.replicates,
-    cycleConfig=args.cycleConfig,
-    omeroSettings=args.omeroSettings,
-    )
-qc.getSingleCellData(args)
-qc.lassoROIs(args)
-qc.dnaIntensityCutoff(args)
-qc.nuclearAreaCutoff(args)
-qc.crossCyleCorrelation(args)
-qc.log10transform(args)
-qc.pruneOutliers(args)
-qc.getOmeroImages(args)
-qc.performPCA(args)
-qc.performTSNE(args)
-qc.getClustermap(args)
-qc.lassoClusters(args)
-qc.cellDensities(args)
-qc.frequencyStats(args)
-qc.clusterBoxplots(args)
-qc.curateFingernails(args)
-qc.spatialAnalysis(args)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--inDir', type=str, default=None)
+    parser.add_argument('--outDir', type=str, default='QC_output')
+    parser.add_argument('--markers', nargs='*', type=str, default=[])
+    parser.add_argument('--samples', type=json.loads, default={})
+    parser.add_argument('--replicates', type=json.loads, default={})
+    parser.add_argument('--cycleConfig', type=str, default=None)
+    parser.add_argument('--omeroSettings', type=str, default=None)
+
+    args = parser.parse_args()
+
+    if not os.path.exists(config['outDir']):
+        os.makedirs(config['outDir'])
+
+    df_dir = os.path.join(config['outDir'], 'dataframe_archive')
+    if not os.path.exists(df_dir):
+        os.makedirs(df_dir)
+
+    # make instance of the QC class
+    qc = QC(
+        inDir=config['inDir'],
+        outDir=config['outDir'],
+        markers=config['markers'],
+        samples=config['samples'],
+        replicates=config['replicates'],
+        cycleConfig=config['cycleConfig'],
+        omeroSettings=config['omeroSettings'],
+        )
+    qc.getSingleCellData(config)
+    qc.lassoROIs(config)
+    qc.dnaIntensityCutoff(config)
+    qc.nuclearAreaCutoff(config)
+    qc.crossCyleCorrelation(config)
+    qc.log10transform(config)
+    qc.pruneOutliers(config)
+    qc.getOmeroImages(config)
+    qc.performPCA(config)
+    qc.performTSNE(config)
+    qc.getClustermap(config)
+    qc.lassoClusters(config)
+    qc.cellDensities(config)
+    qc.frequencyStats(config)
+    qc.clusterBoxplots(config)
+    qc.curateFingernails(config)
+    qc.spatialAnalysis(config)
+
+
+if __name__ == '__main__':
+    fire.Fire(run)
