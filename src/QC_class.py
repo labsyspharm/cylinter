@@ -1,40 +1,47 @@
+import os
+import re
+import yaml
+import math
+import pickle
+import subprocess
 
+import gc
+import zarr
+import hdbscan
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from skimage import io
-import pickle
 import seaborn as sns
+
+from skimage import io
+from skimage.color import gray2rgb
+from skimage.filters import gaussian
+from skimage.util.dtype import img_as_float
+from skimage.util.dtype import img_as_uint
+
 from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider, Button
 from matplotlib.widgets import TextBox
-from matplotlib.text import Text
-import re
-import subprocess
-from natsort import natsorted, order_by_index, index_natsorted
+from matplotlib.colors import ListedColormap
+
 from sklearn.preprocessing import MinMaxScaler
-import yaml
-import zarr
-from numcodecs import Blosc
-from skimage.util.dtype import img_as_float
-from skimage.util.dtype import img_as_uint
+from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize as norm
+
+from natsort import natsorted, order_by_index, index_natsorted
+from numcodecs import Blosc
 from datetime import datetime
-from sklearn.manifold import TSNE
-import hdbscan
 from joblib import Memory
-from matplotlib.colors import ListedColormap
-import math
 from scipy.stats import ttest_ind
 from rpy2.robjects.packages import importr
 from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
-from skimage.color import gray2rgb
-import gc
-from skimage.filters import gaussian
 from bridson import poisson_disc_samples
 
-from utilsQC import *
+from QC_utils import (save_dataframe, read_dataframe, getZarrs,
+                      cluster_expression, categorical_cmap,
+                      SelectFromCollection)
 
 # map matplotlib color codes to the default seaborn palette
 sns.set()
@@ -320,10 +327,6 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
-            blueLine = ax.axvline(
-                x=lowerCutoff, c='b', linewidth=2.5)
-            redLine = ax.axvline(
-                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -469,10 +472,6 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
-            blueLine = ax.axvline(
-                x=lowerCutoff, c='b', linewidth=2.5)
-            redLine = ax.axvline(
-                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -694,9 +693,6 @@ class QC(object):
         os.chdir(self.outDir)
         pickle_in = open('count_cutoff.pkl', 'rb')
         count_cutoff = pickle.load(pickle_in)
-
-        # get dataframe index
-        total_indices = df.index
 
         # grab dna and sample columns of dataframe
         facet_input = df.loc[:, df.columns.str.contains('dna_|sample')]
@@ -1517,18 +1513,7 @@ class QC(object):
 
     def getClustermap(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
-
-        clustermap_input = df[df['cluster'] != -1]
-
-        cluster_heatmap_input = clustermap_input[
-            self.markers + ['cluster']].groupby('cluster').mean()
-
         sns.set(font_scale=1.1)
-        g = sns.clustermap(
-            cluster_heatmap_input, cmap='viridis', standard_scale=1,
-            square=False, yticklabels=1, linewidth=0.75, cbar=True
-            )
 
         plt.savefig(
             os.path.join(
@@ -1539,8 +1524,6 @@ class QC(object):
     def lassoClusters(self, args):
 
         df = read_dataframe(outDir=self.outDir)
-
-        lasso_dict = {}
 
         subplot_kw = dict(
             xlim=(df['emb1'].min(), df['emb1'].max()),
