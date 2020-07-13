@@ -85,7 +85,8 @@ def read_dataframe(outDir):
     return df
 
 
-def categorical_cmap(numCatagories, numSubcatagories, cmap='tab10', continuous=False):
+def categorical_cmap(numCatagories, numSubcatagories, cmap='tab10',
+                     continuous=False):
     if numCatagories > plt.get_cmap(cmap).N:
         raise ValueError('Too many categories for colormap.')
     if continuous:
