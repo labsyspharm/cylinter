@@ -1,1 +1,1 @@
-python ~/projects/QC/runQC.py confg.yaml
+python QC_run.py confg.yaml
