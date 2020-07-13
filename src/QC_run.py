@@ -6,10 +6,13 @@ import fire
 
 from QC_class import QC
 
+
 def run(config_filepath: str):
+    # load config file
     with open(config_filepath, 'r') as f:
         config = yaml.load(f, Loader=yaml.Loader)
 
+    # parse param files
     with open(config['markers_filepath'], 'r') as f:
         config['markers'] = [line.strip() for line in f]
 
@@ -19,17 +22,7 @@ def run(config_filepath: str):
     with open(config['replicates_filepath'], 'r') as f:
         config['replicates'] = yaml.load(f, Loader=yaml.Loader)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--inDir', type=str, default=None)
-    parser.add_argument('--outDir', type=str, default='QC_output')
-    parser.add_argument('--markers', nargs='*', type=str, default=[])
-    parser.add_argument('--samples', type=json.loads, default={})
-    parser.add_argument('--replicates', type=json.loads, default={})
-    parser.add_argument('--cycleConfig', type=str, default=None)
-    parser.add_argument('--omeroSettings', type=str, default=None)
-
-    args = parser.parse_args()
-
+    # create directory
     if not os.path.exists(config['outDir']):
         os.makedirs(config['outDir'])
 
@@ -47,6 +40,7 @@ def run(config_filepath: str):
         cycleConfig=config['cycleConfig'],
         omeroSettings=config['omeroSettings'],
         )
+
     qc.getSingleCellData(config)
     qc.lassoROIs(config)
     qc.dnaIntensityCutoff(config)
