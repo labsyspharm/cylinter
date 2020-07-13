@@ -1,7 +1,7 @@
 inDir: /Users/greg/projects/QC/datasets/mc38
 outDir: /Users/greg/projects/QC/QC_output
-markers: markers.csv
-samples: samples.yaml
-replicates: replicates.yaml
+markers_filepath: markers.csv
+samples_filepath: samples.yaml
+replicates_filepath: replicates.yaml
 cycleConfig: 'gjb15@transfer.rc.hms.harvard.edu: /home/gjb15/scripts/cycif/haigis/config/config_template.yml'
 omeroSettings: 'gjb15@transfer.rc.hms.harvard.edu: /home/gjb15/scripts/cycif/haigis/omero/sample_2_settings.yml'
