@@ -1517,7 +1517,7 @@ class QC(object):
 
         plt.savefig(
             os.path.join(
-                self.outDir, f'clustermap.pdf'), bbox_inches='tight')
+                self.outDir, 'clustermap.pdf'), bbox_inches='tight')
 
         plt.show(block=True)
 
@@ -1660,7 +1660,7 @@ class QC(object):
                 patch.set_x(patch.get_x() + diff * 0.5)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.outDir, f'facetGrid.pdf'))
+        plt.savefig(os.path.join(self.outDir, 'facetGrid.pdf'))
         plt.show(block=True)
 
     def frequencyStats(self, args):
@@ -1715,7 +1715,7 @@ class QC(object):
                 'cd' if 'cd' in i else 'hfd' for i in group['sample']
                 ]
             group['replicate'] = [
-                re.sub("\D", "", i) for i in group['sample']
+                re.sub("\\D", "", i) for i in group['sample']
                 ]
             group['cluster'] = w
 
