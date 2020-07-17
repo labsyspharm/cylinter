@@ -1,40 +1,47 @@
+import os
+import re
+import yaml
+import math
+import pickle
+import subprocess
 
+import gc
+import zarr
+import hdbscan
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from skimage import io
-import pickle
 import seaborn as sns
+
+from skimage import io
+from skimage.color import gray2rgb
+from skimage.filters import gaussian
+from skimage.util.dtype import img_as_float
+from skimage.util.dtype import img_as_uint
+
 from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider, Button
 from matplotlib.widgets import TextBox
-from matplotlib.text import Text
-import re
-import subprocess
-from natsort import natsorted, order_by_index, index_natsorted
+from matplotlib.colors import ListedColormap
+
 from sklearn.preprocessing import MinMaxScaler
-import yaml
-import zarr
-from numcodecs import Blosc
-from skimage.util.dtype import img_as_float
-from skimage.util.dtype import img_as_uint
+from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize as norm
+
+from natsort import natsorted, order_by_index, index_natsorted
+from numcodecs import Blosc
 from datetime import datetime
-from sklearn.manifold import TSNE
-import hdbscan
 from joblib import Memory
-from matplotlib.colors import ListedColormap
-import math
 from scipy.stats import ttest_ind
 from rpy2.robjects.packages import importr
 from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
-from skimage.color import gray2rgb
-import gc
-from skimage.filters import gaussian
 from bridson import poisson_disc_samples
 
-from utilsQC import *
+from QC_utils import (save_dataframe, read_dataframe, getZarrs,
+                      cluster_expression, categorical_cmap,
+                      SelectFromCollection)
 
 # map matplotlib color codes to the default seaborn palette
 sns.set()
@@ -320,10 +327,6 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
-            blueLine = ax.axvline(
-                x=lowerCutoff, c='b', linewidth=2.5)
-            redLine = ax.axvline(
-                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -469,10 +472,6 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
-            blueLine = ax.axvline(
-                x=lowerCutoff, c='b', linewidth=2.5)
-            redLine = ax.axvline(
-                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -694,9 +693,6 @@ class QC(object):
         os.chdir(self.outDir)
         pickle_in = open('count_cutoff.pkl', 'rb')
         count_cutoff = pickle.load(pickle_in)
-
-        # get dataframe index
-        total_indices = df.index
 
         # grab dna and sample columns of dataframe
         facet_input = df.loc[:, df.columns.str.contains('dna_|sample')]
@@ -1532,15 +1528,13 @@ class QC(object):
 
         plt.savefig(
             os.path.join(
-                self.outDir, f'clustermap.pdf'), bbox_inches='tight')
+                self.outDir, 'clustermap.pdf'), bbox_inches='tight')
 
         plt.show(block=True)
 
     def lassoClusters(self, args):
 
         df = read_dataframe(outDir=self.outDir)
-
-        lasso_dict = {}
 
         subplot_kw = dict(
             xlim=(df['emb1'].min(), df['emb1'].max()),
@@ -1677,7 +1671,7 @@ class QC(object):
                 patch.set_x(patch.get_x() + diff * 0.5)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.outDir, f'facetGrid.pdf'))
+        plt.savefig(os.path.join(self.outDir, 'facetGrid.pdf'))
         plt.show(block=True)
 
     def frequencyStats(self, args):
@@ -1732,7 +1726,7 @@ class QC(object):
                 'cd' if 'cd' in i else 'hfd' for i in group['sample']
                 ]
             group['replicate'] = [
-                re.sub("\D", "", i) for i in group['sample']
+                re.sub("\\D", "", i) for i in group['sample']
                 ]
             group['cluster'] = w
 
