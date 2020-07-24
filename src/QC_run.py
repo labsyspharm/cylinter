@@ -39,6 +39,7 @@ def run(config_filepath: str):
         replicates=config['replicates'],
         cycleConfig=config['cycleConfig'],
         omeroSettings=config['omeroSettings'],
+        randomSampleSize=config['randomSampleSize']
         )
 
     qc.getSingleCellData(config)
