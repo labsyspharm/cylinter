@@ -72,6 +72,7 @@ def dataset_files(root):
 
 class QC(object):
     def __init__(self,
+
                  inDir=None,
                  outDir=None,
                  markers=None,
@@ -79,6 +80,8 @@ class QC(object):
                  replicates=None,
                  cycleConfig=None,
                  omeroSettings=None,
+                 randomSampleSize=None,
+
                  numPCAComponents=2,
                  pointSize=125.0,
                  normalize=True,
@@ -93,10 +96,19 @@ class QC(object):
                  learningRate=200.0,
                  metric='euclidean',
                  random_state=5,
+                 
                  denominator_cluster=2,
                  FDRCorrection=False,
+
                  bonferroniCorrection=False,
+                 
+                 denominator_cluster=2,
+                 FDRCorrection=False,
+        
+                 bonferroniCorrection=False,
+                 
                  numFingernails=10,
+
                  cropDict={
                      'cd13': ('top', 10000),
                      'hfd3': ('bottom', 11000),
@@ -114,6 +126,7 @@ class QC(object):
                     'CD11B_MYC': 2, 'CD8T': 7
                     },
                  radiusRange=[40, 600],
+
                  dfSaveCount=1
                  ):
         """
@@ -128,6 +141,7 @@ class QC(object):
             image pre-preprossesing config file.
             omeroSettings:rsync source-->destination command for
             Omero settings config file.
+            randomSampleSize: analyze a random subset of data; float (0-1)
 
           performPCA module —
             numPCAComponents: number of PCs
@@ -189,25 +203,38 @@ class QC(object):
         self.replicates = replicates
         self.cycleConfig = cycleConfig
         self.omeroSettings = omeroSettings
+        self.randomSampleSize = randomSampleSize
+
         self.numPCAComponents = numPCAComponents
         self.pointSize = pointSize
         self.normalize = normalize
         self.labelPoints = labelPoints
         self.condHueDict = condHueDict
+
         self.numTSNEComponents = numTSNEComponents
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
         self.learningRate = learningRate
         self.metric = metric
         self.random_stats = random_state
+
         self.denominator_cluster = denominator_cluster
         self.FDRCorrection = FDRCorrection
+
         self.bonferroniCorrection = bonferroniCorrection
+
+        self.denominator_cluster = denominator_cluster
+        self.FDRCorrection = FDRCorrection
+
+        self.bonferroniCorrection = bonferroniCorrection
+
         self.numFingernails = numFingernails
+
         self.cropDict = cropDict
         self.spatialDict1 = spatialDict1
         self.spatialDict2 = spatialDict2
         self.radiusRange = radiusRange
+
         self.dfSaveCount = dfSaveCount
 
     def getSingleCellData(self, args):
@@ -263,6 +290,10 @@ class QC(object):
             'dna_cycle5', 'dna_cycle6', 'dna_cycle7', 'dna_cycle8',
             'dna_cycle9', 'dna_cycle10'] + self.markers
         df = df[cols]
+
+        # handle data subsetting
+        df = df.sample(frac=self.randomSampleSize, random_state=1)
+        df.reset_index(drop=True, inplace=True)
 
         self.dfSaveCount = save_dataframe(
             df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
