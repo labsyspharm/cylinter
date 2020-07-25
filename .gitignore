@@ -1,4 +1,3 @@
 .DS_Store
 datasets
-output/
-__pycache__
+QC_output

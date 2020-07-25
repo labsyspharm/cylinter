@@ -72,7 +72,6 @@ def dataset_files(root):
 
 class QC(object):
     def __init__(self,
-
                  inDir=None,
                  outDir=None,
                  markers=None,
@@ -80,8 +79,6 @@ class QC(object):
                  replicates=None,
                  cycleConfig=None,
                  omeroSettings=None,
-                 randomSampleSize=None,
-
                  numPCAComponents=2,
                  pointSize=125.0,
                  normalize=True,
@@ -103,7 +100,6 @@ class QC(object):
                  bonferroniCorrection=False,
 
                  numFingernails=10,
-
                  cropDict={
                      'cd13': ('top', 10000),
                      'hfd3': ('bottom', 11000),
@@ -121,72 +117,13 @@ class QC(object):
                     'CD11B_MYC': 2, 'CD8T': 7
                     },
                  radiusRange=[40, 600],
-
                  dfSaveCount=1
                  ):
         """
         Args:
-          config.yaml —
-            input_dir: path to csv tables and t-CyCIF images (Zarr arrays)
-            output_dir: path to save directory
-            markers: probes to be used in the analysis
-            samples: map of sample names to experimental condition
-            replicates: map of sample names to replicate number
-            cycleConfig: rsync source-->destination command for
-            image pre-preprossesing config file.
-            omeroSettings:rsync source-->destination command for
-            Omero settings config file.
-            randomSampleSize: analyze a random subset of data; float (0-1)
-
-          performPCA module —
-            numPCAComponents: number of PCs
-            pointSize: scatter point size
-            normalize: scale input vectors individually to
-            unit norm (vector length)
-            labelPoints: annotate scatter points
-            condHueDict: color scatter points by experimental condition
-
-          performTSNE module —
-            numTSNEComponents: dimension of the TSNE embedding
-            perplexity: related to the number of nearest neighbors
-            used in other manifold learning algorithms. Larger datasets
-            usually require larger perplexity. Different values can
-            result in significanlty different results.
-            earlyExaggeration: for larger values, the space between
-            natural clusters will be larger in the embedded space.
-            learningRate: t-SNE learning rate: usually [10.0, 1000.0]
-            metric: string allowed by scipy.spatial.distance.pdist for
-            its metric parameter, or a metric listed in
-            pairwise.PAIRWISE_DISTANCE_FUNCTIONS.
-            random_state: integer, determines the random number generator.
-            For reproducible results across multiple function calls.
-
-          frequencyStats —
-            denominator_cluster: HDBSCAN cluster to use as the
-            denominator when computing cell frequency ratios
-            FDRCorrection: true, report p-vals corrected for
-            multiple comparisions by False Discovery Rate method (q-vals);
-            false, report uncorrected p-vals
-
-          clusterBoxplots —
-            bonferroniCorrection: true, report p-vals corrected for
-            multiple comparisions by Bonferroni method (q-vals);
-            false, report uncorrected p-vals
-
-          curateFingernails —
-            numFingernails: number of example cells to randomly draw from
-            each HDBSCAN cluster
-
-          spatialAnalysis —
-            cropDict: vertical crop coordinate (numpy row) and
-            sub-image to use for t-CyCIF images containing more
-            than one tissue section
-            spatialDict1: cutoff for pixel-level protein signal instensities
-            spatialDict2: map of cell state call to HDBSCAN cluster
-            for cell states of interest
-            radiusRange: range of radii (in pixels) for Poisson-disc sampling
-            dfSaveCount: integer (typically 1) to start counting from
-            each time the dataframe is updated and saved to disc
+            input_dir: directory containing single-cell data files
+            output_dir: directory save QC output files
+            markers: molecular probes to be considered in the analysis
         """
 
         # assert(SOMETHING)  # placeholder for now
@@ -198,33 +135,27 @@ class QC(object):
         self.replicates = replicates
         self.cycleConfig = cycleConfig
         self.omeroSettings = omeroSettings
-        self.randomSampleSize = randomSampleSize
-
         self.numPCAComponents = numPCAComponents
         self.pointSize = pointSize
         self.normalize = normalize
         self.labelPoints = labelPoints
         self.condHueDict = condHueDict
-
         self.numTSNEComponents = numTSNEComponents
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
         self.learningRate = learningRate
         self.metric = metric
         self.random_stats = random_state
-
-        self.denominator_cluster = denominator_cluster
+        self.denominator_clusters = denominator_clusters
         self.FDRCorrection = FDRCorrection
 
         self.bonferroniCorrection = bonferroniCorrection
 
         self.numFingernails = numFingernails
-
         self.cropDict = cropDict
         self.spatialDict1 = spatialDict1
         self.spatialDict2 = spatialDict2
         self.radiusRange = radiusRange
-
         self.dfSaveCount = dfSaveCount
 
     def getSingleCellData(self, args):
@@ -280,10 +211,6 @@ class QC(object):
             'dna_cycle5', 'dna_cycle6', 'dna_cycle7', 'dna_cycle8',
             'dna_cycle9', 'dna_cycle10'] + self.markers
         df = df[cols]
-
-        # handle data subsetting
-        df = df.sample(frac=self.randomSampleSize, random_state=1)
-        df.reset_index(drop=True, inplace=True)
 
         self.dfSaveCount = save_dataframe(
             df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
@@ -1263,7 +1190,7 @@ class QC(object):
             palette=[
                 self.condHueDict['cd'] if 'cd' in i else
                 self.condHueDict['hfd'] for i in medians.index],
-            edgecolor='k', s=self.pointSize, alpha=1.0, legend=False)
+            edgecolor='k', s=125, alpha=1.0, legend=False)
 
         # annotate data points
         if self.labelPoints is True:
@@ -1809,7 +1736,7 @@ class QC(object):
             group['cluster'] = w
 
             # get denominator cell count of each sample
-            if self.denominator_cluster is None:
+            if self.denominator_clusters is None:
                 group['tissue_count'] = [
                     len(stats_input[stats_input['sample'] == i]) for
                     i in group['sample']]
@@ -1817,7 +1744,7 @@ class QC(object):
                 group['tissue_count'] = [
                     len(stats_input[(stats_input['sample'] == i) &
                         (stats_input[
-                            'cluster'] == self.denominator_cluster)]) for
+                            'cluster'] == self.denominator_clusters)]) for
                     i in group['sample']]
 
             # compute density of cells per sample corresponding to
@@ -2013,7 +1940,7 @@ class QC(object):
                 means1, means2,
                 axis=0, equal_var=False, nan_policy='propagate')
 
-            if self.bonferroniCorrection:
+            if self.BonferroniCorrection:
 
                 # perform Bonferroni correction
                 p_adj = pval * len(boxplot_input['label'].unique())/2
