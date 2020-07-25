@@ -96,17 +96,12 @@ class QC(object):
                  learningRate=200.0,
                  metric='euclidean',
                  random_state=5,
-                 
+
                  denominator_cluster=2,
                  FDRCorrection=False,
 
                  bonferroniCorrection=False,
-                 
-                 denominator_cluster=2,
-                 FDRCorrection=False,
-        
-                 bonferroniCorrection=False,
-                 
+
                  numFingernails=10,
 
                  cropDict={
@@ -217,11 +212,6 @@ class QC(object):
         self.learningRate = learningRate
         self.metric = metric
         self.random_stats = random_state
-
-        self.denominator_cluster = denominator_cluster
-        self.FDRCorrection = FDRCorrection
-
-        self.bonferroniCorrection = bonferroniCorrection
 
         self.denominator_cluster = denominator_cluster
         self.FDRCorrection = FDRCorrection
