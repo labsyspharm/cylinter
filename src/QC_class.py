@@ -96,17 +96,12 @@ class QC(object):
                  learningRate=200.0,
                  metric='euclidean',
                  random_state=5,
-                 
+
                  denominator_cluster=2,
                  FDRCorrection=False,
 
                  bonferroniCorrection=False,
-                 
-                 denominator_cluster=2,
-                 FDRCorrection=False,
-        
-                 bonferroniCorrection=False,
-                 
+
                  numFingernails=10,
 
                  cropDict={
@@ -190,7 +185,8 @@ class QC(object):
             spatialDict2: map of cell state call to HDBSCAN cluster
             for cell states of interest
             radiusRange: range of radii (in pixels) for Poisson-disc sampling
-            dfSaveCount: integer (typically 1) to start counting from
+
+            dfSaveCount: integer (typically 1) from which start counting
             each time the dataframe is updated and saved to disc
         """
 
@@ -217,11 +213,6 @@ class QC(object):
         self.learningRate = learningRate
         self.metric = metric
         self.random_stats = random_state
-
-        self.denominator_cluster = denominator_cluster
-        self.FDRCorrection = FDRCorrection
-
-        self.bonferroniCorrection = bonferroniCorrection
 
         self.denominator_cluster = denominator_cluster
         self.FDRCorrection = FDRCorrection
