@@ -39,7 +39,7 @@ from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
 from bridson import poisson_disc_samples
 
-from QC_utils import (save_dataframe, read_dataframe, getZarrs,
+from QC_utils import (save_dataframe, read_dataframe, loadZarrs,
                       cluster_expression, categorical_cmap,
                       SelectFromCollection)
 
@@ -406,6 +406,10 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
+            blueLine = ax.axvline(
+                x=lowerCutoff, c='b', linewidth=2.5)
+            redLine = ax.axvline(
+                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -460,7 +464,7 @@ class QC(object):
         lowerCutoff, upperCutoff = update(val=None)
 
         fig, ax = plt.subplots()
-        # plot cell area histogram BEFORE filtering
+        # plot DNA intensity histogram BEFORE filtering
         plt.hist(
             df['dna_cycle1'], bins=bins,
             density=False, color='b', ec='none',
@@ -474,7 +478,7 @@ class QC(object):
             (df['dna_cycle1'] < upperCutoff)
             ]
 
-        # plot cell area histogram AFTER filtering
+        # plot DNA intensity histogram AFTER filtering
         plt.hist(
             df['dna_cycle1'], bins=bins, color='r', ec='none',
             alpha=0.5, histtype=histtype, range=rnge, label='after')
@@ -551,6 +555,10 @@ class QC(object):
             [i.remove() for i in ax.get_lines()]
             lowerCutoff = sLower.val
             upperCutoff = sUpper.val
+            blueLine = ax.axvline(
+                x=lowerCutoff, c='b', linewidth=2.5)
+            redLine = ax.axvline(
+                x=upperCutoff, c='r', linewidth=2.5)
             return lowerCutoff, upperCutoff
 
         sLower.on_changed(update)
@@ -605,7 +613,7 @@ class QC(object):
         lowerCutoff, upperCutoff = update(val=None)
 
         fig, ax = plt.subplots()
-        # plot cell area histogram BEFORE filtering
+        # plot nuclear area histogram BEFORE filtering
         plt.hist(
             df['area'], bins=bins,
             density=False, color='b', ec='none',
@@ -619,7 +627,7 @@ class QC(object):
             (df['area'] < upperCutoff)
             ]
 
-        # plot cell area histogram AFTER filtering
+        # plot nuclear area histogram AFTER filtering
         plt.hist(
             df['area'], bins=bins, color='r', ec='none',
             alpha=0.5, histtype=histtype, range=rnge, label='after')
@@ -1111,8 +1119,11 @@ class QC(object):
         # get config_template.yml from cluster
         subprocess.call(['rsync', '-avP', self.cycleConfig, self.outDir])
 
+        # apply omero bottom and top signal intensity cutoffs
+        subprocess.call(['rsync', '-avP', self.omeroSettings, self.outDir])
+
         # load configuration file
-        config = yaml.load(
+        config = yaml.safe_load(
             open(f'{self.outDir}/config_template.yml'))
 
         # set cycle map from configuration file to a variable
@@ -1189,10 +1200,7 @@ class QC(object):
                     zs[f'{s}_{v}'][:] = img
             print()
 
-            # apply omero bottom and top signal intensity cutoffs
-            subprocess.call(['rsync', '-avP', self.omeroSettings, self.outDir])
-
-            channel_settings = yaml.load(
+            channel_settings = yaml.safe_load(
                 open(f'{self.outDir}/sample_2_settings.yml'))
 
             # set channel start to 0.0 to see all background,
@@ -1220,14 +1228,6 @@ class QC(object):
                 temp = np.clip(temp, 0, 1)
 
                 zs[k][:] = img_as_uint(temp)
-
-        zs = {}
-        for s in df['sample'].unique():
-            zs[f'{s}_dna'] = zarr.open(f'{zarrs_dir}/{s}_dna.zarr', mode='r')
-            for k, v in cycle_map.items():
-                zs[f'{s}_{v}'] = zarr.open(
-                    f'{zarrs_dir}/{s}_{v}.zarr', mode='r'
-                    )
 
     def performPCA(self, args):
 
@@ -1296,7 +1296,12 @@ class QC(object):
 
         df = read_dataframe(outDir=self.outDir)
 
-        if not os.path.join(self.outDir, 'embedding.npy'):
+        if os.path.exists(os.path.join(self.outDir, 'embedding.npy')):
+            embedded = np.load(os.path.join(self.outDir, 'embedding.npy'))
+            df['emb1'] = embedded[:, 0]
+            df['emb2'] = embedded[:, 1]
+
+        else:
             startTime = datetime.now()
             embedded = TSNE(
                 n_components=self.numTSNEComponents,
@@ -1313,11 +1318,6 @@ class QC(object):
             df['emb1'] = embedded[:, 0]
             df['emb2'] = embedded[:, 1]
 
-        else:
-            embedded = np.load(os.path.join(self.outDir, 'embedding.npy'))
-            df['emb1'] = embedded[:, 0]
-            df['emb2'] = embedded[:, 1]
-
         sns.set_style('white')
 
         def submit(text, df):
@@ -1328,8 +1328,6 @@ class QC(object):
             if len(tup) == 1:
 
                 mylist = [tup[0]]
-
-                scatter_point_size = 0.045
 
                 for i in mylist:
 
@@ -1417,7 +1415,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=scatter_point_size,
+                                s=135000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -1488,7 +1486,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=scatter_point_size,
+                                s=135000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -1549,8 +1547,6 @@ class QC(object):
 
                 mylist = list(range(tup[0], tup[1] + 1, 1))
                 mylist.reverse()  # run higher sizes first for plot order
-
-                scatter_point_size = 0.045
 
                 for i in mylist:
 
@@ -2051,7 +2047,7 @@ class QC(object):
 
         df = read_dataframe(outDir=self.outDir)
 
-        zs = getZarrs(df=df, cycleConfig=self.cycleConfig, outDir=self.outDir)
+        zs = loadZarrs(df=df, outDir=self.outDir)
 
         thumbnail_input = df[df['cluster'] >= 0]
 
@@ -2262,7 +2258,7 @@ class QC(object):
 
         df = read_dataframe(outDir=self.outDir)
 
-        zs = getZarrs(df=df, cycleConfig=self.cycleConfig, outDir=self.outDir)
+        zs = loadZarrs(df=df, cycleConfig=self.cycleConfig, outDir=self.outDir)
 
         spatial_dir = os.path.join(self.outDir, 'spatial_analysis')
         if not os.path.exists(spatial_dir):
