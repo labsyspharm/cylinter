@@ -154,13 +154,10 @@ def cluster_expression(df, markers, cluster, num_proteins):
     return hi_markers
 
 
-def getZarrs(df, cycleConfig, outDir):
-
-    # get config_template.yml from cluster
-    subprocess.call(['rsync', '-avP', cycleConfig, outDir])
+def loadZarrs(df, outDir):
 
     # load configuration file
-    config = yaml.load(
+    config = yaml.safe_load(
         open(f'{outDir}/config_template.yml'))
 
     # set cycle map from configuration file to a variable
