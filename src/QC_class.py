@@ -23,6 +23,9 @@ from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider, Button
 from matplotlib.widgets import TextBox
 from matplotlib.colors import ListedColormap
+from matplotlib.path import Path
+
+import napari
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.manifold import TSNE
@@ -118,7 +121,7 @@ class QC(object):
                     'aco2': 0.07, 'glut1': 0.25
                     },
                  spatialDict2={
-                    'CD11B_MYC': 2, 'CD8T': 7
+                    'TCF1': 0, 'CD8T': 1
                     },
                  radiusRange=[40, 600],
 
@@ -297,55 +300,85 @@ class QC(object):
         if not os.path.exists(os.path.join(self.outDir, 'lasso_dict.pkl')):
 
             lasso_dict = {}
+
             for name, group in df.groupby('sample'):
-                data = df[['x', 'y']][df['sample'] == name]
-                data.reset_index(drop=False, inplace=True)
 
-                subplot_kw = dict(
-                    xlim=(data['x'].min(), data['x'].max()),
-                    ylim=(data['y'].min(), data['y'].max()),
-                    autoscale_on=False)
+                sample_data = group[['x', 'y']].astype(int)
 
-                subplot_kw = dict()
-
-                fig, ax = plt.subplots(subplot_kw=subplot_kw)
-
-                # read ashlar_output dna channel
                 dna = io.imread(f'{self.inDir}/{name}_dna.tif')
 
-                ax.imshow(dna, cmap='gray')
+                columns, rows = np.meshgrid(
+                    np.arange(dna.shape[1]),
+                    np.arange(dna.shape[0])
+                    )
+                columns, rows = columns.flatten(), rows.flatten()
+                pixel_coords = np.vstack((rows, columns)).T
 
-                plt.grid(False)
-                pts = ax.scatter(data['x'], data['y'], c='lime', s=0.0005)
-                selector = SelectFromCollection(ax, pts)
+                with napari.gui_qt():
+                    viewer = napari.view_image(
+                        dna, rgb=False, name=f'{name}_dna'
+                        )
 
-                def accept(event):
-                    if event.key == "enter":
-                        print("Selected points:")
-                        print(selector.xys[selector.ind])
-                        selector.disconnect()
-                        ax.set_title("")
-                        fig.canvas.draw()
+                    selection_layer = viewer.add_shapes(
+                        shape_type='polygon',
+                        face_color=[1.0, 1.0, 1.0, 0.2],
+                        edge_color=[0.0, 0.66, 1.0, 1.0],
+                        edge_width=10.0,
+                        name='ROI(s)'
+                        )
 
-                fig.canvas.mpl_connect("key_press_event", accept)
-                ax.set_title(
-                    f'Sample {name}. Press enter to accept selected points.')
-                ax.set_aspect('equal')
-                plt.show(block=True)
+                    # @viewer.mouse_drag_callbacks.append
+                    # def get_cell_indices(viewer, event):
+                    #
+                    #     # on mouse press
+                    #     yield
+                    #
+                    #     # on mouse move
+                    #     while event.type == 'mouse_move':
+                    #         yield
+                    #
+                    #     # on mouse release
+                    #     selection_layer = viewer.layers['ROI_1']
+                    #     yield
 
-                # filter dataframe
-                drop_idx = (
-                    set(np.array(list(range(selector.xys.data.shape[0]))))
-                    - set(selector.ind))
+                sample_data['tuple'] = list(
+                    zip(sample_data['y'], sample_data['x'])
+                    )
 
-                idx = data['index'].iloc[list(drop_idx)].values
-                df.drop(idx, inplace=True)
-                lasso_dict[name] = idx
+                idxs_to_drop = []
+                mask_coords = set()
+                cell_coords = set(
+                    [tuple(i) for i in np.array(sample_data[['y', 'x']])]
+                    )
+                for roi in selection_layer.data:
+
+                    selection_verts = np.round(roi).astype(int)
+                    polygon = Path(selection_verts)
+
+                    grid = polygon.contains_points(pixel_coords)
+                    mask = grid.reshape(
+                        dna.shape[0], dna.shape[1])
+
+                    mask_coords.update(
+                        [tuple(i) for i in np.argwhere(mask)]
+                        )
+
+                inter = mask_coords.intersection(cell_coords)
+
+                idxs_to_drop.extend(
+                    [i[0] for i in sample_data.iterrows() if
+                     i[1]['tuple'] not in inter]
+                     )
+
+                lasso_dict[name] = idxs_to_drop
 
             os.chdir(self.outDir)
             f = open('lasso_dict.pkl', 'wb')
             pickle.dump(lasso_dict, f)
             f.close()
+
+            for key, value in lasso_dict.items():
+                df.drop(lasso_dict[key], inplace=True)
 
             self.dfSaveCount = save_dataframe(
                 df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
@@ -442,7 +475,7 @@ class QC(object):
                 coords = df_test[
                     ['x', 'y', 'dna_cycle1']][df_test['sample'] == text]
                 sp = ax.scatter(
-                    coords['x'], coords['y'], s=coords['dna_cycle1']*40,
+                    coords['x'], coords['y'], s=3.5,
                     c=coords['dna_cycle1'], cmap='viridis')
                 plt.title(
                     f'Sample {text}. '
@@ -591,7 +624,7 @@ class QC(object):
                 coords = df_test[
                     ['x', 'y', 'area']][df_test['sample'] == text]
                 sp = ax.scatter(
-                    coords['x'], coords['y'], s=coords['area']/100,
+                    coords['x'], coords['y'], s=3.5,
                     c=coords['area'], cmap='viridis')
                 plt.title(
                     f'Sample {text}. '
@@ -970,7 +1003,7 @@ class QC(object):
 
         g.map(
             lambda x, y, color: plt.scatter(
-                x, y, ec='none', s=0.001, c='r'), 'signal', 'area')
+                x, y, ec='none', s=5000/len(df), c='r'), 'signal', 'area')
 
         g.set_titles(
             col_template="{col_name}", row_template="{row_name}",
@@ -1063,7 +1096,7 @@ class QC(object):
 
             g.map(
                 lambda x, y, color: plt.scatter(
-                    x, y, ec='none', s=0.001, c='r'), 'signal', 'area')
+                    x, y, ec='none', s=5000/len(df), c='r'), 'signal', 'area')
 
             g.set_titles(
                 col_template='{col_name}', row_template='{row_name}',
@@ -2258,7 +2291,7 @@ class QC(object):
 
         df = read_dataframe(outDir=self.outDir)
 
-        zs = loadZarrs(df=df, cycleConfig=self.cycleConfig, outDir=self.outDir)
+        zs = loadZarrs(df=df, outDir=self.outDir)
 
         spatial_dir = os.path.join(self.outDir, 'spatial_analysis')
         if not os.path.exists(spatial_dir):
