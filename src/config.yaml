@@ -1,8 +1,0 @@
-inDir: /Users/greg/projects/haigis_collaboration/sample_2/analysis/data
-outDir: /Users/greg/projects/cycif-qc/output
-markers_filepath: markers.csv
-samples_filepath: samples.yaml
-replicates_filepath: replicates.yaml
-cycleConfig: 'gjb15@transfer.rc.hms.harvard.edu: /home/gjb15/scripts/cycif/haigis/config/config_template.yml'
-omeroSettings: 'gjb15@transfer.rc.hms.harvard.edu: /home/gjb15/scripts/cycif/haigis/omero/sample_2_settings.yml'
-randomSampleSize: 0.01

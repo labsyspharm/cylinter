@@ -13,7 +13,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from skimage import io
+# from skimage import io
 from skimage.color import gray2rgb
 from skimage.filters import gaussian
 from skimage.util.dtype import img_as_float
@@ -26,6 +26,7 @@ from matplotlib.colors import ListedColormap
 from matplotlib.path import Path
 
 import napari
+from tifffile import imread
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.manifold import TSNE
@@ -42,8 +43,8 @@ from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
 from bridson import poisson_disc_samples
 
-from QC_utils import (save_dataframe, read_dataframe, loadZarrs,
-                      cluster_expression, categorical_cmap,
+from QC_utils import (save_dataframe, read_dataframe, read_markers,
+                      loadZarrs, cluster_expression, categorical_cmap,
                       SelectFromCollection)
 
 # map matplotlib color codes to the default seaborn palette
@@ -78,11 +79,9 @@ class QC(object):
 
                  inDir=None,
                  outDir=None,
-                 markers=None,
-                 samples=None,
-                 replicates=None,
-                 cycleConfig=None,
-                 omeroSettings=None,
+                 markers_filepath=None,
+                 mask_object=None,
+                 sample_metadata=None,
                  randomSampleSize=None,
 
                  numPCAComponents=2,
@@ -135,10 +134,6 @@ class QC(object):
             markers: probes to be used in the analysis
             samples: map of sample names to experimental condition
             replicates: map of sample names to replicate number
-            cycleConfig: rsync source-->destination command for
-            image pre-preprossesing config file.
-            omeroSettings:rsync source-->destination command for
-            Omero settings config file.
             randomSampleSize: analyze a random subset of data; float (0-1)
 
           performPCA module —
@@ -197,11 +192,9 @@ class QC(object):
 
         self.inDir = inDir
         self.outDir = outDir
-        self.markers = markers
-        self.samples = samples
-        self.replicates = replicates
-        self.cycleConfig = cycleConfig
-        self.omeroSettings = omeroSettings
+        self.markers_filepath = markers_filepath
+        self.mask_object = mask_object
+        self.sample_metadata = sample_metadata
         self.randomSampleSize = randomSampleSize
 
         self.numPCAComponents = numPCAComponents
@@ -233,20 +226,24 @@ class QC(object):
 
     def getSingleCellData(self, args):
 
-        files = dataset_files(self.inDir)
+        files = dataset_files(f'{self.inDir}/csv')
 
-        sample_to_condition = self.samples
-        sample_to_replicate = self.replicates
+        sample_metadata = self.sample_metadata
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
 
         df_list = []
         for file in files:
+
             sample = file.split('.')[0]
 
             print(f'Importing single-cell data for sample {sample}.')
 
-            data = pd.read_csv(os.path.join(self.inDir, file))
+            data = pd.read_csv(os.path.join(f'{self.inDir}/csv', file))
 
-            data['sample'] = sample
+            data['Sample'] = sample
 
             # append dataframe to list
             df_list.append(data)
@@ -260,52 +257,54 @@ class QC(object):
         df.reset_index(drop=True, inplace=True)
 
         # add condition column
-        df['condition'] = [
-            sample_to_condition[s] for s in df['sample']]
+        df['Condition'] = [
+            sample_metadata[s][0] for s in df['Sample']]
 
         # add replicate column
-        df['replicate'] = [
-            int(sample_to_replicate[s]) for s in df['sample']]
-
-        # reindex dna cycles starting at 1, not 0
-        dna_dict = {}
-        idx_seed = 1
-        for cycle in df.columns.sort_values():
-            if 'dna_cycle' in cycle:
-                dna_dict[cycle] = 'dna_cycle' + str(idx_seed)
-                idx_seed += 1
-
-        df.rename(columns=dna_dict, inplace=True)
+        df['Replicate'] = [
+            sample_metadata[s][1] for s in df['Sample']]
 
         # organize columns
-        cols = [
-            'x', 'y', 'area', 'sample', 'condition', 'replicate', 'mask_id',
-            'dna_cycle1', 'dna_cycle2', 'dna_cycle3', 'dna_cycle4',
-            'dna_cycle5', 'dna_cycle6', 'dna_cycle7', 'dna_cycle8',
-            'dna_cycle9', 'dna_cycle10'] + self.markers
+        cols = (
+            ['CellID', 'Sample', 'Condition', 'Replicate', 'X_centroid',
+             'Y_centroid', 'column_centroid', 'row_centroid', 'Area',
+             'MajorAxisLength', 'MinorAxisLength', 'Eccentricity', 'Solidity',
+             'Extent', 'Orientation'] +
+            [f'{i}_cellMask' for i in markers['marker_name']]
+             )
         df = df[cols]
 
         # handle data subsetting
         df = df.sample(frac=self.randomSampleSize, random_state=1)
+        df.sort_values(by=['Sample', 'CellID'], inplace=True)
         df.reset_index(drop=True, inplace=True)
 
-        self.dfSaveCount = save_dataframe(
-            df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
-            )
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='getSingleCellData')
+        self.data = df
+
+        return self.data
 
     def lassoROIs(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
 
         if not os.path.exists(os.path.join(self.outDir, 'lasso_dict.pkl')):
 
             lasso_dict = {}
 
-            for name, group in df.groupby('sample'):
+            for sample_name, group in df.groupby('Sample'):
 
-                sample_data = group[['x', 'y']].astype(int)
+                sample_data = group[['X_centroid', 'Y_centroid']].astype(int)
 
-                dna = io.imread(f'{self.inDir}/{name}_dna.tif')
+                if '-' in sample_name:
+                    img_name = sample_name.split('-')[1]
+                else:
+                    img_name = sample_name
+                dna = imread(
+                    f'{self.inDir}/images/{img_name}.tif',
+                    key=0  # key 0 is first dna cycle in markers.csv file
+                    )
 
                 columns, rows = np.meshgrid(
                     np.arange(dna.shape[1]),
@@ -316,7 +315,7 @@ class QC(object):
 
                 with napari.gui_qt():
                     viewer = napari.view_image(
-                        dna, rgb=False, name=f'{name}_dna'
+                        dna, rgb=False, name=f'{sample_name}_dna'
                         )
 
                     selection_layer = viewer.add_shapes(
@@ -342,35 +341,42 @@ class QC(object):
                     #     yield
 
                 sample_data['tuple'] = list(
-                    zip(sample_data['y'], sample_data['x'])
+                    zip(sample_data['Y_centroid'], sample_data['X_centroid'])
                     )
 
                 idxs_to_drop = []
                 mask_coords = set()
                 cell_coords = set(
-                    [tuple(i) for i in np.array(sample_data[['y', 'x']])]
+                    [tuple(i) for i in np.array(
+                        sample_data[['Y_centroid', 'X_centroid']])]
                     )
-                for roi in selection_layer.data:
 
-                    selection_verts = np.round(roi).astype(int)
-                    polygon = Path(selection_verts)
+                # take all cells if no ROIs are drawn
+                if len(selection_layer.data) == 0:
+                    continue
 
-                    grid = polygon.contains_points(pixel_coords)
-                    mask = grid.reshape(
-                        dna.shape[0], dna.shape[1])
+                else:
+                    for roi in selection_layer.data:
 
-                    mask_coords.update(
-                        [tuple(i) for i in np.argwhere(mask)]
-                        )
+                        selection_verts = np.round(roi).astype(int)
+                        polygon = Path(selection_verts)
 
-                inter = mask_coords.intersection(cell_coords)
+                        grid = polygon.contains_points(pixel_coords)
+                        mask = grid.reshape(
+                            dna.shape[0], dna.shape[1])
 
-                idxs_to_drop.extend(
-                    [i[0] for i in sample_data.iterrows() if
-                     i[1]['tuple'] not in inter]
-                     )
+                        mask_coords.update(
+                            [tuple(i) for i in np.argwhere(mask)]
+                            )
 
-                lasso_dict[name] = idxs_to_drop
+                    inter = mask_coords.intersection(cell_coords)
+
+                    idxs_to_drop.extend(
+                        [i[0] for i in sample_data.iterrows() if
+                         i[1]['tuple'] not in inter]
+                         )
+
+                    lasso_dict[sample_name] = idxs_to_drop
 
             os.chdir(self.outDir)
             f = open('lasso_dict.pkl', 'wb')
@@ -380,9 +386,11 @@ class QC(object):
             for key, value in lasso_dict.items():
                 df.drop(lasso_dict[key], inplace=True)
 
-            self.dfSaveCount = save_dataframe(
-                df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
-                )
+            save_dataframe(
+                df=df, outDir=self.outDir,  moduleName='lassoROIs')
+            self.data = df
+
+            return self.data
 
         else:
 
@@ -393,27 +401,32 @@ class QC(object):
             for key, value in lasso_dict.items():
                 df.drop(lasso_dict[key], inplace=True)
 
-            self.dfSaveCount = save_dataframe(
-                df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
-                )
+            save_dataframe(df=df, outDir=self.outDir, moduleName='lassoROIs')
+            self.data = df
+
+            return self.data
 
     def dnaIntensityCutoff(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
 
         bins = 100
-        rnge = [0, 0.55]
+
         histtype = 'stepfilled'
 
         sns.set_style('whitegrid')
         fig, ax = plt.subplots()
         plt.subplots_adjust(left=0.25, bottom=0.25)
 
-        plt.hist(
-            df['dna_cycle1'], bins=bins,
+        n, bins, patches = plt.hist(
+            df[f'{dna1}_cellMask'], bins=bins,
             density=False, color='grey', ec='none',
             alpha=0.75, histtype=histtype,
-            range=rnge, label='before'
+            range=None, label='before'
             )
 
         plt.title('median DNA intensity')
@@ -422,6 +435,8 @@ class QC(object):
         axcolor = 'lightgoldenrodyellow'
         axLowerCutoff = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
         axUpperCutoff = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+
+        rnge = [0, bins.max()]
 
         sLower = Slider(
             axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
@@ -461,22 +476,30 @@ class QC(object):
 
             # apply lower and upper cutoffs
             df_test = df[
-                (df['dna_cycle1'] > lowerCutoff) &
-                (df['dna_cycle1'] < upperCutoff)
+                (df[f'{dna1}_cellMask'] > lowerCutoff) &
+                (df[f'{dna1}_cellMask'] < upperCutoff)
                 ]
 
-            if text in df['sample'].unique():
-                dna = io.imread(
-                    f'{self.inDir}/{text}_dna.tif')
+            if text in df['Sample'].unique():
+
+                if '-' in text:
+                    img_name = text.split('-')[1]
+                else:
+                    img_name = text
+                dna = imread(
+                    f'{self.inDir}/images/{img_name}.tif',
+                    key=0
+                    )
 
                 fig, ax = plt.subplots()
                 ax.imshow(dna, cmap='gray')
                 ax.grid(False)
                 coords = df_test[
-                    ['x', 'y', 'dna_cycle1']][df_test['sample'] == text]
+                    ['X_centroid', 'Y_centroid', f'{dna1}_cellMask']][
+                        df_test['Sample'] == text]
                 sp = ax.scatter(
-                    coords['x'], coords['y'], s=3.5,
-                    c=coords['dna_cycle1'], cmap='viridis')
+                    coords['X_centroid'], coords['Y_centroid'], s=3.5,
+                    c=coords[f'{dna1}_cellMask'], cmap='viridis')
                 plt.title(
                     f'Sample {text}. '
                     f'Selected cells colored by DNA intensity.'
@@ -491,7 +514,7 @@ class QC(object):
             hovercolor='1.0',
             label_pad=0.05
             )
-        text_box.on_text_change(lambda val: submit(val, df))
+        text_box.on_submit(lambda val: submit(val, df))
         plt.show(block=True)
 
         lowerCutoff, upperCutoff = update(val=None)
@@ -499,22 +522,22 @@ class QC(object):
         fig, ax = plt.subplots()
         # plot DNA intensity histogram BEFORE filtering
         plt.hist(
-            df['dna_cycle1'], bins=bins,
+            df[f'{dna1}_cellMask'], bins=bins,
             density=False, color='b', ec='none',
             alpha=0.5, histtype=histtype,
-            range=rnge, label='before'
+            range=None, label='before'
             )
 
         # apply lower and upper cutoffs
         df = df[
-            (df['dna_cycle1'] > lowerCutoff) &
-            (df['dna_cycle1'] < upperCutoff)
+            (df[f'{dna1}_cellMask'] > lowerCutoff) &
+            (df[f'{dna1}_cellMask'] < upperCutoff)
             ]
 
         # plot DNA intensity histogram AFTER filtering
         plt.hist(
-            df['dna_cycle1'], bins=bins, color='r', ec='none',
-            alpha=0.5, histtype=histtype, range=rnge, label='after')
+            df[f'{dna1}_cellMask'], bins=bins, color='r', ec='none',
+            alpha=0.5, histtype=histtype, range=None, label='after')
         plt.xlabel('median DNA intensity')
         plt.ylabel('count')
 
@@ -542,27 +565,30 @@ class QC(object):
         plt.savefig(os.path.join(self.outDir, 'histogram_dna.pdf'))
         plt.close()
 
-        self.dfSaveCount = save_dataframe(
-            df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='dnaIntensityCutoff'
             )
+        self.data = df
+
+        return self.data
 
     def nuclearAreaCutoff(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
 
         bins = 100
-        rnge = [0, 1000]
+
         histtype = 'stepfilled'
 
         sns.set_style('whitegrid')
         fig, ax = plt.subplots()
         plt.subplots_adjust(left=0.25, bottom=0.25)
 
-        plt.hist(
-            df['area'], bins=bins,
+        n, bins, patches = plt.hist(
+            df['Area'], bins=bins,
             density=False, color='grey', ec='none',
             alpha=0.75, histtype=histtype,
-            range=rnge, label='before'
+            range=None, label='before'
             )
 
         plt.title('nuclear area')
@@ -571,6 +597,8 @@ class QC(object):
         axcolor = 'lightgoldenrodyellow'
         axLowerCutoff = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
         axUpperCutoff = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+
+        rnge = [0, bins.max()]
 
         sLower = Slider(
             axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
@@ -610,22 +638,30 @@ class QC(object):
 
             # apply lower and upper cutoffs
             df_test = df[
-                (df['area'] > lowerCutoff) &
-                (df['area'] < upperCutoff)
+                (df['Area'] > lowerCutoff) &
+                (df['Area'] < upperCutoff)
                 ]
 
-            if text in df['sample'].unique():
-                dna = io.imread(
-                    f'{self.inDir}/{text}_dna.tif')
+            if text in df['Sample'].unique():
+
+                if '-' in text:
+                    img_name = text.split('-')[1]
+                else:
+                    img_name = text
+                dna = imread(
+                    f'{self.inDir}/images/{img_name}.tif',
+                    key=0
+                    )
 
                 fig, ax = plt.subplots()
                 ax.imshow(dna, cmap='gray')
                 ax.grid(False)
                 coords = df_test[
-                    ['x', 'y', 'area']][df_test['sample'] == text]
+                    ['X_centroid', 'Y_centroid', 'Area']][
+                        df_test['Sample'] == text]
                 sp = ax.scatter(
-                    coords['x'], coords['y'], s=3.5,
-                    c=coords['area'], cmap='viridis')
+                    coords['X_centroid'], coords['Y_centroid'], s=3.5,
+                    c=coords['Area'], cmap='viridis')
                 plt.title(
                     f'Sample {text}. '
                     f'Selected cells colored by nuclear area.'
@@ -640,7 +676,7 @@ class QC(object):
             hovercolor='1.0',
             label_pad=0.05
             )
-        text_box.on_text_change(lambda val: submit(val, df))
+        text_box.on_submit(lambda val: submit(val, df))
         plt.show(block=True)
 
         lowerCutoff, upperCutoff = update(val=None)
@@ -648,22 +684,22 @@ class QC(object):
         fig, ax = plt.subplots()
         # plot nuclear area histogram BEFORE filtering
         plt.hist(
-            df['area'], bins=bins,
+            df['Area'], bins=bins,
             density=False, color='b', ec='none',
             alpha=0.5, histtype=histtype,
-            range=rnge, label='before'
+            range=None, label='before'
             )
 
         # apply lower and upper cutoffs
         df = df[
-            (df['area'] > lowerCutoff) &
-            (df['area'] < upperCutoff)
+            (df['Area'] > lowerCutoff) &
+            (df['Area'] < upperCutoff)
             ]
 
         # plot nuclear area histogram AFTER filtering
         plt.hist(
-            df['area'], bins=bins, color='r', ec='none',
-            alpha=0.5, histtype=histtype, range=rnge, label='after')
+            df['Area'], bins=bins, color='r', ec='none',
+            alpha=0.5, histtype=histtype, range=None, label='after')
         plt.xlabel('nuclear area')
         plt.ylabel('count')
 
@@ -696,46 +732,61 @@ class QC(object):
         if not os.path.exists(lasso_dir):
             os.mkdir(lasso_dir)
 
-        for sample in df['sample'].unique():
+        for sample_name in df['Sample'].unique():
 
-            dna = io.imread(
-                f'{self.inDir}/{sample}_dna.tif')
+            if '-' in sample_name:
+                img_name = sample_name.split('-')[1]
+            else:
+                img_name = sample_name
+            dna = imread(
+                f'{self.inDir}/images/{img_name}.tif',
+                key=0
+                )
 
             fig, ax = plt.subplots()
             ax.imshow(dna, cmap='gray')
             ax.grid(False)
-            coords = df[['x', 'y', 'area']][df['sample'] == sample]
+            coords = df[['X_centroid', 'Y_centroid', 'Area']][
+                df['Sample'] == sample_name]
             sp = ax.scatter(
-                coords['x'], coords['y'], s=coords['area']/100,
-                c=coords['area'], cmap='viridis')
+                coords['X_centroid'], coords['Y_centroid'],
+                s=coords['Area']/100, c=coords['Area'], cmap='viridis'
+                )
             plt.title(
-                f'Sample {sample}. Lasso colored by nuclear area')
+                f'Sample {sample_name}. Lasso colored by nuclear area')
             plt.colorbar(sp)
             plt.savefig(
                 os.path.join(
-                    lasso_dir, f'{sample}.png'), dpi=1000)
+                    lasso_dir, f'{sample_name}.png'), dpi=1000)
             plt.close('all')
 
-        self.dfSaveCount = save_dataframe(
-            df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='nuclearAreaCutoff'
             )
+        self.data = df
+
+        return self.data
 
     def crossCyleCorrelation(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
 
         ratios = pd.DataFrame(
             [np.log10(
-                (df['dna_cycle1'] + 0.00001) /
+                (df[f'{dna1}_cellMask'] + 0.00001) /
                 (df[i] + 0.00001)) for i in
-                df.columns[df.columns.str.contains('dna_cycle')]]).T
+                df.columns[df.columns.str.contains(dna_prefix)]]).T
 
         list1 = [i for i in ratios.columns if i.startswith('Unnamed')]
         list2 = [f'1/{i+1}' for i in range(1, len(list1)+1)]
         ratio_columns = dict(zip(list1, list2))
         ratios.rename(columns=ratio_columns, inplace=True)
-        ratios.drop('dna_cycle1', axis=1, inplace=True)
-        ratios['sample'] = df['sample']
+        ratios.drop(f'{dna1}_cellMask', axis=1, inplace=True)
+        ratios['sample'] = df['Sample']
 
         ratios = ratios.melt(id_vars=['sample'])
         ratios.rename(columns={'variable': 'cycles'}, inplace=True)
@@ -815,20 +866,22 @@ class QC(object):
         count_cutoff = pickle.load(pickle_in)
 
         # grab dna and sample columns of dataframe
-        facet_input = df.loc[:, df.columns.str.contains('dna_|sample')]
+        facet_input = df.loc[
+            :, df.columns.str.contains(f'{dna_prefix}|Sample')
+            ]
 
         # initialize a set to append indices to drop
         indices_to_drop = set()
 
         # loop over samples
-        for sample in df['sample'].unique():
+        for sample in df['Sample'].unique():
 
             # slice sample-specific data
-            sample_df = df[df['sample'] == sample]
+            sample_df = df[df['Sample'] == sample]
 
             # loop over dna cycle columns
             for col_name in sample_df.columns:
-                if 'dna_cycle' in col_name:
+                if dna_prefix in col_name:
 
                     # get cycle number
                     cycle_num = str(re.search(r'\d+', col_name).group())
@@ -837,8 +890,9 @@ class QC(object):
 
                         # get ratios
                         ratios = np.log10(
-                            (sample_df['dna_cycle1'] + 0.00001) /
-                            (sample_df['dna_cycle' + cycle_num] + 0.00001))
+                            (sample_df[f'{dna1}_cellMask'] + 0.00001) /
+                            (sample_df[f'{dna_prefix}{cycle_num}_cellMask'] +
+                             0.00001))
 
                         # get histogram elements
                         sns.set_style('whitegrid')
@@ -880,11 +934,11 @@ class QC(object):
 
         # grab dna and sample columns
         facet_input = df.loc[
-            :, df.columns.str.contains('dna_|sample')].copy()
+            :, df.columns.str.contains(f'{dna_prefix}|Sample')].copy()
 
         # plot cell dropout facet (per cycle)
         facet_per_cycle_melt = (
-            facet_input.drop(['sample'], axis=1)
+            facet_input.drop(['Sample'], axis=1)
             .melt(var_name='cycle', value_name='signal'))
 
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -892,26 +946,26 @@ class QC(object):
 
         g.map(
             lambda y, color: plt.scatter(
-                y, facet_input['dna_cycle1'],
+                y, facet_input[f'{dna1}_cellMask'],
                 s=0.25, alpha=0.1, linewidth=None,
                 marker='o', c='r'), 'signal')
         plt.savefig(
             os.path.join(
-                self.outDir, 'cycle_correlation(perCycle).png'), dpi=1000)
+                self.outDir, 'cycle_correlation(perCycle).pdf'))
         plt.close('all')
 
         # plot cell dropout facet (per sample per cycle)
         # take a fraction of the total dataframe for plotting
         facet_per_sample_per_cycle_melt = (
             facet_input.sample(frac=0.1)
-            .melt(id_vars=['sample'],
+            .melt(id_vars=['Sample'],
                   var_name='cycle', value_name='signal')
             )
 
-        facet_per_sample_per_cycle_melt['sample'] = pd.Categorical(
-            facet_per_sample_per_cycle_melt['sample'], ordered=True,
+        facet_per_sample_per_cycle_melt['Sample'] = pd.Categorical(
+            facet_per_sample_per_cycle_melt['Sample'], ordered=True,
             categories=natsorted(
-                facet_per_sample_per_cycle_melt['sample'].unique()))
+                facet_per_sample_per_cycle_melt['Sample'].unique()))
 
         facet_per_sample_per_cycle_melt['cycle'] = pd.Categorical(
             facet_per_sample_per_cycle_melt['cycle'], ordered=True,
@@ -919,253 +973,312 @@ class QC(object):
                 facet_per_sample_per_cycle_melt['cycle'].unique()))
 
         facet_per_sample_per_cycle_melt = (
-            facet_per_sample_per_cycle_melt.sort_values(['sample', 'cycle'])
+            facet_per_sample_per_cycle_melt.sort_values(['Sample', 'cycle'])
             )
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        # build cmap
         cmap = categorical_cmap(
-            numCatagories=10, numSubcatagories=3,
-            cmap='tab10', continuous=False
+            numUniqueSamples=len(
+                facet_per_sample_per_cycle_melt['Sample'].unique()),
+            numCatagories=10,
+            cmap='tab10',
+            continuous=False
             )
-
-        # trim qualitative cmap to the number of unique samples
-        trim = len(cmap.colors) - len(
-            facet_per_sample_per_cycle_melt['sample'].unique())
 
         sample_color_dict = dict(
             zip(
-                natsorted(facet_per_sample_per_cycle_melt['sample'].unique()),
-                cmap.colors[:-trim])
+                natsorted(facet_per_sample_per_cycle_melt['Sample'].unique()),
+                cmap.colors)
                 )
 
         g = sns.FacetGrid(
-            facet_per_sample_per_cycle_melt, col='cycle', hue='sample'
+            facet_per_sample_per_cycle_melt, col='cycle', hue='Sample'
             )
 
         g.map(
             lambda sam, y, color, **kwargs: plt.scatter(
                 y, facet_per_sample_per_cycle_melt.loc[
-                    (facet_per_sample_per_cycle_melt['sample'] ==
+                    (facet_per_sample_per_cycle_melt['Sample'] ==
                      sam.unique()[0])
                     & (facet_per_sample_per_cycle_melt['cycle'] ==
-                       'dna_cycle1'), 'signal'],
+                       f'{dna1}_cellMask'), 'signal'],
                 c=np.reshape(sample_color_dict[sam.unique()[0]], (-1, 3)),
                 s=0.25, linewidth=None, marker='o', **kwargs),
-            'sample', 'signal'
+            'Sample', 'signal'
             )
 
         plt.legend(markerscale=10, bbox_to_anchor=(1.1, 1.05))
 
         plt.savefig(
             os.path.join(
-                self.outDir, 'cycle_correlation(perSample).png'), dpi=600,
+                self.outDir, 'cycle_correlation(perSample).pdf'),
             bbox_inches='tight')
         plt.close('all')
 
-        self.dfSaveCount = save_dataframe(
-            df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='crossCyleCorrelation'
             )
+        self.data = df
+
+        return self.data
 
     def log10transform(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
 
-        df[self.markers] += 0.00000000001
-        df[self.markers] = np.log10(df[self.markers])
-
-        self.dfSaveCount = save_dataframe(
-            df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
             )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
+
+        # rescale abx intensities between 0 and 1
+        # min_max_scaler = MinMaxScaler()
+        # df[abx_channels] = min_max_scaler.fit_transform(df[abx_channels])
+
+        # log10 transform
+        df[abx_channels] += 0.00000000001
+        df[abx_channels] = np.log10(df[abx_channels])
+
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='log10transform'
+            )
+        self.data = df
+
+        return self.data
 
     def pruneOutliers(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
+
+        sample_metadata = self.sample_metadata
+
+        # save images
+        correlation_dir = os.path.join(self.outDir, 'lassos')
+        if not os.path.exists(correlation_dir):
+            os.mkdir(correlation_dir)
 
         # plot raw signal intensity histrograms for inspection
-        hist_facet = (
-            df[['sample', 'area'] + self.markers]
-            .sample(frac=1.0)
-            .melt(
-                id_vars=['sample', 'area'],
-                var_name='channel', value_name='signal')
-            )
+        for ab in abx_channels:
 
-        # sort naturally by sample column
-        hist_facet = hist_facet.reindex(
-            index=order_by_index(
-                hist_facet.index, index_natsorted(hist_facet['sample'])))
+            print(ab)
 
-        g = sns.FacetGrid(
-            hist_facet, row='sample', col='channel',
-            height=0.5, aspect=1.0, sharex=True, sharey=False
-            )
-
-        g.map(
-            lambda x, y, color: plt.scatter(
-                x, y, ec='none', s=5000/len(df), c='r'), 'signal', 'area')
-
-        g.set_titles(
-            col_template="{col_name}", row_template="{row_name}",
-            fontweight='bold', size=1.5, pad=0.75)
-
-        for ax in g.axes.flatten():
-            # ax.get_xaxis().set_ticks([0, 0.25, 0.5, 0.75, 1.0])
-            ax.tick_params(axis='both', which='major', labelsize=0.2, pad=-5)
-            ax.xaxis.label.set_size(2.0)
-            ax.yaxis.label.set_size(2.0)
-            ax.grid(linewidth=0.075)
-
-        plt.subplots_adjust(
-            left=0.01, bottom=0.01, right=0.99,
-            top=0.99, hspace=0.4, wspace=0.4
-            )
-
-        plt.savefig(
-            os.path.join(
-                self.outDir, 'scatter_plots(raw).png'), dpi=1000)
-        plt.close()
-
-        subprocess.call(
-            ['open', '-a', 'Preview', os.path.join(
-                self.outDir, 'scatter_plots(raw).png')])
-
-        def submit(text, df):
-
-            lowerPercentileCutoff = float(text.split(',')[0])
-            upperPercentileCutoff = float(text.split(',')[1][1:])
-
-            indices_to_drop = []
-            for s in df['sample'].unique():
-                for col in df[self.markers]:
-
-                    data = df[col][df['sample'] == s]
-
-                    # add row index to list if column value < lower bound
-                    indices_to_drop.extend(
-                        data.index[
-                            data < np.percentile(data, lowerPercentileCutoff)]
-                            )
-
-                    # add row index to list if column value > upper bound
-                    indices_to_drop.extend(
-                        data.index[
-                            data > np.percentile(data, upperPercentileCutoff)])
-
-            df = df.drop(
-                labels=set(indices_to_drop), axis=0,
-                inplace=False, errors='raise')
-
-            # rescale signal intensities
-            for s in df['sample'].unique():
-                data = df[df['sample'] == s]
-                scaler = MinMaxScaler(
-                        feature_range=(0, 1), copy=True).fit(
-                            data[self.markers].values)
-                rescaled_channel_data = scaler.transform(
-                    data[self.markers].values)
-
-                rescaled_channel_data = pd.DataFrame(
-                    data=rescaled_channel_data,
-                    index=data[self.markers].index,
-                    columns=data[self.markers].columns
-                    )
-
-                df.update(rescaled_channel_data)
-
-            # plot pruned and rescaled signal intensity histrograms
             hist_facet = (
-                df[['sample', 'area'] + self.markers]
+                df[['Sample', 'Condition', 'Area'] + [ab]]
                 .sample(frac=1.0)
                 .melt(
-                    id_vars=['sample', 'area'],
+                    id_vars=['Sample', 'Condition', 'Area'],
                     var_name='channel', value_name='signal')
                 )
 
-            # sort naturally by sample column
-            hist_facet = hist_facet.reindex(
-                index=order_by_index(
-                    hist_facet.index,
-                    index_natsorted(hist_facet['sample']))
-                    )
+            # sort and create labels column for plotting
+            hist_facet.sort_values(by=['Condition', 'Sample'], inplace=True)
+            hist_facet['for_plot'] = (
+                hist_facet['Condition'] + '_' +
+                hist_facet['Sample']
+                )
 
+            sns.set_style('white')
             g = sns.FacetGrid(
-                hist_facet, row='sample', col='channel',
+                hist_facet, col='for_plot', col_wrap=15,
                 height=0.5, aspect=1.0, sharex=True, sharey=False
                 )
 
             g.map(
-                lambda x, y, color: plt.scatter(
-                    x, y, ec='none', s=5000/len(df), c='r'), 'signal', 'area')
+                lambda x, y, color: plt.hexbin(
+                    x, y, gridsize=20, linewidths=0.02, color='dimgrey'),
+                'signal', 'Area')
 
             g.set_titles(
-                col_template='{col_name}', row_template='{row_name}',
-                fontweight='bold', size=1.5, pad=0.75)
+                col_template="{col_name}", fontweight='bold',
+                size=1.5, pad=0.75
+                )
+
+            g.fig.suptitle(ab, y=0.97)
 
             for ax in g.axes.flatten():
-                # ax.get_xaxis().set_ticks([0, 0.25, 0.5, 0.75, 1.0])
                 ax.tick_params(
-                    axis='both', which='major', labelsize=0.2, pad=-5)
+                    axis='both', which='major',
+                    labelsize=0.2, pad=-5
+                    )
                 ax.xaxis.label.set_size(2.0)
                 ax.yaxis.label.set_size(2.0)
-                ax.grid(linewidth=0.075)
+                ax.spines['left'].set_visible(False)
+                ax.spines['bottom'].set_visible(False)
 
             plt.subplots_adjust(
                 left=0.01, bottom=0.01, right=0.99,
-                top=0.99, hspace=0.4, wspace=0.4
+                top=0.90, hspace=0.4, wspace=0.4
                 )
 
             plt.savefig(
                 os.path.join(
-                    self.outDir,
-                    'scatterplots(pruned_rescaled).png'), dpi=1000)
+                    correlation_dir, f'{ab}_hexbins(raw).pdf'))
+
             plt.close()
 
             subprocess.call(
-                ['open', '-a', 'Preview',
-                 os.path.join(
-                    self.outDir, 'scatterplots(pruned_rescaled).png')]
-                 )
+                ['open', '-a', 'Preview', os.path.join(
+                    correlation_dir, f'{ab}_hexbins(raw).pdf')])
 
-            self.dfSaveCount = save_dataframe(
-                df=df, outDir=self.outDir, dfSaveCount=self.dfSaveCount
+            def submit(text, df):
+
+                lowerPercentileCutoff = float(text.split(',')[0])
+                upperPercentileCutoff = float(text.split(',')[1])
+
+                ab = str(text.split(',')[2][1:])
+
+                # for s in df['Sample'].unique():
+
+                data = df[ab]
+
+                indices_to_drop = []
+
+                # add row index to list if column value < lower bound
+                indices_to_drop.extend(
+                    data.index[
+                        data < np.percentile(data, lowerPercentileCutoff)]
+                        )
+
+                # add row index to list if column value > upper bound
+                indices_to_drop.extend(
+                    data.index[
+                        data > np.percentile(data, upperPercentileCutoff)])
+
+                df = df.drop(
+                    labels=set(indices_to_drop), axis=0,
+                    inplace=False, errors='raise')
+
+                pruned_data = df[ab]
+
+                # rescale channel signal intensities
+                scaler = (
+                    MinMaxScaler(feature_range=(0, 1), copy=True)
+                    .fit(pruned_data.values.reshape(-1, 1))
+                        )
+                rescaled_data = scaler.transform(
+                    pruned_data.values.reshape(-1, 1)
+                    )
+
+                rescaled_data = pd.DataFrame(
+                    data=rescaled_data,
+                    index=pruned_data.index,
+                    ).rename(columns={0: ab})
+
+                df.update(rescaled_data)
+
+                # plot pruned and rescaled signal intensity histrograms
+                hist_facet = (
+                    df[['Sample', 'Condition', 'Area'] + [ab]]
+                    .sample(frac=1.0)
+                    .melt(
+                        id_vars=['Sample', 'Condition', 'Area'],
+                        var_name='channel', value_name='signal')
+                    )
+
+                # sort and create labels column for plotting
+                hist_facet.sort_values(
+                    by=['Condition', 'Sample'], inplace=True
+                    )
+                hist_facet['for_plot'] = (
+                    hist_facet['Condition'] + '_' +
+                    hist_facet['Sample']
+                    )
+
+                g = sns.FacetGrid(
+                    hist_facet, col='for_plot', col_wrap=15,
+                    height=0.5, aspect=1.0, sharex=True, sharey=False
+                    )
+
+                g.map(
+                    lambda x, y, color: plt.hexbin(
+                        x, y, gridsize=20, linewidths=0.02, color='dimgrey'),
+                    'signal', 'Area')
+
+                g.set_titles(
+                    col_template="{col_name}", fontweight='bold',
+                    size=1.5, pad=0.75
+                    )
+
+                g.fig.suptitle(ab, y=0.97)
+
+                for ax in g.axes.flatten():
+                    ax.tick_params(
+                        axis='both', which='major',
+                        labelsize=0.2, pad=-5
+                        )
+                    ax.xaxis.label.set_size(2.0)
+                    ax.yaxis.label.set_size(2.0)
+                    ax.spines['left'].set_visible(False)
+                    ax.spines['bottom'].set_visible(False)
+
+                plt.subplots_adjust(
+                    left=0.01, bottom=0.01, right=0.99,
+                    top=0.90, hspace=0.4, wspace=0.4
+                    )
+
+                plt.savefig(
+                    os.path.join(
+                        correlation_dir,
+                        f'{ab}_hexbins(pruned_rescaled).pdf')
+                        )
+
+                plt.close()
+
+                subprocess.call(
+                    ['open', '-a', 'Preview', os.path.join(
+                        correlation_dir,
+                        f'{ab}_hexbins(pruned_rescaled).pdf')]
+                        )
+                ##################
+
+            plt.rcParams['figure.figsize'] = (7, 3)
+            axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
+            text_box = TextBox(
+                axbox,
+                'lowerCutoff, upperCutoff, abxName',
+                initial='',
+                color='0.95',
+                hovercolor='1.0',
+                label_pad=0.05
                 )
+            text_box.label.set_size(10)
 
-        plt.rcParams['figure.figsize'] = (7, 3)
-        axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
-        text_box = TextBox(
-            axbox,
-            'lowerPercentileCutoff, upperPercentileCutoff',
-            initial='',
-            color='0.95',
-            hovercolor='1.0',
-            label_pad=0.05
+            text_box.on_submit(lambda text: submit(text, df))
+
+            plt.show(block=True)
+
+        save_dataframe(
+            df=df, outDir=self.outDir, moduleName='pruneOutliers'
             )
-        text_box.label.set_size(10)
+        self.data = df
 
-        text_box.on_submit(lambda text: submit(text, df))
+        return self.data
 
-        plt.show(block=True)
+    def makeZarrs(self, args):
 
-    def getOmeroImages(self, args):
+        df = self.data
 
-        # get config_template.yml from cluster
-        subprocess.call(['rsync', '-avP', self.cycleConfig, self.outDir])
-
-        # apply omero bottom and top signal intensity cutoffs
-        subprocess.call(['rsync', '-avP', self.omeroSettings, self.outDir])
-
-        # load configuration file
-        config = yaml.safe_load(
-            open(f'{self.outDir}/config_template.yml'))
-
-        # set cycle map from configuration file to a variable
-        cycle_map = config['cycle_map']
-
-        df = read_dataframe(outDir=self.outDir)
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
 
         # make directory to store zarr arrays
-        zarrs_dir = os.path.join(self.outDir, 'ashlar_zarrs')
+        zarrs_dir = os.path.join(self.outDir, 'zarrs')
         if not os.path.exists(zarrs_dir):
             os.mkdir(zarrs_dir)
 
@@ -1176,53 +1289,67 @@ class QC(object):
             compressor = Blosc(cname='zstd', clevel=3, shuffle=Blosc.SHUFFLE)
 
             # loop over tissue samples
-            for s in df['sample'].unique():
+            for sample_name in df['Sample'].unique():
 
                 # read segmentation mask for sample to crop
                 # ashlar_output images to the same size
-                segmentation = io.imread(
-                    os.path.join(self.inDir, f'{s}_segmentation.tif'))
+                if '-' in sample_name:
+                    img_name = sample_name.split('-')[1]
+                else:
+                    img_name = sample_name
+
+                segmentation = imread(
+                    os.path.join(
+                        f'{self.inDir}/masks',
+                        f'{img_name}-{self.mask_object}.tif')
+                        )
 
                 # read DNA ashlar_output image
-                img = io.imread(
-                    os.path.join(
-                        self.inDir, f'{s}_dna.tif'))
+                img = imread(
+                    f'{self.inDir}/images/{img_name}.tif',
+                    key=0  # key 0 is first dna cycle in markers.csv file
+                    )
 
                 # crop DNA image to size of U-Net segmentation mask
                 img = img[0:segmentation.shape[0], 0:segmentation.shape[1]]
 
                 # initialize zarr array for DNA image, append to a dictionary
-                zs[f'{s}_dna'] = zarr.open(
-                    f'{zarrs_dir}/{s}_dna.zarr', mode='w',
+                zs[f'{img_name}_{dna1}'] = zarr.open(
+                    f'{zarrs_dir}/{img_name}_{dna1}.zarr', mode='w',
                     shape=(
                         img.shape[0], img.shape[1]),
                     chunks=(1000, 1000), dtype='uint16', compressor=compressor
                     )
 
                 # update zarr array with DNA image data
-                zs[f'{s}_dna'][:] = img
+                zs[f'{img_name}_{dna1}'][:] = img
 
                 # update zarr array with all antibody images
-                for k, v in cycle_map.items():
+                # for k, v in cycle_map.items():
+                abx_channels = [
+                    i for i in markers['marker_name'] if
+                    dna_prefix not in i
+                    ]
 
-                    print(f'Storing sample {s} {v}.tif')
+                for ab in abx_channels:
 
-                    # split key into cycle_number and channel_number components
-                    cycle_number = str(int(k.split('_')[0])-1)
-                    channel_number = k.split('_')[1]
+                    print(f'Storing sample {img_name} {ab}.tif')
 
-                    # read ashlar_output image
-                    img = io.imread(
-                        os.path.join(
-                            self.inDir, f'{s}_cycle_{cycle_number}_channel_'
-                            f'{channel_number}.tif'))
+                    channel_number = markers['channel_number'][
+                        markers['marker_name'] == ab].iloc[0]
+
+                    # read antibody image
+                    img = imread(
+                        f'{self.inDir}/images/{img_name}.tif',
+                        key=(channel_number-1)
+                        )
 
                     # crop image to size of U-Net segmentation mask
                     img = img[0:segmentation.shape[0], 0:segmentation.shape[1]]
 
                     # initialize zarr array for image, append to a dictionary
-                    zs[f'{s}_{v}'] = zarr.open(
-                        f'{zarrs_dir}/{s}_{v}.zarr', mode='w',
+                    zs[f'{img_name}_{ab}'] = zarr.open(
+                        f'{zarrs_dir}/{img_name}_{ab}.zarr', mode='w',
                         shape=(
                             img.shape[0], img.shape[1]),
                         chunks=(1000, 1000), dtype='uint16',
@@ -1230,44 +1357,64 @@ class QC(object):
                         )
 
                     # update zarr array with image data
-                    zs[f'{s}_{v}'][:] = img
+                    zs[f'{img_name}_{ab}'][:] = img
             print()
 
-            channel_settings = yaml.safe_load(
-                open(f'{self.outDir}/sample_2_settings.yml'))
+            # apply OMERO image rendering settings if available and desired
+            if os.path.exists(f'{self.inDir}/images/omero_settings.yml'):
 
-            # set channel start to 0.0 to see all background,
-            # or use: channel_settings['channels'][channel]['start']
-            settings_dict = {}
-            for channel in channel_settings['channels']:
-                settings_dict[
-                    channel_settings['channels'][channel]['label']] = ((
-                        channel_settings['channels'][channel]['start'],
-                        channel_settings['channels'][channel]['end']),
-                        channel_settings['channels'][channel]['color'])
+                # load settings
+                img_rend_settings = yaml.safe_load(
+                    open(f'{self.inDir}/images/omero_settings.yml'))
 
-            for k, v in zs.items():
+                # set channel start to 0.0 to see all background,
+                # or use: img_rend_settings['channels'][channel]['start']
+                settings_dict = {}
+                for channel in img_rend_settings['channels']:
+                    settings_dict[
+                        img_rend_settings['channels'][channel]['label']] = ((
+                            img_rend_settings['channels'][channel]['start'],
+                            img_rend_settings['channels'][channel]['end']),
+                            img_rend_settings['channels'][channel]['color'])
 
-                print(f'Applying OMERO signal intensity cutoffs for {k}')
+                for k, v in zs.items():
 
-                param_map_key = k.split('_')[1]
+                    print(f'Applying OMERO signal intensity cutoffs for {k}')
 
-                bottom_omero_cutoff = settings_dict[param_map_key][0][0]
-                top_omero_cutoff = settings_dict[param_map_key][0][1]
+                    param_map_key = k.split('_')[1]
 
-                temp = img_as_float(zs[k])
-                temp -= (bottom_omero_cutoff/65535)
-                temp /= ((top_omero_cutoff/65535)-(bottom_omero_cutoff/65535))
-                temp = np.clip(temp, 0, 1)
+                    bottom_omero_cutoff = settings_dict[param_map_key][0][0]
+                    top_omero_cutoff = settings_dict[param_map_key][0][1]
 
-                zs[k][:] = img_as_uint(temp)
+                    temp = img_as_float(zs[k])
+                    temp -= (bottom_omero_cutoff/65535)
+                    temp /= (
+                        (top_omero_cutoff/65535)-(bottom_omero_cutoff/65535)
+                        )
+                    temp = np.clip(temp, 0, 1)
+
+                    zs[k][:] = img_as_uint(temp)
+
+        return self.data
 
     def performPCA(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
 
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
+
+        sample_metadata = self.sample_metadata
+
+        # print(zs.keys())
         medians = df.groupby(
-            ['sample']).median()[self.markers]
+            ['Sample']).median()[abx_channels]
 
         # set grid background style
         sns.set_style('whitegrid')
@@ -1279,7 +1426,9 @@ class QC(object):
 
         # normalize signal intensities across samples (axis=0)
         if self.normalize is True:
-            df = norm(medians, norm='l2', axis=0, copy=True, return_norm=False)
+            medians = norm(
+                medians, norm='l2', axis=0, copy=True, return_norm=False
+                )
         else:
             medians = medians.values
 
@@ -1290,13 +1439,30 @@ class QC(object):
         scatter_input = pd.DataFrame(data=projected, index=idx)
         scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
 
+        # switch sample names for condition names
+        scatter_input.index = [
+            sample_metadata[i][0] for i in scatter_input.index
+            ]
+
+        # build cmap
+        cmap = categorical_cmap(
+            numUniqueSamples=len(scatter_input.index.unique()),
+            numCatagories=10,
+            cmap='tab10',
+            continuous=False
+            )
+
+        sample_color_dict = dict(
+            zip(
+                natsorted(scatter_input.index.unique()),
+                cmap.colors)
+                )
+
         # plot scores plot for first 2 PCs
         sns.scatterplot(
             data=scatter_input, x='PC1', y='PC2',
             hue=scatter_input.index,
-            palette=[
-                self.condHueDict['cd'] if 'cd' in i else
-                self.condHueDict['hfd'] for i in medians.index],
+            palette=sample_color_dict,
             edgecolor='k', s=self.pointSize, alpha=1.0, legend=False)
 
         # annotate data points
@@ -1306,7 +1472,7 @@ class QC(object):
               scatter_input['PC1'], scatter_input['PC2']):
 
                 plt.annotate(
-                    label, xy=(x, y), xytext=(3, 5), size=7.0,
+                    label, xy=(x, y), xytext=(3, 5), size=4.0,
                     textcoords='offset points', ha='left', va='bottom',
                     bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
                               alpha=0.0))
@@ -1325,9 +1491,24 @@ class QC(object):
         plt.savefig(os.path.join(self.outDir, 'sample_scores.pdf'))
         plt.close('all')
 
+        return self.data
+
     def performTSNE(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        # df = self.data
+
+        df = pd.read_csv(
+            '/Users/greg/projects/cycif-qc/output/tma22/dataframe_archive/' +
+            'pruneOutliers.csv', index_col=0)
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
 
         if os.path.exists(os.path.join(self.outDir, 'embedding.npy')):
             embedded = np.load(os.path.join(self.outDir, 'embedding.npy'))
@@ -1344,7 +1525,7 @@ class QC(object):
                 learning_rate=self.learningRate,
                 metric=self.metric,
                 random_state=5,
-                n_jobs=-1).fit_transform(df[self.markers])
+                n_jobs=-1).fit_transform(df[abx_channels])
             print('Embedding completed in ' + str(datetime.now() - startTime))
 
             np.save(os.path.join(self.outDir, 'embedding'), embedded)
@@ -1354,6 +1535,15 @@ class QC(object):
         sns.set_style('white')
 
         def submit(text, df):
+
+            markers, dna1, dna_prefix = read_markers(
+                markers_filepath=self.markers_filepath
+                )
+
+            abx_channels = [
+                f'{i}_cellMask' for i in markers['marker_name'] if
+                dna_prefix not in i
+                ]
 
             numerical_input = text.split('.')[0].strip()
             tup = tuple(map(int, numerical_input.split('-')))
@@ -1398,7 +1588,7 @@ class QC(object):
                         )
 
                     # PLOT TSNE
-                    for color_by in ['cluster', 'sample']:
+                    for color_by in ['cluster', 'Condition']:
 
                         highlight = 'none'
 
@@ -1406,14 +1596,14 @@ class QC(object):
 
                             num_colors_required = len(
                                 df[color_by].unique()) - 1
-                            numSubcatagories = math.ceil(
+                            catagories = math.ceil(
                                 num_colors_required/10
                                 )
 
-                            # get cmap
+                            # build cmap
                             cmap = categorical_cmap(
+                                numUniqueSamples=len(df[color_by].unique()),
                                 numCatagories=10,
-                                numSubcatagories=numSubcatagories,
                                 cmap='tab10',
                                 continuous=False
                                 )
@@ -1466,7 +1656,7 @@ class QC(object):
                               ):
 
                                 hi_markers = cluster_expression(
-                                    df=df, markers=self.markers,
+                                    df=df, markers=abx_channels,
                                     cluster=i, num_proteins=3
                                     )
 
@@ -1484,32 +1674,25 @@ class QC(object):
                                 bbox_to_anchor=[1.02, 1.0]
                                 )
 
-                        elif color_by == 'sample':
+                        elif color_by == 'Condition':
 
                             num_colors_required = len(df[color_by].unique())
                             numSubcatagories = math.ceil(
                                 num_colors_required/10
                                 )
 
+                            # build cmap
                             cmap = categorical_cmap(
+                                numUniqueSamples=len(df[color_by].unique()),
                                 numCatagories=10,
-                                numSubcatagories=numSubcatagories,
                                 cmap='tab10',
                                 continuous=False
                                 )
 
-                            # trim qualitative cmap to number of unique samples
-                            trim = (
-                                len(cmap.colors) - len(df['sample'].unique())
-                                )
-                            cmap = ListedColormap(
-                                cmap.colors[:-trim]
-                                )
-
                             sample_dict = dict(
                                 zip(
-                                    natsorted(df['sample'].unique()),
-                                    list(range(len(df['sample'].unique()))))
+                                    natsorted(df[color_by].unique()),
+                                    list(range(len(df[color_by].unique()))))
                                     )
 
                             c = [sample_dict[i] for i in df[color_by]]
@@ -1556,19 +1739,21 @@ class QC(object):
                                 bbox_to_anchor=[1.02, 1.0]
                                 )
 
+                    plt.tight_layout()
+
                     if '.save' in text:
 
                         plt.savefig(
                             os.path.join(
                                 self.outDir,
-                                f'tsne_{color_by}.png'),
-                            dpi=300
+                                f'tsne_{color_by}.pdf')
                             )
 
-                        self.dfSaveCount = save_dataframe(
+                        save_dataframe(
                             df=df, outDir=self.outDir,
-                            dfSaveCount=self.dfSaveCount
+                            moduleName='performTSNE'
                             )
+                        self.data = df
 
                         plt.close('all')
 
@@ -1619,19 +1804,30 @@ class QC(object):
         text_box.on_submit(lambda text: submit(text, df))
         plt.show(block=True)
 
+        return self.data
+
     def getClustermap(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
 
         clustermap_input = df[df['cluster'] != -1]
 
         cluster_heatmap_input = clustermap_input[
-            self.markers + ['cluster']].groupby('cluster').mean()
+            abx_channels + ['cluster']].groupby('cluster').mean()
 
-        sns.set(font_scale=1.1)
+        sns.set(font_scale=0.4)
         g = sns.clustermap(
             cluster_heatmap_input, cmap='viridis', standard_scale=1,
-            square=False, yticklabels=1, linewidth=0.75, cbar=True
+            square=False, yticklabels=1, linewidth=0.1, cbar=True
             )
 
         plt.savefig(
@@ -1640,9 +1836,20 @@ class QC(object):
 
         plt.show(block=True)
 
+        return self.data
+
     def lassoClusters(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
 
         subplot_kw = dict(
             xlim=(df['emb1'].min(), df['emb1'].max()),
@@ -1653,10 +1860,16 @@ class QC(object):
 
         fig, ax = plt.subplots(subplot_kw=subplot_kw)
 
+        # build cmap
         cmap = categorical_cmap(
-            numCatagories=10, numSubcatagories=3,
-            cmap='tab10', continuous=False
+            numUniqueSamples=len(df['cluster'].unique()),
+            numCatagories=10,
+            cmap='tab10',
+            continuous=False
             )
+        # add black as first element to represent HDBSCAN outliers
+        cmap.colors = np.append([[0.0, 0.0, 0.0]], cmap.colors, axis=0)
+        cmap.colors = np.delete(cmap.colors, -1, axis=0)
 
         pts = ax.scatter(
             df['emb1'],
@@ -1692,24 +1905,28 @@ class QC(object):
 
         # show highest expression channels
         markers = df.copy()
-        markers['cluster'].loc[~df.index.isin(idx)] = 100
+        markers.loc[~markers.index.isin(idx), 'cluster'] = 1000
         hi_markers = cluster_expression(
-            df=markers, markers=self.markers, cluster=100, num_proteins=3
+            df=markers, markers=abx_channels, cluster=1000, num_proteins=3
             )
         print(hi_markers)
 
+        return self.data
+
     def cellDensities(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
+
+        sample_metadata = self.sample_metadata
 
         facet_input = df[df['cluster'] >= 0]
 
         facet_input = facet_input.groupby(
-            ['condition', 'sample', 'cluster']).size().reset_index()
+            ['Condition', 'Sample', 'cluster']).size().reset_index()
         facet_input.rename(columns={0: 'count'}, inplace=True)
 
         # divide cluster cell counts by total number of cells per sample
-        for name, group in facet_input.groupby(['sample']):
+        for name, group in facet_input.groupby(['Sample']):
 
             total_cells = group['count'].sum()
 
@@ -1721,48 +1938,67 @@ class QC(object):
         pad = pd.DataFrame()
         for cluster in sorted(facet_input['cluster'].unique()):
             to_append = pd.DataFrame(
-                {'sample': natsorted(facet_input['sample'].unique()),
-                 'cluster': [cluster]*len(facet_input['sample'].unique())})
+                {'Sample': natsorted(facet_input['Sample'].unique()),
+                 'cluster': [cluster]*len(facet_input['Sample'].unique())})
             pad = pad.append(to_append)
         pad.reset_index(drop=True, inplace=True)
-        pad['condition'] = [
-            'cd' if 'cd' in i else 'hfd' for i in pad['sample']
-            ]
+        pad['Condition'] = [sample_metadata[i][0] for i in pad['Sample']]
 
         facet_input = facet_input.merge(
-            pad, how='right', on=['condition', 'sample', 'cluster'])
+            pad, how='right', on=['Condition', 'Sample', 'cluster'])
         facet_input.fillna(value=0, inplace=True)
 
-        means = {}
-        for cluster in facet_input.groupby('cluster'):
-            means[cluster[0]] = cluster[1]['cluster_conc'].median()
-        facet_input['ave_cluster_conc'] = [
-            means[i] for i in facet_input['cluster']
-            ]
+        new_df = pd.DataFrame()
+        for cluster in facet_input.groupby(['cluster']):
+            for name in cluster[1].groupby(['Condition']):
+                cluster[1].loc[
+                    name[1]['cluster_conc'].index, 'ave_cluster_conc'
+                    ] = name[1]['cluster_conc'].mean()
+            conds = cluster[1].drop_duplicates(subset=['Condition']).copy()
+            conds.sort_values(
+                by='ave_cluster_conc', ascending=False, inplace=True
+                )
+            conds.reset_index(drop=True, inplace=True)
+            conds.reset_index(drop=False, inplace=True)
 
-        facet_input.sort_values(
-            by=['condition', 'cluster', 'cluster_conc'],
-            ascending=[True, True, True], inplace=True)
-        facet_input.reset_index(drop=True, inplace=True)
+            conds_dict = dict(zip(conds['Condition'], conds['index']))
+            cluster[1]['index'] = [
+                conds_dict[i] for i in cluster[1]['Condition']
+                ]
+
+            new_df = new_df.append(cluster[1])
+
+        new_df.sort_values(
+            by=['cluster', 'ave_cluster_conc'],
+            ascending=[True, False], inplace=True)
+
+        # build cmap
+        cmap = categorical_cmap(
+            numUniqueSamples=len(facet_input['Condition'].unique()),
+            numCatagories=10,
+            cmap='tab10',
+            continuous=False
+            )
 
         sns.set(font_scale=0.4)
 
         g = sns.FacetGrid(
-            data=facet_input, col='cluster', col_wrap=5,
+            data=new_df, col='cluster', col_wrap=10,
             sharex=False, sharey=False, height=1.5, aspect=1.3
             )
 
         g.map(
-            sns.barplot, 'sample', 'cluster_conc', 'condition',
-            order=None, hue_order=None, ec='k', lw=0.25)
+            sns.barplot, 'Condition', 'cluster_conc',
+            linewidth=0.0, order=None, errwidth=0.2, palette=cmap.colors)
 
-        plt.legend()
-
-        [plt.setp(ax.get_xticklabels(), rotation=90) for ax in g.axes.flat]
+        [
+            plt.setp(ax.get_xticklabels(), rotation=90, size=0.5) for
+            ax in g.axes.flat
+            ]
 
         new_bar_width = 0.6
         for ax, title in zip(
-            g.axes.flatten(), facet_input['cluster'].unique()
+            g.axes.flatten(), new_df['cluster'].unique()
           ):
 
             ax.set_title(title, size=6, weight='bold')
@@ -1779,8 +2015,14 @@ class QC(object):
                 patch.set_x(patch.get_x() + diff * 0.5)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.outDir, 'facetGrid.pdf'))
+
+        plt.savefig(
+            os.path.join(self.outDir, 'facetGrid.png'), dpi=800
+            )
+
         plt.show(block=True)
+
+        return self.data
 
     def frequencyStats(self, args):
 
@@ -2076,11 +2318,22 @@ class QC(object):
             os.path.join(self.outDir, 'cluster_boxplots.pdf'), bbox='tight')
         plt.close('all')
 
-    def curateFingernails(self, args):
+    def curateThumbnails(self, args):
 
-        df = read_dataframe(outDir=self.outDir)
+        df = self.data
 
-        zs = loadZarrs(df=df, outDir=self.outDir)
+        markers, dna1, dna_prefix = read_markers(
+            markers_filepath=self.markers_filepath
+            )
+
+        abx_channels = [
+            f'{i}_cellMask' for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
+
+        zs = loadZarrs(
+            df=df, outDir=self.outDir, markers_filepath=self.markers_filepath
+            )
 
         thumbnail_input = df[df['cluster'] >= 0]
 
@@ -2090,12 +2343,17 @@ class QC(object):
 
         for cluster in sorted(thumbnail_input['cluster'].unique()):
 
+            print(cluster)
+
             markers_to_show = cluster_expression(
-                df=thumbnail_input, markers=self.markers,
+                df=thumbnail_input, markers=abx_channels,
                 cluster=cluster, num_proteins=3
                 )
 
-            markers_to_show = ['dna'] + markers_to_show
+            markers_to_show = [
+                '_'.join(i.split('_')[0:-1]) if '_' in i else i for i in
+                [dna1] + markers_to_show
+                ]
 
             color_dict = {}
             for i, j, k in zip(
@@ -2107,25 +2365,27 @@ class QC(object):
               ):
                 color_dict[i] = j
 
-            print(cluster, markers_to_show)
-
             long_table = pd.DataFrame()
 
-            for sample in thumbnail_input['sample'].unique():
+            for sample in thumbnail_input['Sample'].unique():
+
+                if '-' in sample:
+                    img_name = sample.split('-')[1]
+                else:
+                    img_name = sample
 
                 # initialize a zeros-array with the dimensions of the image
                 overlay = np.zeros(
-                    (zs[f'{sample}_dna'][:].shape[0],
-                     zs[f'{sample}_dna'][:].shape[1]))
+                    (zs[f'{img_name}_{dna1}'][:].shape[0],
+                     zs[f'{img_name}_{dna1}'][:].shape[1]))
 
                 # convert to rgb
                 overlay = gray2rgb(overlay)
 
                 # loop over the channels to create a dict of images
                 for marker in markers_to_show:
-                    print(f'{sample}_{marker}')
                     marker_img = img_as_float(
-                        zs[f'{sample}_{marker}']
+                        zs[f'{img_name}_{marker}']
                         )
                     marker_img = gray2rgb(marker_img)
                     marker_img = (
@@ -2137,7 +2397,7 @@ class QC(object):
 
                 # crop out thumbnail images
                 sample_cluster_subset = thumbnail_input[
-                    (thumbnail_input['sample'] == sample)
+                    (thumbnail_input['Sample'] == sample)
                     & (thumbnail_input['cluster'] == cluster)
                     ]
 
@@ -2162,7 +2422,7 @@ class QC(object):
                         )
 
                 # add centroid mask to image overlay
-                centroids = sample_cluster_subset[['x', 'y']]
+                centroids = sample_cluster_subset[['X_centroid', 'Y_centroid']]
 
                 centroid_img = np.zeros(
                     (overlay.shape[0],
@@ -2172,17 +2432,17 @@ class QC(object):
                 for example, centroid in enumerate(centroids.iterrows()):
 
                     ystart_centroid = int(
-                        centroid[1]['y'] - centroid_dist
+                        centroid[1]['Y_centroid'] - centroid_dist
                         )
                     ystop_centroid = int(
-                        centroid[1]['y'] + centroid_dist
+                        centroid[1]['Y_centroid'] + centroid_dist
                         )
 
                     xstart_centroid = int(
-                        centroid[1]['x'] - centroid_dist
+                        centroid[1]['X_centroid'] - centroid_dist
                         )
                     xstop_centroid = int(
-                        centroid[1]['x'] + centroid_dist
+                        centroid[1]['X_centroid'] + centroid_dist
                         )
 
                     centroid_img[
@@ -2202,8 +2462,8 @@ class QC(object):
                 for example, centroid in enumerate(centroids.iterrows()):
 
                     if (
-                        (centroid[1]['x'] == 0.0) &
-                        (centroid[1]['y'] == 0.0)
+                        (centroid[1]['X_centroid'] == 0.0) &
+                        (centroid[1]['Y_centroid'] == 0.0)
                     ):
 
                         blank_img = np.ones(
@@ -2220,17 +2480,17 @@ class QC(object):
 
                         # specify window x, y ranges
                         ystart_window = int(
-                            centroid[1]['y'] - window_dist
+                            centroid[1]['Y_centroid'] - window_dist
                             )
                         ystop_window = int(
-                            centroid[1]['y'] + window_dist
+                            centroid[1]['Y_centroid'] + window_dist
                             )
 
                         xstart_window = int(
-                            centroid[1]['x'] - window_dist
+                            centroid[1]['X_centroid'] - window_dist
                             )
                         xstop_window = int(
-                            centroid[1]['x'] + window_dist
+                            centroid[1]['X_centroid'] + window_dist
                             )
 
                         # crop overlay image to window size
@@ -2275,7 +2535,7 @@ class QC(object):
 
             ax.legend(
                 custom_lines, list(color_dict.keys()), prop={'size': 12},
-                bbox_to_anchor=(2.0, 30.0)
+                loc='upper right', bbox_to_anchor=(1.0, 1.0)
                 )
 
             plt.savefig(
@@ -2286,6 +2546,8 @@ class QC(object):
             plt.close('all')
             del g
             gc.collect()
+
+        return self.data
 
     def spatialAnalysis(self, args):
 

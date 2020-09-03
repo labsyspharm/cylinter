@@ -1,3 +1,4 @@
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,6 +6,7 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from matplotlib import colors
 import os
+import math
 import subprocess
 import yaml
 import zarr
@@ -68,14 +70,9 @@ class SelectFromCollection(object):
         self.canvas.draw_idle()
 
 
-def save_dataframe(df, outDir, dfSaveCount):
+def save_dataframe(df, outDir, moduleName):
     print('Saving dataframe...')
-    df.to_csv(os.path.join(outDir, 'current_dataframe.csv'))
-    df.to_csv(
-        os.path.join(
-            outDir, f'dataframe_archive/dataframe{dfSaveCount}.csv'))
-    dfSaveCount += 1
-    return dfSaveCount
+    df.to_csv(os.path.join(outDir, f'dataframe_archive/{moduleName}.csv'))
 
 
 def read_dataframe(outDir):
@@ -85,8 +82,22 @@ def read_dataframe(outDir):
     return df
 
 
-def categorical_cmap(numCatagories, numSubcatagories, cmap='tab10',
+def read_markers(markers_filepath):
+    markers = pd.read_csv(
+        markers_filepath,
+        dtype={0: 'int16', 1: 'int16', 2: 'str'},
+        comment='#'
+        )
+    dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
+    dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
+    return markers, dna1, dna_moniker
+
+
+def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10',
                      continuous=False):
+
+    numSubcatagories = math.ceil(numUniqueSamples/numCatagories)
+
     if numCatagories > plt.get_cmap(cmap).N:
         raise ValueError('Too many categories for colormap.')
     if continuous:
@@ -102,6 +113,13 @@ def categorical_cmap(numCatagories, numSubcatagories, cmap='tab10',
         rgb = colors.hsv_to_rgb(arhsv)
         cols[i * numSubcatagories:(i + 1) * numSubcatagories, :] = rgb
     cmap = colors.ListedColormap(cols)
+
+    # trim colors if necessary
+    if len(cmap.colors) > numUniqueSamples:
+        trim = len(cmap.colors) - numUniqueSamples
+        cmap_colors = cmap.colors[:-trim]
+        cmap = colors.ListedColormap(cmap_colors, name='from_list', N=None)
+
     return cmap
 
 
@@ -154,21 +172,34 @@ def cluster_expression(df, markers, cluster, num_proteins):
     return hi_markers
 
 
-def loadZarrs(df, outDir):
+def loadZarrs(df, outDir, markers_filepath):
 
-    # load configuration file
-    config = yaml.safe_load(
-        open(f'{outDir}/config_template.yml'))
+    markers, dna1, dna_prefix = read_markers(
+        markers_filepath=markers_filepath
+        )
 
-    # set cycle map from configuration file to a variable
-    cycle_map = config['cycle_map']
+    zarrs_dir = os.path.join(outDir, 'zarrs')
 
-    zarrs_dir = os.path.join(outDir, 'ashlar_zarrs')
     zs = {}
-    for s in df['sample'].unique():
-        zs[f'{s}_dna'] = zarr.open(f'{zarrs_dir}/{s}_dna.zarr', mode='r')
-        for k, v in cycle_map.items():
-            zs[f'{s}_{v}'] = zarr.open(
-                f'{zarrs_dir}/{s}_{v}.zarr', mode='r'
+    for sample_name in df['Sample'].unique():
+
+        if '-' in sample_name:
+            img_name = sample_name.split('-')[1]
+
+        else:
+            img_name = sample_name
+
+        zs[f'{img_name}_{dna1}'] = (
+            zarr.open(f'{zarrs_dir}/{img_name}_{dna1}.zarr', mode='r')
+            )
+
+        abx_channels = [
+            i for i in markers['marker_name'] if
+            dna_prefix not in i
+            ]
+        for ab in abx_channels:
+            zs[f'{img_name}_{ab}'] = zarr.open(
+                f'{zarrs_dir}/{img_name}_{ab}.zarr', mode='r'
                 )
+
     return zs
