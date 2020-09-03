@@ -1,4 +1,5 @@
 .DS_Store
-datasets
+config/
+input/
 output/
 __pycache__
