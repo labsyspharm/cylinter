@@ -24,33 +24,44 @@ def run(config_filepath: str):
     if not os.path.exists(df_dir):
         os.makedirs(df_dir)
 
+    modules = [
+     'getSingleCellData',
+     'makeZarrs',
+     'delintImages',
+     'dnaIntensityCutoff',
+     'nuclearAreaCutoff',
+     'crossCyleCorrelation',
+     'log10transform',
+     'pruneOutliers',
+     'performPCA',
+     'performTSNE',
+     'getClustermap',
+     'lassoClusters',
+     'curateThumbnails',
+     'viewImages',
+     # 'cellDensities',
+     # 'frequencyStats',
+     # 'clusterBoxplots',
+     # 'spatialAnalysis',
+     ]
+
     # make instance of the QC class
     qc = QC(
         inDir=config['inDir'],
         outDir=config['outDir'],
         markers_filepath=config['markers_filepath'],
         mask_object=config['mask_object'],
+        start_module=config['start_module'],
         sample_metadata=config['sample_metadata'],
-        randomSampleSize=config['randomSampleSize']
+        randomSampleSize=config['randomSampleSize'],
+        modules=modules,
         )
 
-    qc.getSingleCellData(config)
-    qc.lassoROIs(config)
-    qc.dnaIntensityCutoff(config)
-    qc.nuclearAreaCutoff(config)
-    qc.crossCyleCorrelation(config)
-    qc.log10transform(config)
-    qc.pruneOutliers(config)
-    qc.makeZarrs(config)
-    qc.performPCA(config)
-    qc.performTSNE(config)
-    qc.getClustermap(config)
-    qc.lassoClusters(config)
-    qc.cellDensities(config)
-    # qc.frequencyStats(config)
-    # qc.clusterBoxplots(config)
-    qc.curateThumbnails(config)
-    # qc.spatialAnalysis(config)
+    start_idx = modules.index(config['start_module'])
+    for i in modules[start_idx:]:
+        print(f'Running: {i}')
+        result = getattr(qc, i)
+        result(config)
 
 
 if __name__ == '__main__':
