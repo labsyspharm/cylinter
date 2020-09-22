@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from matplotlib import colors
+from sklearn.preprocessing import MinMaxScaler
 import os
 import math
 import subprocess
@@ -70,19 +71,28 @@ class SelectFromCollection(object):
         self.canvas.draw_idle()
 
 
-def save_dataframe(df, outDir, moduleName):
-    print('Saving dataframe...')
-    df.to_csv(os.path.join(outDir, f'dataframe_archive/{moduleName}.csv'))
+def read_previous_dataframe(modules_list, start_module, outDir):
 
-
-def read_dataframe(outDir):
+    target_module_idx = modules_list.index(start_module) - 1
+    target_module_name = modules_list[target_module_idx]
+    print(f'Reading: {target_module_name}.csv')
     df = pd.read_csv(
-        os.path.join(outDir, 'current_dataframe.csv'), index_col=0
-        )
+        os.path.join(
+            outDir,
+            f'dataframe_archive/{target_module_name}.csv'),
+        index_col=0
+            )
+
     return df
 
 
-def read_markers(markers_filepath):
+def save_dataframe(df, outDir, moduleName):
+
+    df.to_csv(os.path.join(outDir, f'dataframe_archive/{moduleName}.csv'))
+
+
+def read_markers(markers_filepath, mask_object):
+
     markers = pd.read_csv(
         markers_filepath,
         dtype={0: 'int16', 1: 'int16', 2: 'str'},
@@ -90,7 +100,14 @@ def read_markers(markers_filepath):
         )
     dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
     dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
-    return markers, dna1, dna_moniker
+
+    # abx channels
+    abx_channels = [
+        f'{i}_{mask_object}' for i in markers['marker_name'] if
+        dna_moniker not in i
+        ]
+
+    return markers, dna1, dna_moniker, abx_channels
 
 
 def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10',
@@ -123,59 +140,78 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10',
     return cmap
 
 
-def cluster_expression(df, markers, cluster, num_proteins):
+def cluster_expression(df, markers, cluster, num_proteins, across_or_within='across'):
+
+    df = df[df['cluster'] >= 0]
 
     cluster_means = df[
         markers +
         ['cluster']].groupby('cluster').mean()
+    # cluster_means = cluster_means[
+    #     cluster_means.index != -1
+    #     ]
 
-    cluster_means = cluster_means[
-        cluster_means.index != -1
-        ]
-
-    marker_names = [i for i in cluster_means]
-
-    max_cluster_ids = [
-        cluster_means[i].idxmax() for
-        i in cluster_means
-        ]
-
-    max_cluster_vals = [
-        cluster_means[i].max() for
-        i in cluster_means
-        ]
-
-    id_val_tuples = list(
-        tuple(
-            zip(max_cluster_ids, max_cluster_vals))
+    # rescale across clusters first
+    # (this will make the clustermap results agree with the top
+    # expressed markers shown for each cluster)
+    min_max_scaler = MinMaxScaler()
+    rescaled_vals = min_max_scaler.fit_transform(cluster_means.values)
+    cluster_means_rescaled = pd.DataFrame(
+        index=cluster_means.index,
+        columns=cluster_means.columns,
+        data=rescaled_vals
         )
 
-    means_dict = dict(
-        zip(marker_names, id_val_tuples)
-        )
+    if across_or_within == 'across':
+        max_cluster_ids = [
+            cluster_means[i].idxmax() for
+            i in cluster_means
+            ]
 
-    means_dict = {
-        k: v for k, v in
-        means_dict.items() if v[0] == cluster
-        }
+        max_cluster_vals = [
+            cluster_means[i].max() for
+            i in cluster_means
+            ]
 
-    total_markers = [
-        k for k, v in sorted(
-            means_dict.items(),
-            key=lambda item: item[1][1])
-        ]
+        id_val_tuples = list(tuple(zip(max_cluster_ids, max_cluster_vals)))
 
-    total_markers.reverse()
+        means_dict = dict(
+            zip(markers, id_val_tuples)
+            )
 
-    hi_markers = total_markers[:num_proteins]
+        means_dict = {
+            k: v for k, v in
+            means_dict.items() if v[0] == cluster
+            }
 
-    return hi_markers
+        # sort means_dict by second element of 2-tuple
+        # (i.e. mean expression value)
+        total_markers = [
+            k for k, v in sorted(
+                means_dict.items(),
+                key=lambda item: item[1][1])
+            ]
+
+        total_markers.reverse()
+
+        hi_markers = total_markers[:num_proteins]
+
+        return hi_markers
+
+    elif across_or_within == 'within':
+        cluster_means_rescaled = cluster_means_rescaled.loc[
+            cluster].sort_values(ascending=False)
+
+        hi_markers = list(cluster_means_rescaled.index[:num_proteins])
+
+        return hi_markers
 
 
-def loadZarrs(df, outDir, markers_filepath):
+def loadZarrs(df, outDir, markers_filepath, mask_object):
 
-    markers, dna1, dna_prefix = read_markers(
-        markers_filepath=markers_filepath
+    markers, dna1, dna_moniker, abx_channels = read_markers(
+        markers_filepath=markers_filepath,
+        mask_object=mask_object,
         )
 
     zarrs_dir = os.path.join(outDir, 'zarrs')
@@ -183,8 +219,8 @@ def loadZarrs(df, outDir, markers_filepath):
     zs = {}
     for sample_name in df['Sample'].unique():
 
-        if '-' in sample_name:
-            img_name = sample_name.split('-')[1]
+        if 'unmicst-' in sample_name:
+            img_name = sample_name.split('unmicst-')[1]
 
         else:
             img_name = sample_name
@@ -195,7 +231,7 @@ def loadZarrs(df, outDir, markers_filepath):
 
         abx_channels = [
             i for i in markers['marker_name'] if
-            dna_prefix not in i
+            dna_moniker not in i
             ]
         for ab in abx_channels:
             zs[f'{img_name}_{ab}'] = zarr.open(

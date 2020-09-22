@@ -1,1 +1,1 @@
-# A Python class for t-CyCIF data introspection and quality control
+# A Python class for assessment and correction of pre-analytical variables in multiplex immunofluorescence data.
