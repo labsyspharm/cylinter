@@ -3,3 +3,4 @@ config/
 input/
 output/
 __pycache__
+transfer.sh

@@ -26,11 +26,11 @@ def run(config_filepath: str):
 
     modules = [
      'getSingleCellData',
-     'makeZarrs',
-     'delintImages',
+     'setContrast',
+     'selectROIs',
      'dnaIntensityCutoff',
      'nuclearAreaCutoff',
-     'crossCyleCorrelation',
+     'crossCycleCorrelation',
      'log10transform',
      'pruneOutliers',
      'performPCA',
@@ -38,7 +38,7 @@ def run(config_filepath: str):
      'getClustermap',
      'lassoClusters',
      'curateThumbnails',
-     'viewImages',
+     'makeZarrs',
      # 'cellDensities',
      # 'frequencyStats',
      # 'clusterBoxplots',
@@ -49,6 +49,7 @@ def run(config_filepath: str):
     qc = QC(
         inDir=config['inDir'],
         outDir=config['outDir'],
+        configDir=config['configDir'],
         markers_filepath=config['markers_filepath'],
         mask_object=config['mask_object'],
         start_module=config['start_module'],

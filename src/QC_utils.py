@@ -1,3 +1,4 @@
+import glob
 import re
 import numpy as np
 import pandas as pd
@@ -11,6 +12,9 @@ import math
 import subprocess
 import yaml
 import zarr
+from hurry.filesize import size
+import psutil
+import gc
 
 
 # scatter point selection tool
@@ -71,24 +75,32 @@ class SelectFromCollection(object):
         self.canvas.draw_idle()
 
 
-def read_previous_dataframe(modules_list, start_module, outDir):
+def read_dataframe(modules_list, start_module, outDir):
 
-    target_module_idx = modules_list.index(start_module) - 1
-    target_module_name = modules_list[target_module_idx]
-    print(f'Reading: {target_module_name}.csv')
-    df = pd.read_csv(
-        os.path.join(
-            outDir,
-            f'dataframe_archive/{target_module_name}.csv'),
-        index_col=0
-            )
+    # target_module_idx = modules_list.index(start_module) - 1
+    # target_module_name = modules_list[target_module_idx]
+
+    fileList = glob.glob(os.path.join(outDir, 'dataframe_archive/*.parquet'))
+    parquet_name = fileList[0].split('/')[-1]
+    print(f'Reading: {parquet_name}')
+
+    for filePath in fileList:
+        df = pd.read_parquet(filePath)
 
     return df
 
 
 def save_dataframe(df, outDir, moduleName):
 
-    df.to_csv(os.path.join(outDir, f'dataframe_archive/{moduleName}.csv'))
+    fileList = glob.glob(os.path.join(outDir, 'dataframe_archive/*.parquet'))
+
+    for filePath in fileList:
+        os.remove(filePath)
+
+    df.to_parquet(
+        os.path.join(outDir, f'dataframe_archive/{moduleName}.parquet'),
+        index=True
+        )
 
 
 def read_markers(markers_filepath, mask_object):
@@ -142,68 +154,70 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10',
 
 def cluster_expression(df, markers, cluster, num_proteins, across_or_within='across'):
 
-    df = df[df['cluster'] >= 0]
+    if cluster > -1:
 
-    cluster_means = df[
-        markers +
-        ['cluster']].groupby('cluster').mean()
-    # cluster_means = cluster_means[
-    #     cluster_means.index != -1
-    #     ]
+        df = df[df['cluster'] > -1]
 
-    # rescale across clusters first
-    # (this will make the clustermap results agree with the top
-    # expressed markers shown for each cluster)
-    min_max_scaler = MinMaxScaler()
-    rescaled_vals = min_max_scaler.fit_transform(cluster_means.values)
-    cluster_means_rescaled = pd.DataFrame(
-        index=cluster_means.index,
-        columns=cluster_means.columns,
-        data=rescaled_vals
-        )
+        cluster_means = df[markers + ['cluster']].groupby('cluster').mean()
 
-    if across_or_within == 'across':
-        max_cluster_ids = [
-            cluster_means[i].idxmax() for
-            i in cluster_means
-            ]
-
-        max_cluster_vals = [
-            cluster_means[i].max() for
-            i in cluster_means
-            ]
-
-        id_val_tuples = list(tuple(zip(max_cluster_ids, max_cluster_vals)))
-
-        means_dict = dict(
-            zip(markers, id_val_tuples)
+        # rescale across clusters first
+        # (this will make the clustermap results agree with the top
+        # expressed markers shown for each cluster)
+        min_max_scaler = MinMaxScaler()
+        rescaled_vals = min_max_scaler.fit_transform(cluster_means.values)
+        cluster_means_rescaled = pd.DataFrame(
+            index=cluster_means.index,
+            columns=cluster_means.columns,
+            data=rescaled_vals
             )
 
-        means_dict = {
-            k: v for k, v in
-            means_dict.items() if v[0] == cluster
-            }
+        if across_or_within == 'across':
+            max_cluster_ids = [
+                cluster_means[i].idxmax() for
+                i in cluster_means
+                ]
 
-        # sort means_dict by second element of 2-tuple
-        # (i.e. mean expression value)
-        total_markers = [
-            k for k, v in sorted(
-                means_dict.items(),
-                key=lambda item: item[1][1])
-            ]
+            max_cluster_vals = [
+                cluster_means[i].max() for
+                i in cluster_means
+                ]
 
-        total_markers.reverse()
+            id_val_tuples = list(tuple(zip(max_cluster_ids, max_cluster_vals)))
 
-        hi_markers = total_markers[:num_proteins]
+            means_dict = dict(
+                zip(markers, id_val_tuples)
+                )
 
-        return hi_markers
+            means_dict = {
+                k: v for k, v in
+                means_dict.items() if v[0] == cluster
+                }
 
-    elif across_or_within == 'within':
-        cluster_means_rescaled = cluster_means_rescaled.loc[
-            cluster].sort_values(ascending=False)
+            # sort means_dict by second element of 2-tuple
+            # (i.e. mean expression value)
+            total_markers = [
+                k for k, v in sorted(
+                    means_dict.items(),
+                    key=lambda item: item[1][1])
+                ]
 
-        hi_markers = list(cluster_means_rescaled.index[:num_proteins])
+            total_markers.reverse()
 
+            hi_markers = total_markers[:num_proteins]
+
+            return hi_markers
+
+        elif across_or_within == 'within':
+
+            cluster_means_rescaled = cluster_means_rescaled.loc[
+                cluster].sort_values(ascending=False)
+
+            hi_markers = list(cluster_means_rescaled.index[:num_proteins])
+
+            return hi_markers
+
+    else:
+        hi_markers = []
         return hi_markers
 
 
@@ -239,3 +253,13 @@ def loadZarrs(df, outDir, markers_filepath, mask_object):
                 )
 
     return zs
+
+
+def clearRAM(print_usage=False):
+
+    gc.collect()
+
+    if print_usage:
+        process = psutil.Process(os.getpid())
+
+        print(size(process.memory_info().rss))
