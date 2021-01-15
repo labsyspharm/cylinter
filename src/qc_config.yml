@@ -1,0 +1,21 @@
+in_dir: .../input/<experiment_root_dir>
+
+out_dir: .../output/<experiment_root_dir>
+
+random_sample_size: 1.0  # floating point percentage value between 0.0-1.0
+
+mask_object: cellRingMask  # cellMask, nucleiMask, cellRingMask ...
+
+start_module: getSingleCellData  # getSingleCellData, setContrast, ...
+
+sample_metadata:
+  # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>]
+
+samples_to_exclude: ["<sample_name1>",
+                     "<sample_name2>",
+                     ]  # [<sampleString1>, <sampleString2>, ...]
+
+markers_to_exclude: ["<marker_name1>",
+                     "<marker_name2>",
+                     ]  # [<markerString1>, <markerString2>, ...]

@@ -4,7 +4,7 @@ import json
 
 import fire
 
-from QC_class import QC
+from qc_class import QC
 
 
 def run(config_filepath: str):
@@ -13,14 +13,15 @@ def run(config_filepath: str):
         config = yaml.load(f, Loader=yaml.Loader)
 
     # parse param files
-    with open(config['markers_filepath'], 'r') as f:
-        config['markers_filepath'] = str(f.name)
+    markers_filepath = os.path.join(config['in_dir'], 'markers.csv')
+    with open(markers_filepath, 'r') as f:
+        markers_filepath = str(f.name)
 
     # create directories
-    if not os.path.exists(config['outDir']):
-        os.makedirs(config['outDir'])
+    if not os.path.exists(config['out_dir']):
+        os.makedirs(config['out_dir'])
 
-    df_dir = os.path.join(config['outDir'], 'dataframe_archive')
+    df_dir = os.path.join(config['out_dir'], 'dataframe_archive')
     if not os.path.exists(df_dir):
         os.makedirs(df_dir)
 
@@ -29,7 +30,7 @@ def run(config_filepath: str):
      'setContrast',
      'selectROIs',
      'dnaIntensityCutoff',
-     'nuclearAreaCutoff',
+     'dnaAreaCutoff',
      'crossCycleCorrelation',
      'log10transform',
      'pruneOutliers',
@@ -38,7 +39,7 @@ def run(config_filepath: str):
      'getClustermap',
      'lassoClusters',
      'curateThumbnails',
-     'makeZarrs',
+     # 'makeZarrs',
      # 'cellDensities',
      # 'frequencyStats',
      # 'clusterBoxplots',
@@ -47,14 +48,14 @@ def run(config_filepath: str):
 
     # make instance of the QC class
     qc = QC(
-        inDir=config['inDir'],
-        outDir=config['outDir'],
-        configDir=config['configDir'],
-        markers_filepath=config['markers_filepath'],
+        in_dir=config['in_dir'],
+        out_dir=config['out_dir'],
+        random_sample_size=config['random_sample_size'],
         mask_object=config['mask_object'],
         start_module=config['start_module'],
         sample_metadata=config['sample_metadata'],
-        randomSampleSize=config['randomSampleSize'],
+        samples_to_exclude=config['samples_to_exclude'],
+        markers_to_exclude=config['markers_to_exclude'],
         modules=modules,
         )
 
