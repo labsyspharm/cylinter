@@ -1,4 +1,4 @@
-# ACRONYM: Quality Control Tools for Quantitative Immunofluorescence Microscopy
+# ACRONYM: Quality Control Tools for Quantitative Immunofluorescence Microscopy Data
 
 **Funding:** This work is supported by the following:
 
