@@ -103,13 +103,20 @@ def save_dataframe(df, outDir, moduleName):
         )
 
 
-def read_markers(markers_filepath, mask_object):
+def read_markers(markers_filepath, mask_object, markers_to_exclude):
 
     markers = pd.read_csv(
         markers_filepath,
         dtype={0: 'int16', 1: 'int16', 2: 'str'},
         comment='#'
         )
+
+    markers_to_include = [
+        i for i in markers['marker_name']
+        if i not in markers_to_exclude
+        ]
+    markers = markers[markers['marker_name'].isin(markers_to_include)]
+
     dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
     dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
 
@@ -122,8 +129,7 @@ def read_markers(markers_filepath, mask_object):
     return markers, dna1, dna_moniker, abx_channels
 
 
-def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10',
-                     continuous=False):
+def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=False):
 
     numSubcatagories = math.ceil(numUniqueSamples/numCatagories)
 

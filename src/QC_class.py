@@ -6,7 +6,6 @@ import pickle
 import subprocess
 
 import gc
-# import zarr
 import hdbscan
 import numpy as np
 import pandas as pd
@@ -46,7 +45,7 @@ from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
 from bridson import poisson_disc_samples
 
-from QC_utils import (read_dataframe, read_markers, save_dataframe,
+from qc_utils import (read_dataframe, read_markers, save_dataframe,
                       categorical_cmap, cluster_expression, loadZarrs,
                       SelectFromCollection, clearRAM)
 
@@ -81,29 +80,32 @@ class QC(object):
     def __init__(self,
 
                  # config.yaml —
-                 inDir=None,
-                 outDir=None,
-                 configDir=None,
-                 markers_filepath=None,
+                 in_dir=None,
+                 out_dir=None,
+                 random_sample_size=None,
                  mask_object=None,
                  start_module=None,
                  sample_metadata=None,
-                 randomSampleSize=None,
+                 samples_to_exclude=None,
+                 markers_to_exclude=None,
                  modules=None,
 
                  # setContrast -
-                 view_sample='840069_0031-median_r_50',
+                 view_sample='1',  # '840069_0031-median_r_50'
 
                  # selectROIs -
                  delint_mode=False,
                  show_ab_channels=False,
 
+                 # crossCycleCorrelation -
+                 log_ratio_rnge=None,  # None or (float, float)
+
+                 # pruneOutliers -
+                 hexbins=False,
+                 hexbin_grid_size=20,
+
                  # performPCA module —
-                 channel_exclusions=[
-                    'antiRat_cellRingMask',
-                    'antiRabbit_cellRingMask',
-                    'antiGoat_cellRingMask',
-                    ],
+                 channel_exclusions=[],
                  numPCAComponents=2,
                  pointSize=90.0,
                  normalize=True,
@@ -114,7 +116,7 @@ class QC(object):
                      },
 
                  # performTSNE module —
-                 fracForEmbedding=0.1,
+                 fracForEmbedding=1.0,
                  numTSNEComponents=2,
                  perplexity=50.0,
                  earlyExaggeration=12.0,
@@ -154,14 +156,14 @@ class QC(object):
         """
         Args:
           config.yaml —
-            inDir: path to csv files, segmentation masks, and ome.tiffs
-            outDir: path to save directory
-            configDir: path to configuration files
-            markers_filepath: path to list of antibodies used in the analysis
-            randomSampleSize: analyze a random subset of data; float (0.0-1.0)
+            in_dir: path to csv files, segmentation masks, and ome.tiffs
+            out_dir: path to save directory
+            random_sample_size: analyze a random data subset; float (0.0-1.0)
             mask_object: cellMask  # cellMask, nucleiMask
             start_module: module from which to begin running the pipeline
             sample_metadata: <sample>: [<condition>, <replicate>]
+            samples_to_exclude: samples to censor from the analysis
+            markers_to_exclude: markers to censor from the analysis
 
          setContrast —
             view_sample: name of sample for contrast adjustment with Napri
@@ -169,6 +171,21 @@ class QC(object):
         selectROIs —
            delint_mode: whether to drop (True) or keep (False) ROI indices.
            show_ab_channels: otherwise, show cycle1 DNA only.
+
+        crossCycleCorrelation —
+           log_ratio_rnge: Tuple of floats (or None). Lower and upper cutoffs
+           on log(cycle ratio) values for histogram plotting. Symmetrical
+           values around zero allow for a diverging colormap to show tissue
+           areas of increasing (green) and decreasing (pink) DNA signal
+           intensity between successive imaging cycles. Symmetrical cutoffs
+           centered at local minima between adjacent histogram modes allows
+           the colormap to show relative increases and decreases
+           in DNA intensity.
+
+        pruneOutliers —
+           hexbins: Boolean. If True, plot hexbins instead of scatter plots.
+           hexbin_grid_size: Interger value. Higher values increase
+           data point resolution. Not used when hexbins=False.
 
           performPCA module —
             numPCAComponents: number of PCs
@@ -218,20 +235,26 @@ class QC(object):
 
         # assert(SOMETHING)  # placeholder for now
 
-        self.inDir = inDir
-        self.outDir = outDir
-        self.configDir = configDir
-        self.markers_filepath = markers_filepath
+        self.in_dir = in_dir
+        self.out_dir = out_dir
+        self.random_sample_size = random_sample_size
         self.mask_object = mask_object
         self.start_module = start_module
         self.sample_metadata = sample_metadata
-        self.randomSampleSize = randomSampleSize
+        self.samples_to_exclude = samples_to_exclude
+        self.markers_to_exclude = markers_to_exclude
+
         self.modules = modules
 
         self.view_sample = view_sample
 
         self.delint_mode = delint_mode
         self.show_ab_channels = show_ab_channels
+
+        self.log_ratio_rnge = log_ratio_rnge
+
+        self.hexbins = hexbins
+        self.hexbin_grid_size = hexbin_grid_size
 
         self.numPCAComponents = numPCAComponents
         self.pointSize = pointSize
@@ -262,13 +285,14 @@ class QC(object):
 
     def getSingleCellData(self, args):
 
-        files = dataset_files(f'{self.inDir}/quantification')
+        files = dataset_files(f'{self.in_dir}/csv')
 
         sample_metadata = self.sample_metadata
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         df_list = []
@@ -288,14 +312,22 @@ class QC(object):
                 sample_name = raw_sample_name
                 raw_sample_names_dict[sample_name] = raw_sample_name
 
-            print(f'Importing single-cell data for sample {sample_name}.')
+            # disregard samples specified in "samples_to_exclude" config param
+            if raw_sample_name not in self.samples_to_exclude:
+                print(f'Importing single-cell data for sample {sample_name}.')
 
-            data = pd.read_csv(
-                os.path.join(f'{self.inDir}/quantification', file)
-                )
+                data = pd.read_csv(
+                    os.path.join(f'{self.in_dir}/csv', file)
+                    )
 
-            # DISREGARD SAMPLES LABELED WITH LESS THAN 52 ANTIBODIES
-            if len(data.columns) == 52:
+                # drop markers specified in "markers_to_exclude" config param
+                data.drop(
+                    columns=[
+                        f'{i}_{self.mask_object}' for i
+                        in self.markers_to_exclude],
+                    axis=1,
+                    inplace=True
+                    )
 
                 data['Sample'] = sample_name
 
@@ -303,6 +335,8 @@ class QC(object):
 
                 # append dataframe to list
                 df_list.append(data)
+            else:
+                print(f'Censoring single-cell data for sample {sample_name}.')
 
         # stack dataframes row-wise
         df = pd.concat(df_list, axis=0)
@@ -316,7 +350,7 @@ class QC(object):
 
         # add replicate column
         df['Replicate'] = [
-            sample_metadata[s][1] for s in
+            sample_metadata[s][2] for s in
             [raw_sample_names_dict[i] for i in df['Sample']]
             ]
 
@@ -334,8 +368,8 @@ class QC(object):
         channels_set = list(set.intersection(*channel_setlist))
         channels_set.extend(['Condition', 'Replicate'])
 
-        print(f'{len(df.columns)} measured features.')
-        print(f'{len(channels_set)} shared features.')
+        print(f'{len(df.columns)} total measured features.')
+        print(f'{len(channels_set)} features shared among samples.')
 
         before = set(df.columns)
         after = set(channels_set)
@@ -345,14 +379,14 @@ class QC(object):
         df = df[channels_set].copy()
 
         # handle data subsetting
-        df = df.sample(frac=self.randomSampleSize, random_state=1)
+        df = df.sample(frac=self.random_sample_size, random_state=1)
         df.sort_values(by=['Sample', 'CellID'], inplace=True)
 
         # assign global index
         df.reset_index(drop=True, inplace=True)
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='getSingleCellData'
+            df=df, outDir=self.out_dir, moduleName='getSingleCellData'
             )
         print()
         self.data = df
@@ -364,18 +398,19 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         dna = imread(
-            f'{self.inDir}/registration/{self.view_sample}.ome.tif', key=0
+            f'{self.in_dir}/tif/{self.view_sample}*.tif', key=0
             )
 
         with napari.gui_qt():
@@ -392,7 +427,7 @@ class QC(object):
 
                 # read antibody image
                 img = imread(
-                    f'{self.inDir}/registration/{self.view_sample}.ome.tif',
+                    f'{self.in_dir}/tif/{self.view_sample}*.tif',
                     key=(channel_number-1)
                     )
 
@@ -403,7 +438,7 @@ class QC(object):
                     )
 
         if not os.path.exists(
-          os.path.join(self.configDir, 'contrast_limits.yml')):
+          os.path.join(self.out_dir, 'contrast_limits.yml')):
 
             contrast_limits = {}
             for ch in [dna1] + abx_channels:
@@ -412,11 +447,11 @@ class QC(object):
 
             # create channel settings configuration file,
             # update with chosen constrast limits
-            with open(f'{self.configDir}/contrast_limits.yml', 'w') as file:
+            with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
                 yaml.dump(contrast_limits, file)
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='setContrast'
+            df=df, outDir=self.out_dir, moduleName='setContrast'
             )
         self.data = df
         print()
@@ -428,7 +463,7 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
@@ -436,11 +471,12 @@ class QC(object):
         df_subset = df[['Sample', 'X_centroid', 'Y_centroid']].copy()
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
-        selection_dir = os.path.join(self.outDir, 'ROIs')
+        selection_dir = os.path.join(self.out_dir, 'ROIs')
         if not os.path.exists(selection_dir):
             os.makedirs(selection_dir)
 
@@ -461,7 +497,7 @@ class QC(object):
             for sample_name in sorted(samples_to_run):
 
                 dna = imread(
-                    f'{self.inDir}/registration/{sample_name}.ome.tif', key=0
+                    f'{self.in_dir}/tif/{sample_name}*.tif', key=0
                     )
 
                 polygons = []
@@ -480,8 +516,8 @@ class QC(object):
 
                             # read antibody image
                             img = imread(
-                                f'{self.inDir}/registration/' +
-                                f'{sample_name}.ome.tif',
+                                f'{self.in_dir}/tif/' +
+                                f'{sample_name}*.tif',
                                 key=(channel_number-1)
                                 )
 
@@ -548,7 +584,7 @@ class QC(object):
                     )
 
                 dna = imread(
-                    f'{self.inDir}/registration/{sample_name}.ome.tif', key=0
+                    f'{self.in_dir}/tif/{sample_name}*.tif', key=0
                     )
 
                 columns, rows = np.meshgrid(
@@ -569,21 +605,22 @@ class QC(object):
 
                 idxs = set()
                 mask_coords = set()
-                for poly in polygon_dict[sample_name]:
-                    selection_verts = np.round(poly).astype(int)
-                    polygon = Path(selection_verts)
-                    print('C')
-                    grid = polygon.contains_points(pixel_coords)
-                    mask = grid.reshape(
-                        dna.shape[0], dna.shape[1])
-                    print('D')
-                    mask_coords.update(
-                        [tuple(i) for i in np.argwhere(mask)]
-                        )
-                    print('E')
-                clearRAM(print_usage=True)
-                del grid, mask, dna, pixel_coords
-                clearRAM(print_usage=True)
+                if polygon_dict[sample_name]:
+                    for poly in polygon_dict[sample_name]:
+                        selection_verts = np.round(poly).astype(int)
+                        polygon = Path(selection_verts)
+                        print('C')
+                        grid = polygon.contains_points(pixel_coords)
+                        mask = grid.reshape(
+                            dna.shape[0], dna.shape[1])
+                        print('D')
+                        mask_coords.update(
+                            [tuple(i) for i in np.argwhere(mask)]
+                            )
+                        print('E')
+                    clearRAM(print_usage=True)
+                    del grid, mask, dna, pixel_coords
+                    clearRAM(print_usage=True)
 
                 inter = mask_coords.intersection(cell_coords)
 
@@ -593,7 +630,7 @@ class QC(object):
                          i[1]['tuple'] in inter]
                          )
                 else:
-                    if not len(polygon_dict[sample_name]) == 0:
+                    if polygon_dict[sample_name]:
 
                         idxs.update(
                             [i[0] for i in sample_data.iterrows() if
@@ -616,7 +653,7 @@ class QC(object):
                 df = read_dataframe(
                     modules_list=self.modules,
                     start_module=self.start_module,
-                    outDir=self.outDir,
+                    outDir=self.out_dir,
                     )
             else:
                 df = self.data
@@ -624,7 +661,7 @@ class QC(object):
             df = df.loc[df_subset.index]
 
             save_dataframe(
-                df=df, outDir=self.outDir, moduleName='selectROIs'
+                df=df, outDir=self.out_dir, moduleName='selectROIs'
                 )
             self.data = df
 
@@ -635,7 +672,7 @@ class QC(object):
                 df = read_dataframe(
                     modules_list=self.modules,
                     start_module=self.start_module,
-                    outDir=self.outDir,
+                    outDir=self.out_dir,
                     )
             else:
                 df = self.data
@@ -649,7 +686,7 @@ class QC(object):
                     df.drop(idxs, inplace=True)
 
             save_dataframe(
-                df=df, outDir=self.outDir, moduleName='selectROIs'
+                df=df, outDir=self.out_dir, moduleName='selectROIs'
                 )
             self.data = df
 
@@ -662,14 +699,15 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         bins = 100
@@ -687,7 +725,7 @@ class QC(object):
             range=None, label='before'
             )
 
-        plt.title('median DNA intensity')
+        plt.title('mean DNA intensity')
         plt.ylabel('count')
 
         axcolor = 'lightgoldenrodyellow'
@@ -741,7 +779,7 @@ class QC(object):
             if text in df['Sample'].unique():
 
                 dna = imread(
-                    f'{self.inDir}/registration/{text}.ome.tif',
+                    f'{self.in_dir}/tif/{text}*.tif',
                     key=0
                     )
 
@@ -757,11 +795,11 @@ class QC(object):
 
                 with napari.gui_qt():
                     viewer = napari.view_image(
-                        dna, rgb=False, name=f'{text}_dna'
+                        dna, rgb=False, name=dna1
                         )
 
                     viewer.add_points(
-                        centroids, name='DNA_intensity',
+                        centroids, name='DNA intensity',
                         properties=point_properties,
                         face_color='dna_intensity', face_colormap='viridis',
                         edge_color='k', edge_width=0.0, size=4.0
@@ -798,7 +836,7 @@ class QC(object):
         plt.hist(
             df[f'{dna1}_{self.mask_object}'], bins=bins, color='r', ec='none',
             alpha=0.5, histtype=histtype, range=None, label='after')
-        plt.xlabel('median DNA intensity')
+        plt.xlabel('mean DNA intensity')
         plt.ylabel('count')
 
         legend_elements = []
@@ -822,26 +860,32 @@ class QC(object):
             )
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.outDir, 'histogram_dna.pdf'))
+        plt.savefig(os.path.join(self.out_dir, 'histogram_dna.pdf'))
         plt.close()
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='dnaIntensityCutoff'
+            df=df, outDir=self.out_dir, moduleName='dnaIntensityCutoff'
             )
         print()
         self.data = df
         return self.data
 
-    def nuclearAreaCutoff(self, args):
+    def dnaAreaCutoff(self, args):
 
-        if self.start_module == 'nuclearAreaCutoff':
+        if self.start_module == 'dnaAreaCutoff':
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
+
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
 
         bins = 100
 
@@ -858,7 +902,7 @@ class QC(object):
             range=None, label='before'
             )
 
-        plt.title('nuclear area')
+        plt.title('mean DNA area')
         plt.ylabel('count')
 
         axcolor = 'lightgoldenrodyellow'
@@ -912,7 +956,7 @@ class QC(object):
             if text in df['Sample'].unique():
 
                 dna = imread(
-                    f'{self.inDir}/registration/{text}.ome.tif',
+                    f'{self.in_dir}/tif/{text}*.tif',
                     key=0
                     )
 
@@ -929,11 +973,11 @@ class QC(object):
 
                 with napari.gui_qt():
                     viewer = napari.view_image(
-                        dna, rgb=False, name=f'{text}_dna'
+                        dna, rgb=False, name=dna1
                         )
 
                     viewer.add_points(
-                        centroids, name='DNA_area',
+                        centroids, name='DNA area',
                         properties=point_properties,
                         face_color='dna_area', face_colormap='viridis',
                         edge_color='k', edge_width=0.0, size=4.0
@@ -952,7 +996,7 @@ class QC(object):
         lowerCutoff, upperCutoff = update(val=None)
 
         fig, ax = plt.subplots()
-        # plot nuclear area histogram BEFORE filtering
+        # plot DNA area histogram BEFORE filtering
         plt.hist(
             df['Area'], bins=bins,
             density=False, color='b', ec='none',
@@ -966,11 +1010,11 @@ class QC(object):
             (df['Area'] < upperCutoff)
             ]
 
-        # plot nuclear area histogram AFTER filtering
+        # plot DNA area histogram AFTER filtering
         plt.hist(
             df['Area'], bins=bins, color='r', ec='none',
             alpha=0.5, histtype=histtype, range=None, label='after')
-        plt.xlabel('nuclear area')
+        plt.xlabel('mean DNA area')
         plt.ylabel('count')
 
         legend_elements = []
@@ -994,18 +1038,18 @@ class QC(object):
             )
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.outDir, 'histogram_area.pdf'))
+        plt.savefig(os.path.join(self.out_dir, 'histogram_area.pdf'))
         plt.close()
 
         # save images
-        lasso_dir = os.path.join(self.outDir, 'lassos')
+        lasso_dir = os.path.join(self.out_dir, 'lassos')
         if not os.path.exists(lasso_dir):
             os.mkdir(lasso_dir)
 
         for sample_name in df['Sample'].unique():
 
             dna = imread(
-                f'{self.inDir}/registration/{sample_name}.ome.tif',
+                f'{self.in_dir}/tif/{sample_name}*.tif',
                 key=0
                 )
 
@@ -1020,7 +1064,7 @@ class QC(object):
                 c=coords['Area'], cmap='viridis'
                 )
             plt.title(
-                f'Sample {sample_name}. Lasso colored by nuclear area')
+                f'Sample {sample_name}. Lasso colored by DNA area')
             plt.colorbar(sp)
             plt.savefig(
                 os.path.join(
@@ -1028,7 +1072,7 @@ class QC(object):
             plt.close('all')
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='nuclearAreaCutoff'
+            df=df, outDir=self.out_dir, moduleName='dnaAreaCutoff'
             )
         print()
         self.data = df
@@ -1040,28 +1084,46 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
+        # log(cycle 1/n) ratios
         ratios = pd.DataFrame(
             [np.log10(
                 (df[f'{dna1}_{self.mask_object}'] + 0.00001) /
                 (df[i] + 0.00001)) for i in
-                sorted(df.columns[df.columns.str.contains(dna_moniker)])]).T
-
+                natsorted(df.columns[df.columns.str.contains(dna_moniker)])]).T
         list1 = [i for i in ratios.columns if i.startswith('Unnamed')]
         list2 = [f'1/{i+1}' for i in range(1, len(list1)+1)]
         ratio_columns = dict(zip(list1, list2))
+        ratio_columns[f'{dna1}_{self.mask_object}'] = '1/1'
         ratios.rename(columns=ratio_columns, inplace=True)
-        ratios.drop(f'{dna1}_{self.mask_object}', axis=1, inplace=True)
         ratios['sample'] = df['Sample']
+
+        # log(cycle n/n+1) ratios
+        # ratios = pd.DataFrame(
+        #     [np.log10(
+        #         (df[i] + 0.00001) /
+        #         (df[dna_moniker
+        #          + str(int([re.findall(r'(\w+?)(\d+)', i)[0]][0][1]) + 1)
+        #          + '_' + self.mask_object] + 0.00001)
+        #          )
+        #         for i in
+        #         natsorted(
+        #             df.columns[df.columns.str.contains(dna_moniker)])[0:-1]]).T
+        # list1 = [i for i in ratios.columns]
+        # list2 = [f'{i}/{i+1}' for i in range(1, len(list1)+1)]
+        # ratio_columns = dict(zip(list1, list2))
+        # ratios.rename(columns=ratio_columns, inplace=True)
+        # ratios['sample'] = df['Sample']
 
         ratios_melt = (
             ratios
@@ -1091,106 +1153,129 @@ class QC(object):
             ratios_melt, row='sample',
             col='cycle', sharey=False
             )
+
         g = g.map(
             plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-            ec='none', range=(-1, 1), bins=200, density=True
+            ec='none', range=self.log_ratio_rnge, bins=200, density=True
             )
 
         plt.savefig(
-            os.path.join(self.outDir, 'cycle_correlation(logRatio).pdf'))
+            os.path.join(self.out_dir, 'cycle_correlation(logRatio).pdf'))
         plt.close()
 
         subprocess.call(
             ['open', '-a', 'Preview', os.path.join(
-                self.outDir, 'cycle_correlation(logRatio).pdf')])
+                self.out_dir, 'cycle_correlation(logRatio).pdf')])
 
         def submit(text, g):
 
             count_cutoff = float(text.split(', ')[0])
-            os.chdir(self.outDir)
+            os.chdir(self.out_dir)
             f = open('count_cutoff.pkl', 'wb')
             pickle.dump(count_cutoff, f)
             f.close()
 
             sample_to_inspect = str(text.split(', ')[1])
 
-            sample_df = df[df['Sample'] == sample_to_inspect]
-            sample_centroids = sample_df[['Y_centroid', 'X_centroid']]
+            if sample_to_inspect in df['Sample'].unique():
+                sample_df = df[df['Sample'] == sample_to_inspect]
+                sample_centroids = sample_df[['Y_centroid', 'X_centroid']]
 
-            with napari.gui_qt():
+                with napari.gui_qt():
 
-                # add dna images
-                for e, i in enumerate(sorted(markers.index[
-                  markers['marker_name'].str.contains(dna_moniker)],
-                  reverse=True)):
+                    # add dna images
+                    for e, i in enumerate(sorted(markers.index[
+                      markers['marker_name'].str.contains(dna_moniker)],
+                      reverse=True)):
 
-                    dna = imread(
-                        f'{self.inDir}/registration/' +
-                        f'{sample_to_inspect}.ome.tif',
-                        key=i
+                        dna = imread(
+                            f'{self.in_dir}/tif/' +
+                            f'{sample_to_inspect}*.tif',
+                            key=i
+                            )
+
+                        name = markers.loc[i]['marker_name']
+                        cycle_num = markers.loc[i]['cycle_number']
+
+                        if name == dna1:
+                            visible = True
+                        else:
+                            visible = False
+
+                        if e == 0:
+                            viewer = napari.view_image(
+                                dna, rgb=False, blending='opaque',
+                                visible=visible,
+                                name=name
+                                )
+                        else:
+                            viewer.add_image(
+                                dna, rgb=False, blending='opaque',
+                                visible=visible,
+                                name=name
+                                )
+
+                        # log(cycle n/n+1) ratios
+                        if cycle_num < markers['cycle_number'].max():
+                            sample_ratios = np.log10(
+                                (sample_df[
+                                    f'{name}_{self.mask_object}'] + 0.00001)
+                                /
+                                (sample_df[dna_moniker
+                                 + str(int(
+                                    [re.findall(r'(\w+?)(\d+)', name)[0]][0][1]
+                                    ) + 1) + '_' + self.mask_object] + 0.00001)
+                                )
+
+                        # log(cycle 1/n) ratios
+                        # if cycle_num != 1:
+                        #     sample_ratios = np.log10(
+                        #         (sample_df[
+                        #             f'{dna1}_{self.mask_object}'] + 0.00001)
+                        #         /
+                        #         (sample_df[
+                        #             f'{name}_{self.mask_object}'] + 0.00001)
+                        #         )
+
+                            sample_ratios = np.clip(
+                                sample_ratios,
+                                a_min=np.percentile(sample_ratios, 1.0),
+                                a_max=np.percentile(sample_ratios, 99.0)
+                                )
+
+                            point_properties = {
+                                'face_color': sample_ratios
+                                }
+
+                            viewer.add_points(
+                                sample_centroids,
+                                name=f'log({cycle_num}/{cycle_num + 1})',
+                                visible=False,
+                                properties=point_properties,
+                                face_color='face_color',
+                                face_colormap='PiYG',
+                                edge_color='k', edge_width=0.0, size=7.0
+                                )
+
+                    # rearrange viwer layers (DNA images first)
+                    layer_names = [str(i) for i in viewer.layers]
+
+                    current_order = tuple(
+                        [layer_names.index(i) for i in layer_names]
                         )
 
-                    name = markers.loc[i]['marker_name']
-                    cycle_num = int(markers.loc[i]['cycle_number']) + 1
+                    dna_idxs = [
+                        layer_names.index(i) for i in layer_names
+                        if dna_moniker in i
+                        ]
+                    log_idxs = [
+                        layer_names.index(i) for i in layer_names
+                        if 'log(' in i
+                        ]
 
-                    if name == dna1:
-                        visible = True
-                    else:
-                        visible = False
+                    target_order = tuple(log_idxs + dna_idxs)
 
-                    if e == 0:
-                        viewer = napari.view_image(
-                            dna, rgb=False, blending='additive',
-                            visible=visible, name=dna_moniker + str(cycle_num)
-                            )
-                    else:
-                        viewer.add_image(
-                            dna, rgb=False, blending='additive',
-                            visible=visible, name=dna_moniker + str(cycle_num)
-                            )
-
-                    if cycle_num != 1:
-                        sample_ratios = np.log10(
-                            (sample_df[f'{dna1}_{self.mask_object}'] + 0.00001)
-                            /
-                            (sample_df[f'{name}_{self.mask_object}'] + 0.00001)
-                            )
-                        sample_ratios = np.clip(
-                            sample_ratios, a_min=-1.0, a_max=1.0
-                            )
-
-                        point_properties = {
-                            'face_color': sample_ratios
-                            }
-
-                        viewer.add_points(
-                            sample_centroids, name=f'log(1/{cycle_num})',
-                            visible=False,
-                            properties=point_properties,
-                            face_color='face_color',
-                            face_colormap='PiYG_r',
-                            edge_color='k', edge_width=0.0, size=7.0
-                            )
-
-                # rearrange viwer layers (DNA images first)
-                layer_names = [str(i) for i in viewer.layers]
-
-                current_order = tuple(
-                    [layer_names.index(i) for i in layer_names]
-                    )
-
-                dna_idxs = [
-                    layer_names.index(i) for i in layer_names
-                    if dna_moniker in i
-                    ]
-                log_idxs = [
-                    layer_names.index(i) for i in layer_names
-                    if 'log(' in i
-                    ]
-
-                target_order = tuple(log_idxs + dna_idxs)
-
-                viewer.layers[current_order] = viewer.layers[target_order]
+                    viewer.layers[current_order] = viewer.layers[target_order]
 
             sns.set(font_scale=0.5)
             sns.set_style('whitegrid')
@@ -1201,18 +1286,18 @@ class QC(object):
                 )
             g = g.map(
                 plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-                ec='none', range=(-1, 1), bins=200, density=True
+                ec='none', range=self.log_ratio_rnge, bins=200, density=True
                 )
 
             for ax in g.axes.ravel():
                 ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
 
             plt.savefig(
-                os.path.join(self.outDir, 'cycle_correlation(logRatio).pdf'))
+                os.path.join(self.out_dir, 'cycle_correlation(logRatio).pdf'))
 
             subprocess.call(
                 ['open', '-a', 'Preview',
-                 os.path.join(self.outDir, 'cycle_correlation(logRatio).pdf')]
+                 os.path.join(self.out_dir, 'cycle_correlation(logRatio).pdf')]
                  )
 
             plt.show(block=False)
@@ -1232,7 +1317,7 @@ class QC(object):
 
         plt.show(block=True)
 
-        os.chdir(self.outDir)
+        os.chdir(self.out_dir)
         pickle_in = open('count_cutoff.pkl', 'rb')
         count_cutoff = pickle.load(pickle_in)
 
@@ -1246,7 +1331,7 @@ class QC(object):
             fig, ax = plt.subplots()
             counts, bins, patches = plt.hist(
                 group['log10(ratio)'], color='r', histtype='stepfilled',
-                ec='none', range=(-1, 1),
+                ec='none', range=None,
                 bins=200, density=True
                 )
             plt.close('all')
@@ -1323,7 +1408,7 @@ class QC(object):
                 marker='o', c='r'), f'{dna1}_{self.mask_object}')
         plt.savefig(
             os.path.join(
-                self.outDir, 'cycle_correlation(perCycle).png'), dpi=800
+                self.out_dir, 'cycle_correlation(perCycle).png'), dpi=800
                 )
         plt.close('all')
 
@@ -1367,13 +1452,13 @@ class QC(object):
 
         plt.savefig(
             os.path.join(
-                self.outDir, 'cycle_correlation(perSample).png'), dpi=800,
+                self.out_dir, 'cycle_correlation(perSample).png'), dpi=800,
             bbox_inches='tight'
             )
         plt.close('all')
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='crossCycleCorrelation'
+            df=df, outDir=self.out_dir, moduleName='crossCycleCorrelation'
             )
         print()
         self.data = df
@@ -1385,14 +1470,15 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         # rescale abx intensities between 0 and 1
@@ -1404,7 +1490,7 @@ class QC(object):
         df[abx_channels] = np.log10(df[abx_channels])
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='log10transform'
+            df=df, outDir=self.out_dir, moduleName='log10transform'
             )
         print()
         self.data = df
@@ -1416,23 +1502,50 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         # save images
-        correlation_dir = os.path.join(self.outDir, 'hexbins')
-        if not os.path.exists(correlation_dir):
-            os.mkdir(correlation_dir)
+        hexbin_dir = os.path.join(self.out_dir, 'hexbins')
+        if not os.path.exists(hexbin_dir):
+            os.mkdir(hexbin_dir)
 
-        # plot raw signal intensity histrograms for inspection
-        for ab in abx_channels:
+        # store upper and lower percentile cutoffs for antibody channels
+        # pick up where left off
+        if os.path.exists(os.path.join(hexbin_dir, 'hexbin_dict.pkl')):
+            f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'rb')
+            hexbin_dict = pickle.load(f)
+            total_markers = set(abx_channels)
+            completed_markers = set(hexbin_dict.keys())
+            scrambled_markers_to_run = total_markers.difference(
+                completed_markers
+                )
+            # revert scrambled markers back to marker.csv order
+            # (unnecessary step, but tidy)
+            markers_dict = dict(zip(abx_channels, range(0, len(abx_channels))))
+            sorted_marker_idxs = sorted(
+                [markers_dict[i] for i in scrambled_markers_to_run]
+            )
+            markers_to_run = [
+                list(markers_dict.keys())[list(markers_dict.values()).index(i)]
+                for i in sorted_marker_idxs
+                ]
+            print(f'Markers to run: {len(markers_to_run)}')
+        else:
+            markers_to_run = abx_channels
+            print(f'Markers to run: {len(markers_to_run)}')
+            hexbin_dict = {}
+
+        # plot raw signal intensity hexbins for inspection
+        for ab in markers_to_run:
 
             print(ab)
 
@@ -1457,10 +1570,17 @@ class QC(object):
                 height=0.5, aspect=1.0, sharex=True, sharey=False
                 )
 
-            g.map(
-                lambda x, y, color: plt.hexbin(
-                    x, y, gridsize=20, linewidths=0.02, color='dimgrey'),
-                'signal', 'Area')
+            if self.hexbins:
+                g.map(
+                    lambda x, y, color: plt.hexbin(
+                        x, y, gridsize=self.hexbin_grid_size,
+                        linewidths=0.02, color='dimgrey'),
+                    'signal', 'Area')
+            else:
+                g.map(
+                    lambda x, y, color: plt.scatter(
+                        x, y, s=0.02, linewidths=0.0, color='k'),
+                    'signal', 'Area')
 
             g.set_titles(
                 col_template="{col_name}", fontweight='bold',
@@ -1476,8 +1596,13 @@ class QC(object):
                     )
                 ax.xaxis.label.set_size(2.0)
                 ax.yaxis.label.set_size(2.0)
-                ax.spines['left'].set_visible(False)
-                ax.spines['bottom'].set_visible(False)
+
+                if self.hexbins:
+                    ax.spines['left'].set_visible(False)
+                    ax.spines['bottom'].set_visible(False)
+                else:
+                    ax.spines['left'].set_linewidth(0.1)
+                    ax.spines['bottom'].set_linewidth(0.1)
 
             plt.subplots_adjust(
                 left=0.01, bottom=0.01, right=0.99,
@@ -1486,13 +1611,13 @@ class QC(object):
 
             plt.savefig(
                 os.path.join(
-                    correlation_dir, f'{ab}_hexbins(raw).pdf'))
+                    hexbin_dir, f'{ab}_hexbins(raw).pdf'))
 
             plt.close()
 
             subprocess.call(
                 ['open', '-a', 'Preview', os.path.join(
-                    correlation_dir, f'{ab}_hexbins(raw).pdf')])
+                    hexbin_dir, f'{ab}_hexbins(raw).pdf')])
 
             def submit(text, df):
 
@@ -1500,6 +1625,16 @@ class QC(object):
                 upperPercentileCutoff = float(text.split(',')[1])
 
                 ab = str(text.split(',')[2][1:])
+
+                hexbin_dict[ab] = (
+                    lowerPercentileCutoff,
+                    upperPercentileCutoff
+                    )
+
+                os.chdir(hexbin_dir)
+                f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
+                pickle.dump(hexbin_dict, f)
+                f.close()
 
                 # for s in df['Sample'].unique():
 
@@ -1518,9 +1653,10 @@ class QC(object):
                     data.index[
                         data > np.percentile(data, upperPercentileCutoff)])
 
-                df = df.drop(
+                df.drop(
                     labels=set(indices_to_drop), axis=0,
-                    inplace=False, errors='raise')
+                    inplace=True, errors='raise'
+                    )
 
                 pruned_data = df[ab]
 
@@ -1563,10 +1699,17 @@ class QC(object):
                     height=0.5, aspect=1.0, sharex=True, sharey=False
                     )
 
-                g.map(
-                    lambda x, y, color: plt.hexbin(
-                        x, y, gridsize=20, linewidths=0.02, color='dimgrey'),
-                    'signal', 'Area')
+                if self.hexbins:
+                    g.map(
+                        lambda x, y, color: plt.hexbin(
+                            x, y, gridsize=self.hexbin_grid_size,
+                            linewidths=0.02, color='dimgrey'),
+                        'signal', 'Area')
+                else:
+                    g.map(
+                        lambda x, y, color: plt.scatter(
+                            x, y, s=0.02, linewidths=0.0, color='k'),
+                        'signal', 'Area')
 
                 g.set_titles(
                     col_template="{col_name}", fontweight='bold',
@@ -1582,8 +1725,13 @@ class QC(object):
                         )
                     ax.xaxis.label.set_size(2.0)
                     ax.yaxis.label.set_size(2.0)
-                    ax.spines['left'].set_visible(False)
-                    ax.spines['bottom'].set_visible(False)
+
+                    if self.hexbins:
+                        ax.spines['left'].set_visible(False)
+                        ax.spines['bottom'].set_visible(False)
+                    else:
+                        ax.spines['left'].set_linewidth(0.1)
+                        ax.spines['bottom'].set_linewidth(0.1)
 
                 plt.subplots_adjust(
                     left=0.01, bottom=0.01, right=0.99,
@@ -1592,7 +1740,7 @@ class QC(object):
 
                 plt.savefig(
                     os.path.join(
-                        correlation_dir,
+                        hexbin_dir,
                         f'{ab}_hexbins(pruned_rescaled).pdf')
                         )
 
@@ -1600,7 +1748,7 @@ class QC(object):
 
                 subprocess.call(
                     ['open', '-a', 'Preview', os.path.join(
-                        correlation_dir,
+                        hexbin_dir,
                         f'{ab}_hexbins(pruned_rescaled).pdf')]
                         )
                 ##################
@@ -1622,7 +1770,7 @@ class QC(object):
             plt.show(block=True)
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='pruneOutliers'
+            df=df, outDir=self.out_dir, moduleName='pruneOutliers'
             )
         print()
         self.data = df
@@ -1634,7 +1782,7 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
@@ -1642,8 +1790,9 @@ class QC(object):
         if len(df['Sample'].unique()) > 1:
 
             markers, dna1, dna_moniker, abx_channels = read_markers(
-                markers_filepath=self.markers_filepath,
-                mask_object=self.mask_object
+                markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+                mask_object=self.mask_object,
+                markers_to_exclude=self.markers_to_exclude,
                 )
 
             abx_channels = [
@@ -1680,56 +1829,61 @@ class QC(object):
             scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
 
             # switch sample names for condition names
-            scatter_input.index = [
-                sample_metadata[i][0] for i in scatter_input.index
+            metadata_keys = [
+                i for i in sample_metadata.keys() if i.split('-')[1]
+                in scatter_input.index
                 ]
 
-            scatter_input.rename(
-                index={'high grade serous ovarian carcinoma':
-                       'High grade serous ovarian carcinoma'}, inplace=True)
+            scatter_input.index = [
+                sample_metadata[i][1]
+                for i in metadata_keys
+                ]
+            scatter_input['condition'] = [
+                sample_metadata[i][0]
+                for i in metadata_keys
+                ]
 
-            tissue_abbr_map = {
-                 'Marker control': 'MC',
-                 'Metastatic melanoma': 'MM',
-                 'Appendix-acute appendicitis': 'APX',
-                 'Tonsil': 'TSL',
-                 'Hepatocellular carcinoma': 'HC',
-                 'Non-neoplastic colon': 'NNC',
-                 'Pancreatic adenocarcinoma': 'PA',
-                 'Lung adenocarcinoma': 'LA',
-                 'Non-neoplastic lung': 'NNL',
-                 'Lung squamous cell carcinoma': 'LSC',
-                 'Renal cell carcinoma': 'RCC',
-                 'Glioblastoma': 'GBM',
-                 'Meningioma': 'MGM',
-                 'Colon adenocarcinoma': 'CA',
-                 'Mesothelioma': 'MTO',
-                 'Seminoma': 'SMA',
-                 'Ductal carcinoma': 'DC',
-                 'Spleen': 'SPL',
-                 'Colon lymph node': 'CLN',
-                 'Cirrhotic liver': 'CL',
-                 'Diverticulitis': 'DVL',
-                 'Non-neoplastic pancreas': 'NNP',
-                 'Normal kidney cortex': 'NKC',
-                 'Prostatic adenocarcinoma': 'PA',
-                 'Colon normal epithelium': 'CNE',
-                 'Gastrointestinal stromal tumor': 'GST',
-                 'Leiomyosarcoma': 'LMS',
-                 'Ductal/lobular carcinoma': 'DLC',
-                 'Non-neoplastic small intestine': 'NNS',
-                 'High grade serous ovarian carcinoma': 'HSO',
-                 'Skin/Hair Follicle Shaft': 'SFS',
-                 'Dedifferentiated Liposarcoma': 'DL',
-                 'non-neoplastic ovary': 'NNO',
-                 'Pulmonary lymph node': 'PLN',
-                 'Normal prostate': 'NP'
-                 }
+            # scatter_input.rename(
+            #     index={'high grade serous ovarian carcinoma':
+            #            'High grade serous ovarian carcinoma'}, inplace=True)
 
-            mylist = list(
-                {k: v for k, v in sorted(tissue_abbr_map.items(),
-                 key=lambda item: item[1])}.keys()
-                 )
+            # tissue_abbr_map = {
+            #      'Marker control': 'MC',
+            #      'Metastatic melanoma': 'MM',
+            #      'Appendix-acute appendicitis': 'APX',
+            #      'Tonsil': 'TSL',
+            #      'Hepatocellular carcinoma': 'HC',
+            #      'Non-neoplastic colon': 'NNC',
+            #      'Pancreatic adenocarcinoma': 'PA',
+            #      'Lung adenocarcinoma': 'LA',
+            #      'Non-neoplastic lung': 'NNL',
+            #      'Lung squamous cell carcinoma': 'LSC',
+            #      'Renal cell carcinoma': 'RCC',
+            #      'Glioblastoma': 'GBM',
+            #      'Meningioma': 'MGM',
+            #      'Colon adenocarcinoma': 'CA',
+            #      'Mesothelioma': 'MTO',
+            #      'Seminoma': 'SMA',
+            #      'Ductal carcinoma': 'DC',
+            #      'Spleen': 'SPL',
+            #      'Colon lymph node': 'CLN',
+            #      'Cirrhotic liver': 'CL',
+            #      'Diverticulitis': 'DVL',
+            #      'Non-neoplastic pancreas': 'NNP',
+            #      'Normal kidney cortex': 'NKC',
+            #      'Prostatic adenocarcinoma': 'PA',
+            #      'Colon normal epithelium': 'CNE',
+            #      'Gastrointestinal stromal tumor': 'GST',
+            #      'Leiomyosarcoma': 'LMS',
+            #      'Ductal/lobular carcinoma': 'DLC',
+            #      'Non-neoplastic small intestine': 'NNS',
+            #      'High grade serous ovarian carcinoma': 'HSO',
+            #      'Skin/Hair Follicle Shaft': 'SFS',
+            #      'Dedifferentiated Liposarcoma': 'DL',
+            #      'non-neoplastic ovary': 'NNO',
+            #      'Pulmonary lymph node': 'PLN',
+            #      'Normal prostate': 'NP'
+            #      }
 
             # build cmap
             cmap = categorical_cmap(
@@ -1741,7 +1895,7 @@ class QC(object):
 
             sample_color_dict = dict(
                 zip(
-                    mylist,
+                    scatter_input.index.unique(),
                     cmap.colors)
                     )
 
@@ -1838,7 +1992,7 @@ class QC(object):
                                 )
 
                             text = plt.annotate(
-                                tissue_abbr_map[label],
+                                label,
                                 xy=(centroid[0], centroid[1]),
                                 xytext=(0, 0), size=4.75, fontweight='bold',
                                 color=sample_color_dict[label],
@@ -1857,7 +2011,7 @@ class QC(object):
                                 )
                     else:
                         text = plt.annotate(
-                            tissue_abbr_map[label], xy=(x, y),
+                            label, xy=(x, y),
                             xytext=(0, 0), size=4.75, fontweight='bold',
                             color=sample_color_dict[label],
                             textcoords='offset points', ha='center',
@@ -1878,14 +2032,16 @@ class QC(object):
                 scatter_input
                 .groupby(['tissue_type'])
                 .count()
-                .reindex(mylist)['PC1'].values
+                .reindex(scatter_input['tissue_type'])['PC1'].values
                 )
 
             legend_handles = []
-            for label, n in zip(mylist, n_per_tissue_type):
+            for label, cond, n in zip(
+              scatter_input['tissue_type'],
+              scatter_input['condition'], n_per_tissue_type):
                 legend_handles.append(
                     Line2D([0], [0], marker='o', color='none',
-                           label=f'{tissue_abbr_map[label]} ({label}, n={n})',
+                           label=f'{label} ({cond}, n={n})',
                            markerfacecolor=sample_color_dict[label],
                            markeredgecolor='k', markeredgewidth=0.2,
                            markersize=5.0)
@@ -1905,11 +2061,11 @@ class QC(object):
                 '% of variance)', fontsize=10, labelpad=4.0)
             plt.tick_params(axis='both', which='major', labelsize=7.0)
             plt.tight_layout()
-            plt.savefig(os.path.join(self.outDir, 'EMIT22_scoresPlot.pdf'))
+            plt.savefig(os.path.join(self.out_dir, 'pcaScoresPlot.pdf'))
             plt.close('all')
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='performPCA'
+            df=df, outDir=self.out_dir, moduleName='performPCA'
             )
         print()
         self.data = df
@@ -1921,30 +2077,37 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
             i for i in abx_channels if i not in self.channel_exclusions
             ]
 
-        if os.path.exists(os.path.join(self.outDir, 'embedding.npy')):
+        if os.path.exists(os.path.join(self.out_dir, 'embedding.npy')):
 
-            df = df.sample(frac=self.fracForEmbedding, random_state=5)
-            embedded = np.load(os.path.join(self.outDir, 'embedding.npy'))
+            # df = df.sample(frac=self.fracForEmbedding, random_state=5)
+            print(df)
+            embedded = np.load(os.path.join(self.out_dir, 'embedding.npy'))
             df['emb1'] = embedded[:, 0]
             df['emb2'] = embedded[:, 1]
-
+            breakpoint()
         else:
             startTime = datetime.now()
 
             df = df.sample(frac=self.fracForEmbedding, random_state=5)
+            # save df with newly scrambled row index
+            save_dataframe(
+                df=df, outDir=self.out_dir,
+                moduleName='performTSNE'
+                )
             print(df)
 
             embedded = TSNE(
@@ -1958,7 +2121,7 @@ class QC(object):
                 n_jobs=-1).fit_transform(df[abx_channels])
             print('Embedding completed in ' + str(datetime.now() - startTime))
 
-            np.save(os.path.join(self.outDir, 'embedding'), embedded)
+            np.save(os.path.join(self.out_dir, 'embedding'), embedded)
             df['emb1'] = embedded[:, 0]
             df['emb2'] = embedded[:, 1]
 
@@ -1967,8 +2130,9 @@ class QC(object):
         def submit(text, df):
 
             markers, dna1, dna_moniker, abx_channels = read_markers(
-                markers_filepath=self.markers_filepath,
-                mask_object=self.mask_object
+                markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+                mask_object=self.mask_object,
+                markers_to_exclude=self.markers_to_exclude,
                 )
             abx_channels = [
                 i for i in abx_channels if i not in self.channel_exclusions
@@ -2005,10 +2169,11 @@ class QC(object):
                         f'min_cluster_size={i}', np.unique(clustering.labels_)
                         )
 
+                    plt.rcParams['figure.figsize'] = (15, 7)
                     fig, (ax1, ax2) = plt.subplots(1, 2)
                     fig.suptitle(
                         f'min cluster size = {min_cluster_size}',
-                        fontsize=6
+                        fontsize=10
                         )
 
                     plt.subplots_adjust(
@@ -2061,7 +2226,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=15000/len(df),
+                                s=35000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -2094,7 +2259,7 @@ class QC(object):
 
                             cluster_lgd = ax1.legend(
                                 handles=legend_elements,
-                                prop={'size': 4},
+                                prop={'size': 7},
                                 bbox_to_anchor=[1.02, 1.0]
                                 )
 
@@ -2121,7 +2286,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=15000/len(df),
+                                s=35000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -2154,8 +2319,8 @@ class QC(object):
 
                             sample_lgd = ax2.legend(
                                 handles=legend_elements,
-                                prop={'size': 4},
-                                bbox_to_anchor=[1.02, 1.0]
+                                prop={'size': 7},
+                                bbox_to_anchor=[1.27, 1.0]
                                 )
 
                     plt.tight_layout()
@@ -2164,14 +2329,14 @@ class QC(object):
 
                         plt.savefig(
                             os.path.join(
-                                self.outDir,
+                                self.out_dir,
                                 f'tsne_{color_by}.png'),
                             bbox_extra_artists=(cluster_lgd, sample_lgd),
                             bbox_inches='tight', dpi=1000
                             )
 
                         save_dataframe(
-                            df=df, outDir=self.outDir,
+                            df=df, outDir=self.out_dir,
                             moduleName='performTSNE'
                             )
                         self.data = df
@@ -2235,21 +2400,16 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
-        abx_channels = [
-            i for i in abx_channels if i not in
-            ['AF488_cellRingMask', 'AF555_cellRingMask', 'AF647_cellRingMask',
-             'A488_cellRingMask', 'A555_cellRingMask', 'A647_cellRingMask',
-             'CDX2_647_cellRingMask', 'Ki67_570_cellRingMask']
-            ]
 
         clustermap_input = df[df['cluster'] != -1]
 
@@ -2264,12 +2424,12 @@ class QC(object):
 
         plt.savefig(
             os.path.join(
-                self.outDir, 'clustermap.pdf'), bbox_inches='tight')
+                self.out_dir, 'clustermap.pdf'), bbox_inches='tight')
 
         plt.show(block=True)
 
         save_dataframe(
-            df=df, outDir=self.outDir,
+            df=df, outDir=self.out_dir,
             moduleName='getClustermap'
             )
         print()
@@ -2282,21 +2442,16 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
-        abx_channels = [
-            i for i in abx_channels if i not in
-            ['AF488_cellRingMask', 'AF555_cellRingMask', 'AF647_cellRingMask',
-             'A488_cellRingMask', 'A555_cellRingMask', 'A647_cellRingMask',
-             'CDX2_647_cellRingMask', 'Ki67_570_cellRingMask']
-            ]
 
         subplot_kw = dict(
             xlim=(df['emb1'].min(), df['emb1'].max()),
@@ -2344,23 +2499,31 @@ class QC(object):
         ax.set_aspect('equal')
         plt.show(block=True)
 
-        # filter dataframe
-        drop_idx = (
-            set(np.array(list(range(selector.xys.data.shape[0]))))
-            - set(selector.ind))
-        idx = df.iloc[list(drop_idx)].index
+        # Isolate indices from "selector object" that WERE NOT lassoed.
+        # selector_idxs_to_drop = (
+        #     set(np.array(list(range(selector.xys.data.shape[0]))))
+        #     - set(selector.ind))
+
+        # Use iloc to isolate the indices of the original dataframe
+        # corresponding to those in the "selector object".
+        # (This step relies on the fact that the "selector object"
+        # maintains the original dataframe row order.)
+        df_idxs_lassoed = df.iloc[selector.ind].index
+        # df_idxs_to_drop = df.iloc[list(selector_idxs_to_drop)].index
 
         # show highest expression channels
         markers = df.copy()
-        markers.loc[~markers.index.isin(idx), 'cluster'] = 1000
-        hi_markers = cluster_expression(
-            df=markers, markers=abx_channels, cluster=1000,
-            num_proteins=3, across_or_within='within',
-            )
-        print(hi_markers)
+        markers.loc[markers.index.isin(df_idxs_lassoed), 'cluster'] = 1000
+        # markers.loc[~markers.index.isin(df_idxs_to_drop), 'cluster'] = 1000
+        if len(markers[markers['cluster'] == 1000]) > 0:
+            hi_markers = cluster_expression(
+                df=markers, markers=abx_channels, cluster=1000,
+                num_proteins=3, across_or_within='within',
+                )
+            print(hi_markers)
 
         save_dataframe(
-            df=df, outDir=self.outDir,
+            df=df, outDir=self.out_dir,
             moduleName='lassoClusters'
             )
         print()
@@ -2373,49 +2536,52 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
             i for i in abx_channels if i not in self.channel_exclusions
             ]
 
-        thumbnails_dir = os.path.join(self.outDir, 'thumbnails')
+        thumbnails_dir = os.path.join(self.out_dir, 'thumbnails')
         if not os.path.exists(thumbnails_dir):
             os.mkdir(thumbnails_dir)
 
-        # sort ome.tif files from largest to smallest size
-        ome_tifs = df['Sample'].unique()
-        ome_tifs = [f'{self.inDir}/registration/{i}.ome.tif' for i in ome_tifs]
+        # sort ome.tif files from largest to smallest in size
+        os.chdir(f'{self.in_dir}/tif/')
+        ome_tifs = os.listdir(os.getcwd())
         ome_tifs.sort(key=lambda f: os.stat(f).st_size, reverse=True)
-        ome_tifs = [i.split('/')[-1].split('.ome.tif')[0] for i in ome_tifs]
+        ome_tifs = [
+            i for i in ome_tifs if i.split('.')[0] in df['Sample'].unique()
+            ]
 
         # grab image contrast limit settings
-        if os.path.exists(f'{self.configDir}/contrast_limits.yml'):
-
+        if os.path.exists(f'{self.out_dir}/contrast_limits.yml'):
             contrast_limits = yaml.safe_load(
-                open(f'{self.configDir}/contrast_limits.yml')
+                open(f'{self.out_dir}/contrast_limits.yml')
                 )
 
         for cluster in sorted(df['cluster'].unique()):
             if cluster != -1:
-                if cluster > 39:
-                    print(cluster)
+                if cluster > -1:
+                    print(f'Cluster: {cluster}')
 
                     markers_to_show = cluster_expression(
                         df=df, markers=abx_channels,
-                        cluster=cluster, num_proteins=3, across_or_within='within',
+                        cluster=cluster, num_proteins=3,
+                        across_or_within='within',
                         )
 
                     markers_to_show = [
-                        '_'.join(i.split('_')[0:-1]) if '_' in i else i for i in
-                        [dna1] + markers_to_show
+                        '_'.join(i.split('_')[0:-1]) if '_' in i else
+                        i for i in [dna1] + markers_to_show
                         ]
 
                     color_dict = {}
@@ -2430,37 +2596,38 @@ class QC(object):
 
                     long_table = pd.DataFrame()
 
-                    for sample_name in ome_tifs:  # ome_tifs # ['840069_0031-median_r_50']:
-                        print(sample_name)
+                    for sample_name in ome_tifs:  # ['840069_0031-median_r_50']
+                        print(f'Sample: {sample_name}')
 
                         # import cycle1 dna channel, convert to float and rgb
+
                         dna = imread(
-                            f'{self.inDir}/registration/{sample_name}.ome.tif',
+                            os.path.join(f'{self.in_dir}/tif/', sample_name),
                             key=0
                             )
+
                         dna = img_as_float(dna)
                         dna = gray2rgb(dna)
 
                         # loop over the channels to create a dict of images
-                        for marker in markers_to_show:
-                            if marker != dna1:
-                                ch = marker.split(f'_{self.mask_object}')[0]
+                        for e, marker in enumerate(markers_to_show):
+                            if e != 0:
                                 channel_number = markers['channel_number'][
-                                            markers['marker_name'] == ch]
+                                            markers['marker_name'] == marker]
 
                                 # read antibody image
                                 img = imread(
-                                    f'{self.inDir}/registration/' +
-                                    f'{sample_name}.ome.tif',
+                                    os.path.join(
+                                        f'{self.in_dir}/tif/', sample_name),
                                     key=(channel_number-1)
                                     )
 
                                 img = img_as_float(img)
 
-                                img -= (contrast_limits[ch][0]/65535)
+                                img -= (contrast_limits[marker][0]/65535)
                                 img /= (
-                                    (contrast_limits[ch][1]/65535)
-                                    - (contrast_limits[ch][0]/65535)
+                                    (contrast_limits[marker][1]/65535)
+                                    - (contrast_limits[marker][0]/65535)
                                     )
                                 img = np.clip(img, 0, 1)
 
@@ -2468,7 +2635,7 @@ class QC(object):
 
                                 img = (img * color_dict[marker])
 
-                                # loop over ab channels to add to cycle1 dna image
+                                # loop over ab channels, add to cycle1 dna
                                 dna += img
 
                                 print(f'overlayed {marker} image')
@@ -2478,30 +2645,36 @@ class QC(object):
 
                         # crop out thumbnail images
                         sample_cluster_subset = df[
-                            (df['Sample'] == sample_name)
+                            (df['Sample'] == sample_name.split('.')[0])
                             & (df['cluster'] == cluster)
                             ]
 
-                        sample_cluster_subset.reset_index(drop=True, inplace=True)
+                        sample_cluster_subset.reset_index(
+                            drop=True, inplace=True
+                            )
 
                         if self.numFingernails > len(sample_cluster_subset):
-                            dif = self.numFingernails - len(sample_cluster_subset)
+                            dif = (
+                                self.numFingernails
+                                - len(sample_cluster_subset)
+                                )
+
                             extra_rows = pd.DataFrame(
                                 data=0,
                                 index=list(range(dif)),
                                 columns=sample_cluster_subset.columns
                                 )
-                            sample_cluster_subset = sample_cluster_subset.append(
-                                extra_rows
+                            sample_cluster_subset = (
+                                sample_cluster_subset.append(extra_rows)
                                 )
                             sample_cluster_subset.reset_index(
                                 drop=True, inplace=True
                                 )
                         else:
-                            sample_cluster_subset = sample_cluster_subset.sample(
-                                n=self.numFingernails, random_state=3
+                            sample_cluster_subset = (
+                                sample_cluster_subset.sample(
+                                    n=self.numFingernails, random_state=3)
                                 )
-
                         # add centroid mask to image overlay
                         centroids = sample_cluster_subset[
                             ['X_centroid', 'Y_centroid']
@@ -2516,7 +2689,8 @@ class QC(object):
                              dna.shape[1]))
 
                         centroid_dist = 1  # in pixels
-                        for example, centroid in enumerate(centroids.iterrows()):
+                        for example, centroid in enumerate(
+                          centroids.iterrows()):
 
                             ystart_centroid = int(
                                 centroid[1]['Y_centroid'] - centroid_dist
@@ -2551,7 +2725,8 @@ class QC(object):
 
                         # crop thumbnails
                         window_dist = 35  # in pixels
-                        for example, centroid in enumerate(centroids.iterrows()):
+                        for example, centroid in enumerate(
+                          centroids.iterrows()):
 
                             if (
                                 (centroid[1]['X_centroid'] == 0.0) &
@@ -2563,8 +2738,8 @@ class QC(object):
                                      window_dist))
 
                                 long_table = long_table.append(
-                                    {'sample': sample_name,
-                                     'example': int(example),
+                                    {'sample': sample_name.split('.')[0],
+                                     'example': example,
                                      'image': blank_img},
                                     ignore_index=True
                                     )
@@ -2593,8 +2768,8 @@ class QC(object):
                                     ]
 
                                 long_table = long_table.append(
-                                    {'sample': sample_name,
-                                     'example': int(example),
+                                    {'sample': sample_name.split('.')[0],
+                                     'example': example,
                                      'image': thumbnail.copy()},
                                     ignore_index=True
                                     )
@@ -2605,6 +2780,10 @@ class QC(object):
                         # del dna
                         # print('after dell dna')
                         # clearRAM(print_usage=True)
+
+                    long_table['example'] = [
+                        int(i) for i in long_table['example']
+                        ]
 
                     print()
 
@@ -2627,7 +2806,8 @@ class QC(object):
                         ax.set_ylabel('')
 
                     g.set_titles(
-                        col_template="{col_name}", row_template="{row_name}",
+                        col_template="Ex. {col_name}",
+                        row_template="Smpl. {row_name}",
                         fontweight='bold', size=8)
 
                     custom_lines = []
@@ -2636,7 +2816,8 @@ class QC(object):
                             Line2D([0], [0], color=v, lw=6))
 
                     ax.legend(
-                        custom_lines, list(color_dict.keys()), prop={'size': 12},
+                        custom_lines,
+                        list(color_dict.keys()), prop={'size': 12},
                         bbox_to_anchor=(1.05, 1.0), loc='upper left'
                         )
 
@@ -2652,7 +2833,7 @@ class QC(object):
                     # clearRAM(print_usage=True)
 
         save_dataframe(
-            df=df, outDir=self.outDir,
+            df=df, outDir=self.out_dir,
             moduleName='curateThumbnails'
             )
         print()
@@ -2665,7 +2846,7 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
@@ -2673,7 +2854,7 @@ class QC(object):
         # if self.start_module == 'makeZarrs':
         #     df = pd.read_csv(
         #         os.path.join(
-        #             self.outDir,
+        #             self.out_dir,
         #             f'dataframe_archive/getSingleCellData.csv'),
         #         index_col=0
         #             )
@@ -2681,12 +2862,13 @@ class QC(object):
         #     df = self.data
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=self.markers_filepath,
-            mask_object=self.mask_object
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
             )
 
         # make directory to store zarr arrays
-        zarrs_dir = os.path.join(self.outDir, 'zarrs')
+        zarrs_dir = os.path.join(self.out_dir, 'zarrs')
         if not os.path.exists(zarrs_dir):
             os.mkdir(zarrs_dir)
 
@@ -2701,7 +2883,7 @@ class QC(object):
 
             # read DNA ashlar_output image
             img = imread(
-                f'{self.inDir}/registration/{sample_name}.ome.tif',
+                f'{self.in_dir}/tif/{sample_name}*.tif',
                 key=0  # key 0 is first dna cycle in markers.csv file
                 )
 
@@ -2734,7 +2916,7 @@ class QC(object):
 
                 # read antibody image
                 img = imread(
-                    f'{self.inDir}/registration/{sample_name}.ome.tif',
+                    f'{self.in_dir}/tif/{sample_name}*.tif',
                     key=(channel_number-1)
                     )
 
@@ -2752,11 +2934,11 @@ class QC(object):
         print()
 
         # apply image rendering settings if available and desired
-        if os.path.exists(f'{self.configDir}/contrast_limits.yml'):
+        if os.path.exists(f'{self.out_dir}/contrast_limits.yml'):
 
             # load settings
             contrast_limits = yaml.safe_load(
-                open(f'{self.configDir}/contrast_limits.yml'))
+                open(f'{self.out_dir}/contrast_limits.yml'))
 
             for k, v in zs.items():
                 if k in contrast_limits.keys():
@@ -2775,7 +2957,7 @@ class QC(object):
                     zs[k][:] = img_as_uint(temp)
 
         save_dataframe(
-            df=df, outDir=self.outDir, moduleName='makeZarrs'
+            df=df, outDir=self.out_dir, moduleName='makeZarrs'
             )
         print()
         self.data = df
@@ -2787,7 +2969,7 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
@@ -2892,13 +3074,13 @@ class QC(object):
         plt.tight_layout()
 
         plt.savefig(
-            os.path.join(self.outDir, 'facetGrid.png'), dpi=800
+            os.path.join(self.out_dir, 'facetGrid.png'), dpi=800
             )
 
         plt.show(block=True)
 
         save_dataframe(
-            df=df, outDir=self.outDir,
+            df=df, outDir=self.out_dir,
             moduleName='performTSNE'
             )
         print()
@@ -2911,14 +3093,14 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         stats_input = df[df['cluster'] >= 0]
 
-        frequency_dir = os.path.join(self.outDir, 'frequency_stats')
+        frequency_dir = os.path.join(self.out_dir, 'frequency_stats')
         if not os.path.exists(frequency_dir):
             os.mkdir(frequency_dir)
 
@@ -3106,7 +3288,7 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
@@ -3213,7 +3395,7 @@ class QC(object):
                 statistics(label=label), 'label')
 
         plt.savefig(
-            os.path.join(self.outDir, 'cluster_boxplots.pdf'), bbox='tight')
+            os.path.join(self.out_dir, 'cluster_boxplots.pdf'), bbox='tight')
         plt.close('all')
         print()
         self.data = df
@@ -3225,16 +3407,17 @@ class QC(object):
             df = read_dataframe(
                 modules_list=self.modules,
                 start_module=self.start_module,
-                outDir=self.outDir,
+                outDir=self.out_dir,
                 )
         else:
             df = self.data
 
         zs = loadZarrs(
-            df=df, outDir=self.outDir, markers_filepath=self.markers_filepath
+            df=df, outDir=self.out_dir,
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv')
             )
 
-        spatial_dir = os.path.join(self.outDir, 'spatial_analysis')
+        spatial_dir = os.path.join(self.out_dir, 'spatial_analysis')
         if not os.path.exists(spatial_dir):
             os.makedirs(spatial_dir)
 
