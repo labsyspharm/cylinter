@@ -12,7 +12,7 @@ last_modified_date: 2021-01-15
 Quality Control Tools for Quantitative Immunofluorescence Microscopy Data.
 {: .fs-6 .fw-300 }
 
-ACRONYM is an interactive quality control pipeline for vetting and filtering low-quality single-cell data from multiplexed whole tissue and tissue microarray images. It comprises multiple modules for region of interest (ROI) selection, signal intensity and cell area cutoffs, cross-cycle cell correlation, cell clustering and visualization. Each step of the pipeline is a stand alone module. The pipeline is instantiated as a configurable [Python](https://www.python.org) Class object, wherein partial results are cached for iterative and dynamic restarts.
+ACRONYM is an interactive quality control pipeline for vetting and filtering low-quality, single-cell data from multiplexed whole tissue and tissue microarray images. It comprises multiple modules designed to improve dataset quality by identifying and sensoring negatively impacted by optical artifacts. Modules include those for region of interest (ROI) selection, assigning signal intensity and segmentation area cutoffs, correlating cells across imaging cycles, as well as those for downstream cell clustering and visualization. The pipeline is instantiated as a configurable [Python](https://www.python.org) Class object. Each step of the pipeline serves as a stand alone module whose partial results are cached to allow for dynamic restarts and iterative QC strategies.
 
 ACRONYM development is led by [Greg Baker](https://github.com/gjbaker) at [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), Harvard Medical School.
 
