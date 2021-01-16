@@ -1,10 +1,10 @@
 ---
 layout: default
-title: Running mcmicro
+title: Running Cytolinter
 nav_order: 2
 ---
 
-# Running mcmicro
+# Running Cytolinter
 
 ## Table of contents
 {: .no_toc .text-delta }
