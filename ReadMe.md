@@ -1,4 +1,4 @@
-# Cytolinter: Interactive Quality Control Software for Cleaning Single-cell Data derived from Microscopy Images.
+# Cytolinter: Interactive Quality Control Software for Cleaning Microscopy-derived, Single-cell Data.
 
 **Funding:** This work is supported by the following:
 
