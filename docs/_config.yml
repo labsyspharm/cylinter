@@ -9,7 +9,7 @@ heading_anchors: true
 
 # Aux links for the upper right navigation
 aux_links:
-  "mcmicro on GitHub":
+  "Cytolinter on GitHub":
     - "//github.com/labsyspharm/cytolinter"
 aux_links_new_tab: false
 
