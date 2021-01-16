@@ -1,4 +1,4 @@
-# ACRONYM: Quality Control Tools for Quantitative Immunofluorescence Microscopy Data
+# Cytolinter: An Interactive Quality Control Tool for Cleaning Image-derived Single-cell Data.
 
 **Funding:** This work is supported by the following:
 
