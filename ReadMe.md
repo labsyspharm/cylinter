@@ -1,8 +1,10 @@
-# Cytolinter: Interactive Quality Control Software for Cleaning Microscopy-derived, Single-cell Data.
+![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/image.jpg?raw=true)
+
+# CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy.
 
 **Funding:** This work is supported by the following:
 
-* *NIH grant U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs* 
+* *NIH grant U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs*
 * Ludwig Center at Harvard Medical School and the Ludwig Cancer Research Foundation
 
-**Instructions:** https://labsyspharm.github.io/cytolinter/
+**Instructions:** https://labsyspharm.github.io/cylinter/

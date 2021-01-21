@@ -1,3 +1,6 @@
+import logging
+import functools
+
 import os
 import re
 import yaml
@@ -26,6 +29,7 @@ import matplotlib.patheffects as path_effects
 
 import napari
 from tifffile import imread
+import zarr
 
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -45,9 +49,13 @@ from rpy2.robjects.vectors import FloatVector
 from decimal import Decimal
 from bridson import poisson_disc_samples
 
-from qc_utils import (read_dataframe, read_markers, save_dataframe,
-                      categorical_cmap, cluster_expression, loadZarrs,
-                      SelectFromCollection, clearRAM)
+from .utils import (
+    dataset_files, log_banner, log_multiline,
+    SelectFromCollection, read_dataframe, save_dataframe, read_markers,
+    categorical_cmap, cluster_expression, loadZarrs, clearRAM
+    )
+
+logger = logging.getLogger(__name__)
 
 # map matplotlib color codes to the default seaborn palette
 sns.set()
@@ -63,17 +71,30 @@ sns.set_color_codes()
 _ = plt.plot([0, 5], color='y')
 plt.close('all')
 
-SUPPORTED_EXTENSIONS = ['.csv']
+# Pipeline module order, to be filled in by the @module decorator.
+pipeline_modules = []
+pipeline_module_names = []
 
 
-def dataset_files(root):
+def module(func):
     """
-    Return a list of all supported extension
-    files in the specified directory.
+    Annotation for pipeline module functions.
+
+    This function adds the given function to the registry list. It also wraps
+    the given function to log a pre/post-call banner.
+
     """
-    total = os.listdir(root)
-    pruned = [i for i in total if i.endswith(tuple(SUPPORTED_EXTENSIONS))]
-    return pruned
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info("=" * 70)
+        logger.info("RUNNING MODULE: %s", func.__name__)
+        result = func(*args, **kwargs)
+        logger.info("=" * 70)
+        logger.info("")
+        return result
+    pipeline_modules.append(wrapper)
+    pipeline_module_names.append(wrapper.__name__)
+    return wrapper
 
 
 class QC(object):
@@ -85,7 +106,9 @@ class QC(object):
                  random_sample_size=None,
                  mask_object=None,
                  start_module=None,
-                 sample_metadata=None,
+                 sample_conditions=None,
+                 sample_abbreviations=None,
+                 sample_replicates=None,
                  samples_to_exclude=None,
                  markers_to_exclude=None,
                  modules=None,
@@ -116,7 +139,7 @@ class QC(object):
                      },
 
                  # performTSNE module —
-                 fracForEmbedding=1.0,
+                 fracForEmbedding=0.1,
                  numTSNEComponents=2,
                  perplexity=50.0,
                  earlyExaggeration=12.0,
@@ -161,7 +184,9 @@ class QC(object):
             random_sample_size: analyze a random data subset; float (0.0-1.0)
             mask_object: cellMask  # cellMask, nucleiMask
             start_module: module from which to begin running the pipeline
-            sample_metadata: <sample>: [<condition>, <replicate>]
+            sample_conditions: {<sample1>: <cond1>, <sample2>: <cond2>}
+            sample_abbreviations: {<sample1>: <abbrv1>, <sample2>: <abbrv2>}
+            sample_replicates: {<sample1>: <rep1>, <sample2>: <rep2>}
             samples_to_exclude: samples to censor from the analysis
             markers_to_exclude: markers to censor from the analysis
 
@@ -240,7 +265,9 @@ class QC(object):
         self.random_sample_size = random_sample_size
         self.mask_object = mask_object
         self.start_module = start_module
-        self.sample_metadata = sample_metadata
+        self.sample_conditions = sample_conditions
+        self.sample_abbreviations = sample_abbreviations
+        self.sample_replicates = sample_replicates
         self.samples_to_exclude = samples_to_exclude
         self.markers_to_exclude = markers_to_exclude
 
@@ -283,11 +310,10 @@ class QC(object):
         self.spatialDict2 = spatialDict2
         self.radiusRange = radiusRange
 
-    def getSingleCellData(self, args):
+    @module
+    def getSingleCellData(data, self, args):
 
         files = dataset_files(f'{self.in_dir}/csv')
-
-        sample_metadata = self.sample_metadata
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -316,12 +342,12 @@ class QC(object):
             if raw_sample_name not in self.samples_to_exclude:
                 print(f'Importing single-cell data for sample {sample_name}.')
 
-                data = pd.read_csv(
+                csv = pd.read_csv(
                     os.path.join(f'{self.in_dir}/csv', file)
                     )
 
                 # drop markers specified in "markers_to_exclude" config param
-                data.drop(
+                csv.drop(
                     columns=[
                         f'{i}_{self.mask_object}' for i
                         in self.markers_to_exclude],
@@ -329,12 +355,12 @@ class QC(object):
                     inplace=True
                     )
 
-                data['Sample'] = sample_name
+                csv['Sample'] = sample_name
 
-                channel_setlist.append(set(data.columns))
+                channel_setlist.append(set(csv.columns))
 
                 # append dataframe to list
-                df_list.append(data)
+                df_list.append(csv)
             else:
                 print(f'Censoring single-cell data for sample {sample_name}.')
 
@@ -344,13 +370,13 @@ class QC(object):
 
         # add condition column
         df['Condition'] = [
-            sample_metadata[s][0] for s in
+            self.sample_conditions[s] for s in
             [raw_sample_names_dict[i] for i in df['Sample']]
             ]
 
         # add replicate column
         df['Replicate'] = [
-            sample_metadata[s][2] for s in
+            self.sample_replicates[s] for s in
             [raw_sample_names_dict[i] for i in df['Sample']]
             ]
 
@@ -384,24 +410,12 @@ class QC(object):
 
         # assign global index
         df.reset_index(drop=True, inplace=True)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='getSingleCellData'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def setContrast(self, args):
+        return df
 
-        if self.start_module == 'setContrast':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def setContrast(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -437,6 +451,8 @@ class QC(object):
                     name=ch
                     )
 
+        # create channel settings configuration file,
+        # update with chosen constrast limits
         if not os.path.exists(
           os.path.join(self.out_dir, 'contrast_limits.yml')):
 
@@ -445,30 +461,16 @@ class QC(object):
                 ch = ch.split(f'_{self.mask_object}')[0]
                 contrast_limits[ch] = viewer.layers[ch].contrast_limits
 
-            # create channel settings configuration file,
-            # update with chosen constrast limits
             with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
                 yaml.dump(contrast_limits, file)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='setContrast'
-            )
-        self.data = df
         print()
-        return self.data
 
-    def selectROIs(self, args):
+        return data
 
-        if self.start_module == 'selectROIs':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def selectROIs(data, self, args):
 
-        df_subset = df[['Sample', 'X_centroid', 'Y_centroid']].copy()
+        df_subset = data[['Sample', 'X_centroid', 'Y_centroid']].copy()
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -649,60 +651,26 @@ class QC(object):
                 df_subset.drop(idxs, inplace=True)
 
             # drop idxs from full dataframe
-            if self.start_module == 'selectROIs':
-                df = read_dataframe(
-                    modules_list=self.modules,
-                    start_module=self.start_module,
-                    outDir=self.out_dir,
-                    )
-            else:
-                df = self.data
+            df = data.loc[df_subset.index]
 
-            df = df.loc[df_subset.index]
-
-            save_dataframe(
-                df=df, outDir=self.out_dir, moduleName='selectROIs'
-                )
-            self.data = df
+            return df
 
         else:
 
             # drop idxs from full dataframe
-            if self.start_module == 'selectROIs':
-                df = read_dataframe(
-                    modules_list=self.modules,
-                    start_module=self.start_module,
-                    outDir=self.out_dir,
-                    )
-            else:
-                df = self.data
-
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
                     f = open(file, 'rb')
                     idxs = pickle.load(f)
                     idxs = set(idxs)
-                    df.drop(idxs, inplace=True)
-
-            save_dataframe(
-                df=df, outDir=self.out_dir, moduleName='selectROIs'
-                )
-            self.data = df
-
+                    data.drop(idxs, inplace=True)
         print()
-        return self.data
 
-    def dnaIntensityCutoff(self, args):
+        return data
 
-        if self.start_module == 'dnaIntensityCutoff':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def dnaIntensityCutoff(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -719,7 +687,7 @@ class QC(object):
         plt.subplots_adjust(left=0.25, bottom=0.25)
 
         n, bins, patches = plt.hist(
-            df[f'{dna1}_{self.mask_object}'], bins=bins,
+            data[f'{dna1}_{self.mask_object}'], bins=bins,
             density=False, color='grey', ec='none',
             alpha=0.75, histtype=histtype,
             range=None, label='before'
@@ -767,16 +735,16 @@ class QC(object):
             sUpper.reset()
         button.on_clicked(reset)
 
-        def submit(text, df):
+        def submit(text):
             lowerCutoff, upperCutoff = update(val=None)
 
             # apply lower and upper cutoffs
-            df_test = df[
-                (df[f'{dna1}_{self.mask_object}'] > lowerCutoff) &
-                (df[f'{dna1}_{self.mask_object}'] < upperCutoff)
+            df_test = data[
+                (data[f'{dna1}_{self.mask_object}'] > lowerCutoff) &
+                (data[f'{dna1}_{self.mask_object}'] < upperCutoff)
                 ]
 
-            if text in df['Sample'].unique():
+            if text in data['Sample'].unique():
 
                 dna = imread(
                     f'{self.in_dir}/tif/{text}*.tif',
@@ -812,7 +780,7 @@ class QC(object):
             hovercolor='1.0',
             label_pad=0.05
             )
-        text_box.on_submit(lambda val: submit(val, df))
+        text_box.on_submit(submit)
         plt.show(block=True)
 
         lowerCutoff, upperCutoff = update(val=None)
@@ -820,16 +788,16 @@ class QC(object):
         fig, ax = plt.subplots()
         # plot DNA intensity histogram BEFORE filtering
         plt.hist(
-            df[f'{dna1}_{self.mask_object}'], bins=bins,
+            data[f'{dna1}_{self.mask_object}'], bins=bins,
             density=False, color='b', ec='none',
             alpha=0.5, histtype=histtype,
             range=None, label='before'
             )
 
         # apply lower and upper cutoffs
-        df = df[
-            (df[f'{dna1}_{self.mask_object}'] > lowerCutoff) &
-            (df[f'{dna1}_{self.mask_object}'] < upperCutoff)
+        df = data[
+            (data[f'{dna1}_{self.mask_object}'] > lowerCutoff) &
+            (data[f'{dna1}_{self.mask_object}'] < upperCutoff)
             ]
 
         # plot DNA intensity histogram AFTER filtering
@@ -862,24 +830,12 @@ class QC(object):
         plt.tight_layout()
         plt.savefig(os.path.join(self.out_dir, 'histogram_dna.pdf'))
         plt.close()
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='dnaIntensityCutoff'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def dnaAreaCutoff(self, args):
+        return df
 
-        if self.start_module == 'dnaAreaCutoff':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def dnaAreaCutoff(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -896,7 +852,7 @@ class QC(object):
         plt.subplots_adjust(left=0.25, bottom=0.25)
 
         n, bins, patches = plt.hist(
-            df['Area'], bins=bins,
+            data['Area'], bins=bins,
             density=False, color='grey', ec='none',
             alpha=0.75, histtype=histtype,
             range=None, label='before'
@@ -944,16 +900,16 @@ class QC(object):
             sUpper.reset()
         button.on_clicked(reset)
 
-        def submit(text, df):
+        def submit(text):
             lowerCutoff, upperCutoff = update(val=None)
 
             # apply lower and upper cutoffs
-            df_test = df[
-                (df['Area'] > lowerCutoff) &
-                (df['Area'] < upperCutoff)
+            df_test = data[
+                (data['Area'] > lowerCutoff) &
+                (data['Area'] < upperCutoff)
                 ]
 
-            if text in df['Sample'].unique():
+            if text in data['Sample'].unique():
 
                 dna = imread(
                     f'{self.in_dir}/tif/{text}*.tif',
@@ -990,7 +946,7 @@ class QC(object):
             hovercolor='1.0',
             label_pad=0.05
             )
-        text_box.on_submit(lambda val: submit(val, df))
+        text_box.on_submit(submit)
         plt.show(block=True)
 
         lowerCutoff, upperCutoff = update(val=None)
@@ -998,16 +954,16 @@ class QC(object):
         fig, ax = plt.subplots()
         # plot DNA area histogram BEFORE filtering
         plt.hist(
-            df['Area'], bins=bins,
+            data['Area'], bins=bins,
             density=False, color='b', ec='none',
             alpha=0.5, histtype=histtype,
             range=None, label='before'
             )
 
         # apply lower and upper cutoffs
-        df = df[
-            (df['Area'] > lowerCutoff) &
-            (df['Area'] < upperCutoff)
+        df = data[
+            (data['Area'] > lowerCutoff) &
+            (data['Area'] < upperCutoff)
             ]
 
         # plot DNA area histogram AFTER filtering
@@ -1070,24 +1026,12 @@ class QC(object):
                 os.path.join(
                     lasso_dir, f'{sample_name}.png'), dpi=1000)
             plt.close('all')
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='dnaAreaCutoff'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def crossCycleCorrelation(self, args):
+        return df
 
-        if self.start_module == 'crossCycleCorrelation':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def crossCycleCorrelation(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -1098,32 +1042,33 @@ class QC(object):
         # log(cycle 1/n) ratios
         ratios = pd.DataFrame(
             [np.log10(
-                (df[f'{dna1}_{self.mask_object}'] + 0.00001) /
-                (df[i] + 0.00001)) for i in
-                natsorted(df.columns[df.columns.str.contains(dna_moniker)])]).T
+                (data[f'{dna1}_{self.mask_object}'] + 0.00001) /
+                (data[i] + 0.00001)) for i in
+                natsorted(data.columns[
+                    data.columns.str.contains(dna_moniker)])]).T
         list1 = [i for i in ratios.columns if i.startswith('Unnamed')]
         list2 = [f'1/{i+1}' for i in range(1, len(list1)+1)]
         ratio_columns = dict(zip(list1, list2))
         ratio_columns[f'{dna1}_{self.mask_object}'] = '1/1'
         ratios.rename(columns=ratio_columns, inplace=True)
-        ratios['sample'] = df['Sample']
+        ratios['sample'] = data['Sample']
 
         # log(cycle n/n+1) ratios
         # ratios = pd.DataFrame(
         #     [np.log10(
-        #         (df[i] + 0.00001) /
-        #         (df[dna_moniker
+        #         (data[i] + 0.00001) /
+        #         (data[dna_moniker
         #          + str(int([re.findall(r'(\w+?)(\d+)', i)[0]][0][1]) + 1)
         #          + '_' + self.mask_object] + 0.00001)
         #          )
         #         for i in
         #         natsorted(
-        #             df.columns[df.columns.str.contains(dna_moniker)])[0:-1]]).T
+        #             data.columns[data.columns.str.contains(dna_moniker)])[0:-1]]).T
         # list1 = [i for i in ratios.columns]
         # list2 = [f'{i}/{i+1}' for i in range(1, len(list1)+1)]
         # ratio_columns = dict(zip(list1, list2))
         # ratios.rename(columns=ratio_columns, inplace=True)
-        # ratios['sample'] = df['Sample']
+        # ratios['sample'] = data['Sample']
 
         ratios_melt = (
             ratios
@@ -1177,8 +1122,8 @@ class QC(object):
 
             sample_to_inspect = str(text.split(', ')[1])
 
-            if sample_to_inspect in df['Sample'].unique():
-                sample_df = df[df['Sample'] == sample_to_inspect]
+            if sample_to_inspect in data['Sample'].unique():
+                sample_df = data[data['Sample'] == sample_to_inspect]
                 sample_centroids = sample_df[['Y_centroid', 'X_centroid']]
 
                 with napari.gui_qt():
@@ -1364,7 +1309,7 @@ class QC(object):
                 indices_to_drop.update(set(idx))
 
         # filter dataframe by selecting indices NOT in the indices_to_drop list
-        df = df.loc[~df.index.isin(indices_to_drop)]
+        df = data.loc[~data.index.isin(indices_to_drop)]
 
         # grab dna and sample columns
         facet_input = df.loc[
@@ -1456,24 +1401,12 @@ class QC(object):
             bbox_inches='tight'
             )
         plt.close('all')
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='crossCycleCorrelation'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def log10transform(self, args):
+        return df
 
-        if self.start_module == 'log10transform':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def log10transform(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -1483,29 +1416,17 @@ class QC(object):
 
         # rescale abx intensities between 0 and 1
         # min_max_scaler = MinMaxScaler()
-        # df[abx_channels] = min_max_scaler.fit_transform(df[abx_channels])
+        # data[abx_channels] = min_max_scaler.fit_transform(data[abx_channels])
 
         # log10 transform
-        df[abx_channels] += 0.00000000001
-        df[abx_channels] = np.log10(df[abx_channels])
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='log10transform'
-            )
+        data[abx_channels] += 0.00000000001
+        data[abx_channels] = np.log10(data[abx_channels])
         print()
-        self.data = df
-        return self.data
 
-    def pruneOutliers(self, args):
+        return data
 
-        if self.start_module == 'pruneOutliers':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def pruneOutliers(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -1550,7 +1471,7 @@ class QC(object):
             print(ab)
 
             hist_facet = (
-                df[['Sample', 'Condition', 'Area'] + [ab]]
+                data[['Sample', 'Condition', 'Area'] + [ab]]
                 .sample(frac=1.0)
                 .melt(
                     id_vars=['Sample', 'Condition', 'Area'],
@@ -1592,7 +1513,7 @@ class QC(object):
             for ax in g.axes.flatten():
                 ax.tick_params(
                     axis='both', which='major',
-                    labelsize=0.2, pad=-5
+                    labelsize=1.0, pad=-5
                     )
                 ax.xaxis.label.set_size(2.0)
                 ax.yaxis.label.set_size(2.0)
@@ -1619,7 +1540,7 @@ class QC(object):
                 ['open', '-a', 'Preview', os.path.join(
                     hexbin_dir, f'{ab}_hexbins(raw).pdf')])
 
-            def submit(text, df):
+            def submit(text):
 
                 lowerPercentileCutoff = float(text.split(',')[0])
                 upperPercentileCutoff = float(text.split(',')[1])
@@ -1636,29 +1557,31 @@ class QC(object):
                 pickle.dump(hexbin_dict, f)
                 f.close()
 
-                # for s in df['Sample'].unique():
+                # for s in data['Sample'].unique():
 
-                data = df[ab]
+                channel_data = data[ab]
 
                 indices_to_drop = []
 
                 # add row index to list if column value < lower bound
                 indices_to_drop.extend(
-                    data.index[
-                        data < np.percentile(data, lowerPercentileCutoff)]
+                    channel_data.index[
+                        channel_data < np.percentile(
+                            channel_data, lowerPercentileCutoff)]
                         )
 
                 # add row index to list if column value > upper bound
                 indices_to_drop.extend(
-                    data.index[
-                        data > np.percentile(data, upperPercentileCutoff)])
+                    channel_data.index[
+                        channel_data > np.percentile(
+                            channel_data, upperPercentileCutoff)])
 
-                df.drop(
+                data.drop(
                     labels=set(indices_to_drop), axis=0,
                     inplace=True, errors='raise'
                     )
 
-                pruned_data = df[ab]
+                pruned_data = data[ab]
 
                 # rescale channel signal intensities
                 scaler = (
@@ -1674,11 +1597,11 @@ class QC(object):
                     index=pruned_data.index,
                     ).rename(columns={0: ab})
 
-                df.update(rescaled_data)
+                data.update(rescaled_data)
 
                 # plot pruned and rescaled signal intensity histrograms
                 hist_facet = (
-                    df[['Sample', 'Condition', 'Area'] + [ab]]
+                    data[['Sample', 'Condition', 'Area'] + [ab]]
                     .sample(frac=1.0)
                     .melt(
                         id_vars=['Sample', 'Condition', 'Area'],
@@ -1721,7 +1644,7 @@ class QC(object):
                 for ax in g.axes.flatten():
                     ax.tick_params(
                         axis='both', which='major',
-                        labelsize=0.2, pad=-5
+                        labelsize=1.0, pad=-5
                         )
                     ax.xaxis.label.set_size(2.0)
                     ax.yaxis.label.set_size(2.0)
@@ -1765,29 +1688,17 @@ class QC(object):
                 )
             text_box.label.set_size(10)
 
-            text_box.on_submit(lambda text: submit(text, df))
+            text_box.on_submit(submit)
 
             plt.show(block=True)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='pruneOutliers'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def performPCA(self, args):
+        return data
 
-        if self.start_module == 'performPCA':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def performPCA(data, self, args):
 
-        if len(df['Sample'].unique()) > 1:
+        if len(data['Sample'].unique()) > 1:
 
             markers, dna1, dna_moniker, abx_channels = read_markers(
                 markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -1799,10 +1710,8 @@ class QC(object):
                 i for i in abx_channels if i not in self.channel_exclusions
                 ]
 
-            sample_metadata = self.sample_metadata
-
             medians = (
-                df
+                data
                 .groupby(['Sample'])
                 .median()[abx_channels]
                 )
@@ -1830,16 +1739,16 @@ class QC(object):
 
             # switch sample names for condition names
             metadata_keys = [
-                i for i in sample_metadata.keys() if i.split('-')[1]
+                i for i in self.sample_conditions.keys() if i.split('-')[1]
                 in scatter_input.index
                 ]
 
             scatter_input.index = [
-                sample_metadata[i][1]
+                self.sample_abbreviations[i]
                 for i in metadata_keys
                 ]
             scatter_input['condition'] = [
-                sample_metadata[i][0]
+                self.sample_conditions[i]
                 for i in metadata_keys
                 ]
 
@@ -2063,24 +1972,12 @@ class QC(object):
             plt.tight_layout()
             plt.savefig(os.path.join(self.out_dir, 'pcaScoresPlot.pdf'))
             plt.close('all')
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='performPCA'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def performTSNE(self, args):
+        return data
 
-        if self.start_module == 'performTSNE':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def performTSNE(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2092,22 +1989,20 @@ class QC(object):
             ]
 
         if os.path.exists(os.path.join(self.out_dir, 'embedding.npy')):
-
-            # df = df.sample(frac=self.fracForEmbedding, random_state=5)
+            # recapitulate df index at the point of embedding
+            df = data.sample(frac=self.fracForEmbedding, random_state=5)
+            df.reset_index(drop=True, inplace=True)
             print(df)
+
             embedded = np.load(os.path.join(self.out_dir, 'embedding.npy'))
             df['emb1'] = embedded[:, 0]
             df['emb2'] = embedded[:, 1]
-            breakpoint()
+
         else:
             startTime = datetime.now()
-
-            df = df.sample(frac=self.fracForEmbedding, random_state=5)
             # save df with newly scrambled row index
-            save_dataframe(
-                df=df, outDir=self.out_dir,
-                moduleName='performTSNE'
-                )
+            df = data.sample(frac=self.fracForEmbedding, random_state=5)
+            df.reset_index(drop=True, inplace=True)
             print(df)
 
             embedded = TSNE(
@@ -2127,7 +2022,7 @@ class QC(object):
 
         sns.set_style('white')
 
-        def submit(text, df):
+        def submit(text):
 
             markers, dna1, dna_moniker, abx_channels = read_markers(
                 markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2334,13 +2229,6 @@ class QC(object):
                             bbox_extra_artists=(cluster_lgd, sample_lgd),
                             bbox_inches='tight', dpi=1000
                             )
-
-                        save_dataframe(
-                            df=df, outDir=self.out_dir,
-                            moduleName='performTSNE'
-                            )
-                        self.data = df
-
                         plt.close('all')
 
                     plt.show(block=False)
@@ -2387,23 +2275,14 @@ class QC(object):
             label_pad=0.05
             )
         text_box.label.set_size(10)
-        text_box.on_submit(lambda text: submit(text, df))
+        text_box.on_submit(submit)
         plt.show(block=True)
-
         print()
-        self.data = df
-        return self.data
 
-    def getClustermap(self, args):
+        return df
 
-        if self.start_module == 'getClustermap':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def getClustermap(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2411,7 +2290,7 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
 
-        clustermap_input = df[df['cluster'] != -1]
+        clustermap_input = data[data['cluster'] != -1]
 
         cluster_heatmap_input = clustermap_input[
             abx_channels + ['cluster']].groupby('cluster').mean()
@@ -2422,30 +2301,19 @@ class QC(object):
             square=False, yticklabels=1, linewidth=0.1, cbar=True
             )
 
+        plt.gcf().set_size_inches(8.0, 8.0)
+
         plt.savefig(
             os.path.join(
                 self.out_dir, 'clustermap.pdf'), bbox_inches='tight')
 
         plt.show(block=True)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir,
-            moduleName='getClustermap'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def lassoClusters(self, args):
+        return data
 
-        if self.start_module == 'lassoClusters':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def lassoClusters(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2454,8 +2322,8 @@ class QC(object):
             )
 
         subplot_kw = dict(
-            xlim=(df['emb1'].min(), df['emb1'].max()),
-            ylim=(df['emb2'].min(), df['emb2'].max()),
+            xlim=(data['emb1'].min(), data['emb1'].max()),
+            ylim=(data['emb2'].min(), data['emb2'].max()),
             autoscale_on=False)
 
         subplot_kw = dict()
@@ -2464,7 +2332,7 @@ class QC(object):
 
         # build cmap
         cmap = categorical_cmap(
-            numUniqueSamples=len(df['cluster'].unique()),
+            numUniqueSamples=len(data['cluster'].unique()),
             numCatagories=10,
             cmap='tab10',
             continuous=False
@@ -2474,9 +2342,9 @@ class QC(object):
         cmap.colors = np.delete(cmap.colors, -1, axis=0)
 
         pts = ax.scatter(
-            df['emb1'],
-            df['emb2'],
-            c=df['cluster'],
+            data['emb1'],
+            data['emb2'],
+            c=data['cluster'],
             cmap=cmap,
             s=2.0,
             ec='none'
@@ -2508,11 +2376,11 @@ class QC(object):
         # corresponding to those in the "selector object".
         # (This step relies on the fact that the "selector object"
         # maintains the original dataframe row order.)
-        df_idxs_lassoed = df.iloc[selector.ind].index
+        df_idxs_lassoed = data.iloc[selector.ind].index
         # df_idxs_to_drop = df.iloc[list(selector_idxs_to_drop)].index
 
         # show highest expression channels
-        markers = df.copy()
+        markers = data.copy()
         markers.loc[markers.index.isin(df_idxs_lassoed), 'cluster'] = 1000
         # markers.loc[~markers.index.isin(df_idxs_to_drop), 'cluster'] = 1000
         if len(markers[markers['cluster'] == 1000]) > 0:
@@ -2521,25 +2389,12 @@ class QC(object):
                 num_proteins=3, across_or_within='within',
                 )
             print(hi_markers)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir,
-            moduleName='lassoClusters'
-            )
         print()
-        self.data = df
-        return self.data
 
-    def curateThumbnails(self, args):
+        return data
 
-        if self.start_module == 'curateThumbnails':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
+    @module
+    def curateThumbnails(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2559,7 +2414,7 @@ class QC(object):
         ome_tifs = os.listdir(os.getcwd())
         ome_tifs.sort(key=lambda f: os.stat(f).st_size, reverse=True)
         ome_tifs = [
-            i for i in ome_tifs if i.split('.')[0] in df['Sample'].unique()
+            i for i in ome_tifs if i.split('.')[0] in data['Sample'].unique()
             ]
 
         # grab image contrast limit settings
@@ -2568,1329 +2423,1351 @@ class QC(object):
                 open(f'{self.out_dir}/contrast_limits.yml')
                 )
 
-        for cluster in sorted(df['cluster'].unique()):
-            if cluster != -1:
-                if cluster > -1:
-                    print(f'Cluster: {cluster}')
+        df = data[data['cluster'] != -1]
 
-                    markers_to_show = cluster_expression(
-                        df=df, markers=abx_channels,
-                        cluster=cluster, num_proteins=3,
-                        across_or_within='within',
-                        )
-
-                    markers_to_show = [
-                        '_'.join(i.split('_')[0:-1]) if '_' in i else
-                        i for i in [dna1] + markers_to_show
-                        ]
-
-                    color_dict = {}
-                    for i, j, k in zip(
-                      markers_to_show,
-
-                      [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0),
-                       (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
-                      ['gray', 'green', 'red', 'blue']
-                      ):
-                        color_dict[i] = j
-
-                    long_table = pd.DataFrame()
-
-                    for sample_name in ome_tifs:  # ['840069_0031-median_r_50']
-                        print(f'Sample: {sample_name}')
-
-                        # import cycle1 dna channel, convert to float and rgb
-
-                        dna = imread(
-                            os.path.join(f'{self.in_dir}/tif/', sample_name),
-                            key=0
-                            )
-
-                        dna = img_as_float(dna)
-                        dna = gray2rgb(dna)
-
-                        # loop over the channels to create a dict of images
-                        for e, marker in enumerate(markers_to_show):
-                            if e != 0:
-                                channel_number = markers['channel_number'][
-                                            markers['marker_name'] == marker]
-
-                                # read antibody image
-                                img = imread(
-                                    os.path.join(
-                                        f'{self.in_dir}/tif/', sample_name),
-                                    key=(channel_number-1)
-                                    )
-
-                                img = img_as_float(img)
-
-                                img -= (contrast_limits[marker][0]/65535)
-                                img /= (
-                                    (contrast_limits[marker][1]/65535)
-                                    - (contrast_limits[marker][0]/65535)
-                                    )
-                                img = np.clip(img, 0, 1)
-
-                                img = gray2rgb(img)
-
-                                img = (img * color_dict[marker])
-
-                                # loop over ab channels, add to cycle1 dna
-                                dna += img
-
-                                print(f'overlayed {marker} image')
-                                clearRAM(print_usage=True)
-                                del img
-                                clearRAM(print_usage=True)
-
-                        # crop out thumbnail images
-                        sample_cluster_subset = df[
-                            (df['Sample'] == sample_name.split('.')[0])
-                            & (df['cluster'] == cluster)
-                            ]
-
-                        sample_cluster_subset.reset_index(
-                            drop=True, inplace=True
-                            )
-
-                        if self.numFingernails > len(sample_cluster_subset):
-                            dif = (
-                                self.numFingernails
-                                - len(sample_cluster_subset)
-                                )
-
-                            extra_rows = pd.DataFrame(
-                                data=0,
-                                index=list(range(dif)),
-                                columns=sample_cluster_subset.columns
-                                )
-                            sample_cluster_subset = (
-                                sample_cluster_subset.append(extra_rows)
-                                )
-                            sample_cluster_subset.reset_index(
-                                drop=True, inplace=True
-                                )
-                        else:
-                            sample_cluster_subset = (
-                                sample_cluster_subset.sample(
-                                    n=self.numFingernails, random_state=3)
-                                )
-                        # add centroid mask to image overlay
-                        centroids = sample_cluster_subset[
-                            ['X_centroid', 'Y_centroid']
-                            ]
-
-                        clearRAM(print_usage=True)
-                        del sample_cluster_subset
-                        clearRAM(print_usage=True)
-
-                        centroid_img = np.zeros(
-                            (dna.shape[0],
-                             dna.shape[1]))
-
-                        centroid_dist = 1  # in pixels
-                        for example, centroid in enumerate(
-                          centroids.iterrows()):
-
-                            ystart_centroid = int(
-                                centroid[1]['Y_centroid'] - centroid_dist
-                                )
-                            ystop_centroid = int(
-                                centroid[1]['Y_centroid'] + centroid_dist
-                                )
-
-                            xstart_centroid = int(
-                                centroid[1]['X_centroid'] - centroid_dist
-                                )
-                            xstop_centroid = int(
-                                centroid[1]['X_centroid'] + centroid_dist
-                                )
-
-                            centroid_img[
-                                ystart_centroid:ystop_centroid,
-                                xstart_centroid:xstop_centroid
-                                ] = 1
-
-                        # convert to rgb and colorize
-                        centroid_img = gray2rgb(centroid_img)
-                        centroid_img = (centroid_img * (1.0, 1.0, 1.0))
-
-                        # add to overlay
-                        dna += centroid_img
-
-                        print('overlayed centroids')
-                        clearRAM(print_usage=True)
-                        del centroid_img
-                        clearRAM(print_usage=True)
-
-                        # crop thumbnails
-                        window_dist = 35  # in pixels
-                        for example, centroid in enumerate(
-                          centroids.iterrows()):
-
-                            if (
-                                (centroid[1]['X_centroid'] == 0.0) &
-                                (centroid[1]['Y_centroid'] == 0.0)
-                            ):
-
-                                blank_img = np.ones(
-                                    (window_dist,
-                                     window_dist))
-
-                                long_table = long_table.append(
-                                    {'sample': sample_name.split('.')[0],
-                                     'example': example,
-                                     'image': blank_img},
-                                    ignore_index=True
-                                    )
-
-                            else:
-
-                                # specify window x, y ranges
-                                ystart_window = int(
-                                    centroid[1]['Y_centroid'] - window_dist
-                                    )
-                                ystop_window = int(
-                                    centroid[1]['Y_centroid'] + window_dist
-                                    )
-
-                                xstart_window = int(
-                                    centroid[1]['X_centroid'] - window_dist
-                                    )
-                                xstop_window = int(
-                                    centroid[1]['X_centroid'] + window_dist
-                                    )
-
-                                # crop overlay image to window size
-                                thumbnail = dna[
-                                    ystart_window:ystop_window,
-                                    xstart_window:xstop_window
-                                    ]
-
-                                long_table = long_table.append(
-                                    {'sample': sample_name.split('.')[0],
-                                     'example': example,
-                                     'image': thumbnail.copy()},
-                                    ignore_index=True
-                                    )
-                                # thumbnail.copy() so overlay image can be gc'd
-
-                        # print('before dell dna')
-                        # clearRAM(print_usage=True)
-                        # del dna
-                        # print('after dell dna')
-                        # clearRAM(print_usage=True)
-
-                    long_table['example'] = [
-                        int(i) for i in long_table['example']
-                        ]
-
-                    print()
-
-                    # plot facet grid
-                    fig, ax = plt.subplots()
-
-                    g = sns.FacetGrid(
-                        long_table, row='sample', col='example',
-                        sharex=False, sharey=False,
-                        gridspec_kws={'hspace': 0.1, 'wspace': 0.05})
-
-                    g.map(
-                        lambda x, **kwargs: (
-                            plt.imshow(x.values[0]), plt.grid(False)), 'image')
-
-                    for ax in g.axes.flatten():
-                        ax.get_xaxis().set_ticks([])
-                        ax.set_xlabel('')
-                        ax.get_yaxis().set_ticks([])
-                        ax.set_ylabel('')
-
-                    g.set_titles(
-                        col_template="Ex. {col_name}",
-                        row_template="Smpl. {row_name}",
-                        fontweight='bold', size=8)
-
-                    custom_lines = []
-                    for k, v in color_dict.items():
-                        custom_lines.append(
-                            Line2D([0], [0], color=v, lw=6))
-
-                    ax.legend(
-                        custom_lines,
-                        list(color_dict.keys()), prop={'size': 12},
-                        bbox_to_anchor=(1.05, 1.0), loc='upper left'
-                        )
-
-                    plt.savefig(
-                        os.path.join(
-                            thumbnails_dir,
-                            'cluster' + str(cluster) + '_thumbnails.pdf')
-                            )
-                    plt.close('all')
-
-                    # clearRAM(print_usage=True)
-                    # del g
-                    # clearRAM(print_usage=True)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir,
-            moduleName='curateThumbnails'
-            )
-        print()
-        self.data = df
-        return self.data
-
-    def makeZarrs(self, args):
-
-        if self.start_module == 'makeZarrs':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
+        # store the numbers of those clusters that have already been run to
+        # pick up where left off
+        if os.path.exists(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl')):
+            f = open(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl'), 'rb')
+            thmbnls_to_run = pickle.load(f)
+            total_clusters = set(df['cluster'].unique())
+            completed_clusters = set(thmbnls_to_run)
+            clusters_to_run = natsorted(
+                total_clusters.difference(completed_clusters)
                 )
+            print(f'Clusters to run: {len(clusters_to_run)}')
         else:
-            df = self.data
+            clusters_to_run = natsorted(df['cluster'].unique())
+            print(f'Clusters to run: {len(clusters_to_run)}')
+            thmbnls_to_run = []
 
-        # if self.start_module == 'makeZarrs':
-        #     df = pd.read_csv(
-        #         os.path.join(
-        #             self.out_dir,
-        #             f'dataframe_archive/getSingleCellData.csv'),
-        #         index_col=0
-        #             )
-        # else:
-        #     df = self.data
+        for cluster in clusters_to_run:
 
-        markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
-            mask_object=self.mask_object,
-            markers_to_exclude=self.markers_to_exclude,
-            )
+            print(f'Cluster: {cluster}')
 
-        # make directory to store zarr arrays
-        zarrs_dir = os.path.join(self.out_dir, 'zarrs')
-        if not os.path.exists(zarrs_dir):
-            os.mkdir(zarrs_dir)
-
-        # initialize a dictionary to index and access zarr arrays
-        zs = {}
-
-        # select data compression algorithm for zarr arrays
-        compressor = Blosc(cname='zstd', clevel=3, shuffle=Blosc.SHUFFLE)
-
-        # loop over tissue samples
-        for sample_name in df['Sample'].unique():
-
-            # read DNA ashlar_output image
-            img = imread(
-                f'{self.in_dir}/tif/{sample_name}*.tif',
-                key=0  # key 0 is first dna cycle in markers.csv file
+            markers_to_show = cluster_expression(
+                df=data, markers=abx_channels,
+                cluster=cluster, num_proteins=3,
+                across_or_within='within',
                 )
 
-            # initialize zarr array for DNA image, append to a dictionary
-            zs[f'{sample_name}_{dna1}'] = zarr.open(
-                f'{zarrs_dir}/{sample_name}_{dna1}.zarr', mode='w',
-                shape=(
-                    img.shape[0], img.shape[1]),
-                chunks=(1000, 1000), dtype='uint16', compressor=compressor
-                )
-
-            # update zarr array with DNA image data
-            zs[f'{sample_name}_{dna1}'][:] = img
-
-            # update zarr array with all antibody images
-            # for k, v in cycle_map.items():
-            abx_channels = [
-                i for i in markers['marker_name'] if
-                dna_moniker not in i
+            markers_to_show = [
+                '_'.join(i.split('_')[0:-1]) if '_' in i else
+                i for i in [dna1] + markers_to_show
                 ]
 
-            for ab in abx_channels:
+            color_dict = {}
+            for i, j, k in zip(
+              markers_to_show,
 
-                print(
-                    f'Generating Zarr array for sample {sample_name} {ab}.'
+              [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0),
+               (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
+              ['gray', 'green', 'red', 'blue']
+              ):
+                color_dict[i] = j
+
+            long_table = pd.DataFrame()
+
+            for sample_name in ome_tifs:  # ['840069_0031-median_r_50']
+                print(f'Sample: {sample_name}')
+
+                # import cycle1 dna channel, convert to float and rgb
+
+                dna = imread(
+                    os.path.join(f'{self.in_dir}/tif/', sample_name),
+                    key=0
                     )
 
-                channel_number = markers['channel_number'][
-                    markers['marker_name'] == ab].iloc[0]
+                dna = img_as_float(dna)
+                dna = gray2rgb(dna)
 
-                # read antibody image
-                img = imread(
-                    f'{self.in_dir}/tif/{sample_name}*.tif',
-                    key=(channel_number-1)
+                # loop over the channels to create a dict of images
+                for e, marker in enumerate(markers_to_show):
+                    if e != 0:
+                        channel_number = markers['channel_number'][
+                                    markers['marker_name'] == marker]
+
+                        # read antibody image
+                        img = imread(
+                            os.path.join(
+                                f'{self.in_dir}/tif/', sample_name),
+                            key=(channel_number-1)
+                            )
+
+                        img = img_as_float(img)
+
+                        img -= (contrast_limits[marker][0]/65535)
+                        img /= (
+                            (contrast_limits[marker][1]/65535)
+                            - (contrast_limits[marker][0]/65535)
+                            )
+                        img = np.clip(img, 0, 1)
+
+                        img = gray2rgb(img)
+
+                        img = (img * color_dict[marker])
+
+                        # loop over ab channels, add to cycle1 dna
+                        dna += img
+
+                        print(f'overlayed {marker} image')
+                        clearRAM(print_usage=True)
+                        del img
+                        clearRAM(print_usage=True)
+
+                # crop out thumbnail images
+                sample_cluster_subset = data[
+                    (data['Sample'] == sample_name.split('.')[0])
+                    & (data['cluster'] == cluster)
+                    ]
+
+                sample_cluster_subset.reset_index(
+                    drop=True, inplace=True
                     )
 
-                # initialize zarr array for image, append to a dictionary
-                zs[f'{sample_name}_{ab}'] = zarr.open(
-                    f'{zarrs_dir}/{sample_name}_{ab}.zarr', mode='w',
-                    shape=(
-                        img.shape[0], img.shape[1]),
-                    chunks=(1000, 1000), dtype='uint16',
-                    compressor=compressor
-                    )
-
-                # update zarr array with image data
-                zs[f'{sample_name}_{ab}'][:] = img
-        print()
-
-        # apply image rendering settings if available and desired
-        if os.path.exists(f'{self.out_dir}/contrast_limits.yml'):
-
-            # load settings
-            contrast_limits = yaml.safe_load(
-                open(f'{self.out_dir}/contrast_limits.yml'))
-
-            for k, v in zs.items():
-                if k in contrast_limits.keys():
-                    print(f'Applying channel signal intensity cutoffs for {k}')
-
-                    bottom_omero_cutoff = contrast_limits[k][0]
-                    top_omero_cutoff = contrast_limits[k][1]
-
-                    temp = img_as_float(zs[k])
-                    temp -= (bottom_omero_cutoff/65535)
-                    temp /= (
-                        (top_omero_cutoff/65535)-(bottom_omero_cutoff/65535)
-                        )
-                    temp = np.clip(temp, 0, 1)
-
-                    zs[k][:] = img_as_uint(temp)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir, moduleName='makeZarrs'
-            )
-        print()
-        self.data = df
-        return self.data
-
-    def cellDensities(self, args):
-
-        if self.start_module == 'cellDensities':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
-
-        sample_metadata = self.sample_metadata
-
-        facet_input = df[df['cluster'] >= 0]
-
-        facet_input = facet_input.groupby(
-            ['Condition', 'Sample', 'cluster']).size().reset_index()
-        facet_input.rename(columns={0: 'count'}, inplace=True)
-
-        # divide cluster cell counts by total number of cells per sample
-        for name, group in facet_input.groupby(['Sample']):
-
-            total_cells = group['count'].sum()
-
-            facet_input.loc[group.index, 'cluster_conc'] = (
-                group['count']/total_cells
-                )
-
-        # pad counts tables, some clusters may be absent from samples
-        pad = pd.DataFrame()
-        for cluster in sorted(facet_input['cluster'].unique()):
-            to_append = pd.DataFrame(
-                {'Sample': natsorted(facet_input['Sample'].unique()),
-                 'cluster': [cluster]*len(facet_input['Sample'].unique())})
-            pad = pad.append(to_append)
-        pad.reset_index(drop=True, inplace=True)
-        pad['Condition'] = [sample_metadata[i][0] for i in pad['Sample']]
-
-        facet_input = facet_input.merge(
-            pad, how='right', on=['Condition', 'Sample', 'cluster'])
-        facet_input.fillna(value=0, inplace=True)
-
-        new_df = pd.DataFrame()
-        for cluster in facet_input.groupby(['cluster']):
-            for name in cluster[1].groupby(['Condition']):
-                cluster[1].loc[
-                    name[1]['cluster_conc'].index, 'ave_cluster_conc'
-                    ] = name[1]['cluster_conc'].mean()
-            conds = cluster[1].drop_duplicates(subset=['Condition']).copy()
-            conds.sort_values(
-                by='ave_cluster_conc', ascending=False, inplace=True
-                )
-            conds.reset_index(drop=True, inplace=True)
-            conds.reset_index(drop=False, inplace=True)
-
-            conds_dict = dict(zip(conds['Condition'], conds['index']))
-            cluster[1]['index'] = [
-                conds_dict[i] for i in cluster[1]['Condition']
-                ]
-
-            new_df = new_df.append(cluster[1])
-
-        new_df.sort_values(
-            by=['cluster', 'ave_cluster_conc'],
-            ascending=[True, False], inplace=True)
-
-        # build cmap
-        cmap = categorical_cmap(
-            numUniqueSamples=len(facet_input['Condition'].unique()),
-            numCatagories=10,
-            cmap='tab10',
-            continuous=False
-            )
-
-        sns.set(font_scale=0.4)
-
-        g = sns.FacetGrid(
-            data=new_df, col='cluster', col_wrap=10,
-            sharex=False, sharey=False, height=1.5, aspect=1.3
-            )
-
-        g.map(
-            sns.barplot, 'Condition', 'cluster_conc',
-            linewidth=0.0, order=None, errwidth=0.2, palette=cmap.colors)
-
-        [
-            plt.setp(ax.get_xticklabels(), rotation=90, size=0.5) for
-            ax in g.axes.flat
-            ]
-
-        new_bar_width = 0.6
-        for ax, title in zip(
-            g.axes.flatten(), new_df['cluster'].unique()
-          ):
-
-            ax.set_title(title, size=6, weight='bold')
-            ax.set_xlabel('')
-
-            for patch in ax.patches:
-                current_width = patch.get_width()
-                diff = current_width - new_bar_width
-
-                # change the bar width
-                patch.set_width(new_bar_width)
-
-                # recenter the bar
-                patch.set_x(patch.get_x() + diff * 0.5)
-
-        plt.tight_layout()
-
-        plt.savefig(
-            os.path.join(self.out_dir, 'facetGrid.png'), dpi=800
-            )
-
-        plt.show(block=True)
-
-        save_dataframe(
-            df=df, outDir=self.out_dir,
-            moduleName='performTSNE'
-            )
-        print()
-        self.data = df
-        return self.data
-
-    def frequencyStats(self, args):
-
-        if self.start_module == 'frequencyStats':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
-
-        stats_input = df[df['cluster'] >= 0]
-
-        frequency_dir = os.path.join(self.out_dir, 'frequency_stats')
-        if not os.path.exists(frequency_dir):
-            os.mkdir(frequency_dir)
-
-        conditions = sorted(list(set(self.samples.values())))
-
-        # create single-column dataFrame of all sample names
-        # to pad counts tables with zeros if a celltype is not in a tissue
-        pad = pd.DataFrame(
-            sorted(stats_input['sample'].unique())).rename(
-                columns={0: 'sample'}
-                )
-
-        cluster_list = []
-        ratio_list = []
-        dif_list = []
-        pval_list = []
-
-        # intialize a dataframe to collect catplot data
-        catplot_input = pd.DataFrame()
-
-        # loop over clusters
-        for w, group in stats_input.groupby('cluster'):
-
-            print(
-                f'Calculating log2({conditions[1]}/{conditions[0]})'
-                f'of mean cell density for the {str(w)} cluster.'
-                )
-
-            group = group.groupby(
-                ['sample', 'condition', 'replicate', 'cluster']
-                ).size().reset_index(
-                drop=False).rename(columns={0: 'count'}).sort_values(
-                by='count', ascending=False)
-
-            group = group.merge(pad, how='right', on='sample')
-
-            # guard against NaNs induced by the absence
-            # of a given cluster in one or
-            # more of the tissue samples
-            group['count'] = [
-                0 if np.isnan(i) else i for i in group['count']]
-            group['condition'] = [
-                'cd' if 'cd' in i else 'hfd' for i in group['sample']
-                ]
-            group['replicate'] = [
-                re.sub("\\D", "", i) for i in group['sample']
-                ]
-            group['cluster'] = w
-
-            # get denominator cell count of each sample
-            if self.denominator_cluster is None:
-                group['tissue_count'] = [
-                    len(stats_input[stats_input['sample'] == i]) for
-                    i in group['sample']]
-            else:
-                group['tissue_count'] = [
-                    len(stats_input[(stats_input['sample'] == i) &
-                        (stats_input[
-                            'cluster'] == self.denominator_cluster)]) for
-                    i in group['sample']]
-
-            # compute density of cells per sample corresponding to
-            # current variable
-            group['density'] = group['count']/group['tissue_count']
-
-            # append group data to catplot_input
-            catplot_input = catplot_input.append(group)
-
-            cnd1_values = group['density'][group['condition'] == conditions[0]]
-            cnd2_values = group['density'][group['condition'] == conditions[1]]
-
-            stat, pval = ttest_ind(
-                cnd1_values, cnd2_values,
-                axis=0, equal_var=True, nan_policy='propagate')
-
-            cnd1_mean = np.mean(cnd1_values)
-            cnd2_mean = np.mean(cnd2_values)
-
-            ratio = np.log2((cnd2_mean + 0.000001)/(cnd1_mean + 0.000001))
-
-            dif = cnd2_mean-cnd1_mean
-
-            cluster_list.append(w)
-            ratio_list.append(ratio)
-            dif_list.append(dif)
-            pval_list.append(pval)
-
-        statistics = pd.DataFrame(
-            list(zip(cluster_list, ratio_list, dif_list, pval_list)),
-            columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
-                by='dif')
-
-        statistics.to_csv(
-            os.path.join(
-                frequency_dir, 'stats.csv'), index=False)
-
-        stats = importr('stats')
-
-        p_adjust = stats.p_adjust(
-            FloatVector(statistics['pval'].tolist()),
-            method='BH')
-
-        statistics['qval'] = p_adjust
-
-        if self.FDRCorrection:
-            stat = 'qval'
-
-        else:
-            stat = 'pval'
-
-        significant = statistics[
-            statistics[stat] <= 0.05].sort_values(by='dif')
-
-        significant.to_csv(
-            os.path.join(
-                frequency_dir, 'sig_difs.csv'), index=False)
-
-        sns.set_style('whitegrid')
-        fig, ax = plt.subplots()
-        plt.scatter(abs(significant['dif']), significant['ratio'])
-
-        for label, qval, x, y in zip(
-          significant['cluster'], significant[stat],
-          abs(significant['dif']), significant['ratio']):
-
-            plt.annotate(
-                (label, f'{stat[0]}=' + str(round(qval, 4))), size=3,
-                xy=(x, y), xytext=(10, 10),
-                textcoords='offset points', ha='right', va='bottom',
-                bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
-                          alpha=0.0))
-
-        for tick in ax.xaxis.get_major_ticks():
-            tick.label.set_fontsize(5)
-
-        plt.title(f'cnd1 vs. cnd2 {stat[0]}<0.05)', fontsize=12)
-        plt.xlabel(f'abs({conditions[1]} - {conditions[0]})', fontsize=10)
-        plt.ylabel(f'log2({conditions[1]} / {conditions[0]})', fontsize=10)
-        plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
-        plt.close()
-
-        catplot_input.reset_index(drop=True, inplace=True)
-
-        catplot_input[stat] = [
-             '' if i not in significant['cluster'].unique() else
-             round(
-                significant[stat][significant['cluster'] == i].values[0], 6)
-             for i in catplot_input['cluster']]
-
-        # catplot_input['label'] = catplot_input['cluster'].map(str) + \
-        #     ', ' + 'q=' + catplot_input['qval'].astype(str)
-        #
-        # catplot_input['label'] = [
-        #     i.split(',')[0] if not i.split(',')[0] in
-        #     significant['cluster'].unique().astype(str) else i for
-        #     i in catplot_input['label']]
-
-        catplot_input.sort_values(
-            ['cluster', 'condition', 'replicate'], inplace=True)
-
-        # catplot_input.drop('cluster', axis=1, inplace=True)
-
-        # catplot_input.rename(columns={'label': 'cluster'}, inplace=True)
-
-        sns.set(font_scale=0.4)
-        g = sns.catplot(
-            x='condition', y='density',
-            hue='replicate', col='cluster', col_wrap=14,
-            data=catplot_input, kind='strip', palette='tab20',
-            height=2, aspect=0.8, sharey=False, legend=False)
-
-        g.set(ylim=(0.0, None))
-        plt.legend(markerscale=0.5)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(frequency_dir, 'catplot.pdf'))
-        plt.close('all')
-        print()
-        self.data = df
-        return self.data
-
-    def clusterBoxplots(self, args):
-
-        if self.start_module == 'clusterBoxplots':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
-
-        cmap = categorical_cmap(
-            numCatagories=10, numSubcatagories=2,
-            cmap='tab10', continuous=False
-            )
-
-        boxplot_input = df[df['cluster'] >= 0]
-
-        # get tidy input data
-        boxplot_input = (
-            boxplot_input[[
-                'cluster', 'sample', 'condition'] + self.markers]
-            .melt(
-                id_vars=['cluster', 'sample', 'condition'],
-                var_name='protein', value_name='log10(intensity)'))
-
-        boxplot_input = boxplot_input.sample(frac=1.0)
-
-        boxplot_input['label'] = (
-            boxplot_input['protein'] + '_'
-            + boxplot_input['cluster'].map(str) + '_'
-            + boxplot_input['condition']
-            )
-
-        boxplot_input.sort_values(by='label', inplace=True)
-
-        boxplot_input.rename(
-            columns={'log10(intensity)': '$log_{10}(intensity)$'},
-            inplace=True)
-
-        sns.set(font_scale=0.27)
-        sns.set_style('whitegrid')
-
-        g = sns.FacetGrid(
-            boxplot_input, row='cluster', col='protein',
-            sharex=False, sharey=False, height=1, aspect=1.5)
-
-        hue_dict = dict(
-            zip(boxplot_input['cluster'].unique(), cmap.colors)
-            )
-
-        g.map(
-            lambda x, y, z, color:
-                sns.boxplot(
-                    data=boxplot_input, x=x, y=y,
-                    hue=z, palette=hue_dict,
-                    linewidth=0.95, width=0.75,
-                    fliersize=0.95),
-                'condition', '$log_{10}(intensity)$', 'cluster')
-
-        def statistics(label):
-
-            conditions = sorted(list(set(self.samples.values())))
-            cond_dict = {
-                conditions[0]: conditions[1], conditions[1]: conditions[0]
-                }
-            label = label.values[0]
-            cond_name = label.split('_')[-1]
-            opposite_label = label.replace(cond_name, cond_dict[cond_name])
-
-            means1 = boxplot_input[
-                    boxplot_input['label'] == label].groupby(
-                        'sample').mean()['$log_{10}(intensity)$']
-
-            means2 = boxplot_input[
-                    boxplot_input['label'] == opposite_label].groupby(
-                        'sample').mean()['$log_{10}(intensity)$']
-
-            # perform Welch's unequal variances t-test
-            stat, pval = ttest_ind(
-                means1, means2,
-                axis=0, equal_var=False, nan_policy='propagate')
-
-            if self.bonferroniCorrection:
-
-                # perform Bonferroni correction
-                p_adj = pval * len(boxplot_input['label'].unique())/2
-
-                if p_adj <= 0.05:
-                    ax = plt.gca()
-                    ax.text(
-                        0.5, 0.85,
-                        r'$p_{adj} = $' + '%.1E' % Decimal(str(p_adj)),
-                        fontweight='normal', fontsize=11.0,
-                        color='k', ha='center', va='center',
-                        transform=ax.transAxes
-                        )
-            else:
-                # DO NOT perform Bonferroni correction
-                if pval <= 0.05:
-                    ax = plt.gca()
-                    ax.text(
-                        0.5, 0.85, r'$p = $' + '%.1E' % Decimal(str(pval)),
-                        fontweight='normal', fontsize=11.0,
-                        color='k', ha='center', va='center',
-                        transform=ax.transAxes
+                if self.numFingernails > len(sample_cluster_subset):
+                    dif = (
+                        self.numFingernails
+                        - len(sample_cluster_subset)
                         )
 
-        g.map(
-            lambda label, color:
-                statistics(label=label), 'label')
-
-        plt.savefig(
-            os.path.join(self.out_dir, 'cluster_boxplots.pdf'), bbox='tight')
-        plt.close('all')
-        print()
-        self.data = df
-        return self.data
-
-    def spatialAnalysis(self, args):
-
-        if self.start_module == 'spatialAnalysis':
-            df = read_dataframe(
-                modules_list=self.modules,
-                start_module=self.start_module,
-                outDir=self.out_dir,
-                )
-        else:
-            df = self.data
-
-        zs = loadZarrs(
-            df=df, outDir=self.out_dir,
-            markers_filepath=os.path.join(self.in_dir, 'markers.csv')
-            )
-
-        spatial_dir = os.path.join(self.out_dir, 'spatial_analysis')
-        if not os.path.exists(spatial_dir):
-            os.makedirs(spatial_dir)
-
-        stats = pd.DataFrame(
-            columns=[
-                'protein', 'sample', 'celltype', 'ratio_r',
-                'centroids', 'ratio_f', 'points']
-            )
-
-        stats_row_idx = 0
-        for protein, binary_cutoff in self.spatialDict1.items():
-            for sample in df['sample'].unique():
-
-                if sample in self.cropDict.keys():
-                    section = self.cropDict[sample][0]
-                    cut_point = self.cropDict[sample][1]
-
-                    if section == 'bottom':
-                        dna = zs[f'{sample}_dna'][cut_point:]
-                        img = zs[f'{sample}_{protein}'][cut_point:]
-
-                    elif section == 'top':
-                        dna = zs[f'{sample}_dna'][:cut_point]
-                        img = zs[f'{sample}_{protein}'][:cut_point]
-
+                    extra_rows = pd.DataFrame(
+                        data=0,
+                        index=list(range(dif)),
+                        columns=sample_cluster_subset.columns
+                        )
+                    sample_cluster_subset = (
+                        sample_cluster_subset.append(extra_rows)
+                        )
+                    sample_cluster_subset.reset_index(
+                        drop=True, inplace=True
+                        )
                 else:
-                    dna = zs[f'{sample}_dna'][:]
-                    img = zs[f'{sample}_{protein}'][:]
+                    sample_cluster_subset = (
+                        sample_cluster_subset.sample(
+                            n=self.numFingernails, random_state=3)
+                        )
+                # add centroid mask to image overlay
+                centroids = sample_cluster_subset[
+                    ['X_centroid', 'Y_centroid']
+                    ]
 
-                for celltype, cluster in self.spatialDict2.items():
+                clearRAM(print_usage=True)
+                del sample_cluster_subset
+                clearRAM(print_usage=True)
 
-                    print(celltype, protein, sample)
+                centroid_img = np.zeros(
+                    (dna.shape[0],
+                     dna.shape[1]))
 
-                    total_centroids = df[['x', 'y']][
-                        (df['sample'] == sample) &
-                        (df['cluster'] == cluster)].astype(int)
+                centroid_dist = 1  # in pixels
+                for example, centroid in enumerate(
+                  centroids.iterrows()):
 
-                    if sample in self.cropDict.keys():
-                        section = self.cropDict[sample][0]
-                        cut_point = self.cropDict[sample][1]
+                    ystart_centroid = int(
+                        centroid[1]['Y_centroid'] - centroid_dist
+                        )
+                    ystop_centroid = int(
+                        centroid[1]['Y_centroid'] + centroid_dist
+                        )
 
-                        if section == 'bottom':
-                            total_centroids = total_centroids[
-                                total_centroids['y'] >= cut_point]
+                    xstart_centroid = int(
+                        centroid[1]['X_centroid'] - centroid_dist
+                        )
+                    xstop_centroid = int(
+                        centroid[1]['X_centroid'] + centroid_dist
+                        )
 
-                            total_centroids['y'] = (
-                                total_centroids['y']-cut_point
-                                )
+                    centroid_img[
+                        ystart_centroid:ystop_centroid,
+                        xstart_centroid:xstop_centroid
+                        ] = 1
 
-                        elif section == 'top':
-                            total_centroids = total_centroids[
-                                total_centroids['y'] < cut_point]
+                # convert to rgb and colorize
+                centroid_img = gray2rgb(centroid_img)
+                centroid_img = (centroid_img * (1.0, 1.0, 1.0))
 
-                    if len(total_centroids) > 1:
-                        y_min = total_centroids['y'].min()
-                        y_max = total_centroids['y'].max()
-                        y_range = y_max - y_min
+                # add to overlay
+                dna += centroid_img
 
-                        print(y_min, y_max)
+                print('overlayed centroids')
+                clearRAM(print_usage=True)
+                del centroid_img
+                clearRAM(print_usage=True)
 
-                        x_min = total_centroids['x'].min()
-                        x_max = total_centroids['x'].max()
-                        x_range = x_max - x_min
+                # crop thumbnails
+                window_dist = 35  # in pixels
+                for example, centroid in enumerate(
+                  centroids.iterrows()):
 
-                        dna_blurred = gaussian(dna, sigma=12)
-                        dna_mask = np.where(dna_blurred > 0.05, 1, 0)
+                    if (
+                        (centroid[1]['X_centroid'] == 0.0) &
+                        (centroid[1]['Y_centroid'] == 0.0)
+                    ):
 
-                        area_mask = dna_mask[y_min:y_max, :]
-                        area_mask = area_mask[:, x_min:x_max]
+                        blank_img = np.ones(
+                            (window_dist,
+                             window_dist))
 
-                        inside_tumor = np.argwhere(area_mask == 1)
-                        outside_tumor = np.argwhere(area_mask == 0)
-
-                        frac_area_out = outside_tumor.shape[0]/(
-                            outside_tumor.shape[0] + inside_tumor.shape[0])
-
-                        img_blurred = gaussian(img, sigma=12)
-                        img_mask_real = np.where(
-                            img_blurred > binary_cutoff, 1, 0
+                        long_table = long_table.append(
+                            {'sample': sample_name.split('.')[0],
+                             'example': example,
+                             'image': blank_img},
+                            ignore_index=True
                             )
-                        img_mask_fake = img_mask_real.copy()
 
-                        (img_mask_real[total_centroids['y'],
-                         total_centroids['x']]
-                         ) += 10
+                    else:
 
-                        outside_centroids = np.argwhere(img_mask_real == 10)
-                        outside_centroids = pd.DataFrame(
-                            outside_centroids, columns=['y', 'x'])
+                        # specify window x, y ranges
+                        ystart_window = int(
+                            centroid[1]['Y_centroid'] - window_dist
+                            )
+                        ystop_window = int(
+                            centroid[1]['Y_centroid'] + window_dist
+                            )
 
-                        inside_centroids = np.argwhere(img_mask_real == 11)
-                        inside_centroids = pd.DataFrame(
-                            inside_centroids, columns=['y', 'x'])
+                        xstart_window = int(
+                            centroid[1]['X_centroid'] - window_dist
+                            )
+                        xstop_window = int(
+                            centroid[1]['X_centroid'] + window_dist
+                            )
 
-                        radii = []
-                        num_points = []
-                        for radius in range(
-                            self.radiusRange[0], self.radiusRange[1]
-                          ):
-                            total_poisson_points = pd.DataFrame(
-                                poisson_disc_samples(
-                                    width=x_range, height=y_range, r=radius),
-                                columns=['x', 'y'])
-                            print(radius, len(total_poisson_points))
-                            radii.append(radius)
-                            num_points.append(len(total_poisson_points))
-
-                        def closest(lst, K):
-                            return lst[
-                                min(
-                                    range(
-                                        len(lst)),
-                                    key=lambda i: abs(lst[i]-K))]
-
-                        optimal_points = closest(
-                            num_points, len(total_centroids) +
-                            (int(len(total_centroids) * frac_area_out)))
-                        optimal_radius = radii[
-                            num_points.index(optimal_points)-2
+                        # crop overlay image to window size
+                        thumbnail = dna[
+                            ystart_window:ystop_window,
+                            xstart_window:xstop_window
                             ]
 
-                        total_poisson_points = pd.DataFrame(
-                            poisson_disc_samples(
-                                width=x_range, height=y_range,
-                                r=optimal_radius),
-                            columns=['x', 'y']).astype(int)
-
-                        # ensure simulation contains at least 2 points
-                        while len(total_poisson_points) < 2:
-                            optimal_radius -= 1
-                            total_poisson_points = pd.DataFrame(
-                                poisson_disc_samples(
-                                    width=x_range, height=y_range,
-                                    r=optimal_radius),
-                                columns=['x', 'y']).astype(int)
-
-                        total_poisson_points['x'] = (
-                            total_poisson_points['x'] + x_min
+                        long_table = long_table.append(
+                            {'sample': sample_name.split('.')[0],
+                             'example': example,
+                             'image': thumbnail.copy()},
+                            ignore_index=True
                             )
-                        total_poisson_points['y'] = (
-                            total_poisson_points['y'] + y_min
-                            )
+                        # thumbnail.copy() so overlay image can be gc'd
 
-                        (dna_mask[total_poisson_points['y'],
-                                  total_poisson_points['x']]
-                         ) += 10
+                # print('before dell dna')
+                # clearRAM(print_usage=True)
+                # del dna
+                # print('after dell dna')
+                # clearRAM(print_usage=True)
 
-                        total_poisson_points = np.argwhere(dna_mask == 11)
-                        total_poisson_points = pd.DataFrame(
-                            total_poisson_points, columns=['y', 'x'])
+            long_table['example'] = [
+                int(i) for i in long_table['example']
+                ]
 
-                        (img_mask_fake[total_poisson_points['y'],
-                         total_poisson_points['x']]
-                         ) += 10
+            print()
 
-                        outside_poisson_points = np.argwhere(
-                            img_mask_fake == 10
-                            )
-                        outside_poisson_points = pd.DataFrame(
-                            outside_poisson_points, columns=['y', 'x'])
+            # plot facet grid
+            fig, ax = plt.subplots()
 
-                        inside_poisson_points = np.argwhere(
-                            img_mask_fake == 11
-                            )
-                        inside_poisson_points = pd.DataFrame(
-                            inside_poisson_points, columns=['y', 'x'])
+            g = sns.FacetGrid(
+                long_table, row='sample', col='example',
+                sharex=False, sharey=False,
+                gridspec_kws={'hspace': 0.1, 'wspace': 0.05})
 
-                        rgb_img = img_as_float(img)
-                        rgb_img = gray2rgb(rgb_img)
-                        rgb_img = (rgb_img * (0.5, 0.5, 0.5))
+            g.map(
+                lambda x, **kwargs: (
+                    plt.imshow(x.values[0]), plt.grid(False)), 'image')
 
-                        plt.imshow(rgb_img)
-                        plt.scatter(
-                            inside_centroids['x'],
-                            inside_centroids['y'], s=0.5, ec='none', c='g'
-                            )
+            for ax in g.axes.flatten():
+                ax.get_xaxis().set_ticks([])
+                ax.set_xlabel('')
+                ax.get_yaxis().set_ticks([])
+                ax.set_ylabel('')
 
-                        plt.scatter(
-                            outside_centroids['x'],
-                            outside_centroids['y'], s=0.5, ec='none', c='r')
+            g.set_titles(
+                col_template="Ex. {col_name}",
+                row_template="Smpl. {row_name}",
+                fontweight='bold', size=8)
 
-                        legend_elements = []
-                        legend_elements.append(
-                            Line2D([0], [0], marker='o', color='none',
-                                   label='inside',
-                                   markerfacecolor='g',
-                                   markeredgecolor='none', lw=0.001,
-                                   markersize=6)
-                                   )
-                        legend_elements.append(
-                            Line2D([0], [0], marker='o', color='none',
-                                   label='outside',
-                                   markerfacecolor='r',
-                                   markeredgecolor='none', lw=0.001,
-                                   markersize=6)
-                                   )
+            custom_lines = []
+            for k, v in color_dict.items():
+                custom_lines.append(
+                    Line2D([0], [0], color=v, lw=6))
 
-                        plt.legend(
-                            handles=legend_elements, prop={'size': 6},
-                            bbox_to_anchor=[1.0, 1.0])
-
-                        ratio_real = str(
-                            round(
-                                len(inside_centroids)/len(total_centroids), 2)
-                                )
-                        total_cells = str(len(total_centroids))
-                        title_statement = (
-                            f'{sample}-{celltype}, inside/total: {ratio_real},'
-                            + f' total cells={total_cells}'
-                            )
-                        plt.title(title_statement, fontsize=10)
-
-                        plt.grid(False)
-                        plt.savefig(
-                            os.path.join(
-                                spatial_dir,
-                                f'{protein}_{celltype}_{sample}.png'), dpi=800)
-                        plt.close('all')
-
-                        plt.imshow(rgb_img)
-
-                        plt.scatter(
-                            inside_poisson_points['x'],
-                            inside_poisson_points['y'],
-                            s=0.5, ec='none', c='g'
-                            )
-
-                        plt.scatter(
-                            outside_poisson_points['x'],
-                            outside_poisson_points['y'],
-                            s=0.5, ec='none', c='r'
-                            )
-
-                        legend_elements = []
-                        legend_elements.append(
-                            Line2D([0], [0], marker='o', color='none',
-                                   label='inside',
-                                   markerfacecolor='g',
-                                   markeredgecolor='none', lw=0.001,
-                                   markersize=6)
-                                   )
-                        legend_elements.append(
-                            Line2D([0], [0], marker='o', color='none',
-                                   label='outside',
-                                   markerfacecolor='r',
-                                   markeredgecolor='none', lw=0.001,
-                                   markersize=6)
-                                   )
-
-                        plt.legend(
-                            handles=legend_elements, prop={'size': 6},
-                            bbox_to_anchor=[1.0, 1.0])
-
-                        if not len(total_poisson_points) == 0:
-                            ratio_fake = str(
-                                round(
-                                    len(inside_poisson_points) /
-                                    len(total_poisson_points), 2))
-                        else:
-                            ratio_fake = 'divide by zero'
-
-                        poisson_points = str(len(total_poisson_points))
-                        title_statement = (
-                            f'{sample}-{celltype}_Poisson-disc,' +
-                            f' inside/total: {ratio_fake},' +
-                            f' total points={poisson_points}'
-                            )
-                        plt.title(title_statement, fontsize=10)
-
-                        plt.grid(False)
-                        plt.savefig(
-                            os.path.join(
-                                spatial_dir,
-                                f'{protein}_{celltype}_Poisson-disc_' +
-                                f'{sample}.png'),
-                            dpi=800
-                            )
-                        plt.close('all')
-
-                        stats.loc[stats_row_idx] = (
-                            protein, sample, celltype, float(ratio_real),
-                            len(total_centroids), float(ratio_fake),
-                            len(total_poisson_points)
-                            )
-                        stats_row_idx += 1
-
-        stats.to_csv(os.path.join(spatial_dir, 'stats.csv'))
-        # stats = pd.read_csv(
-        #     os.path.join(spatial_dir, 'stats.csv'), index_col=0)
-
-        stats = stats[stats['ratio_f'] != 'divide by zero']
-        stats['ratio_f'] = [float(i) for i in stats['ratio_f']]
-
-        stats['condition'] = [
-            re.findall(r"[^\W\d_]+|\d+", i)[0] for
-            i in stats['sample']
-            ]
-
-        simulation = stats.copy()
-
-        stats.rename(
-            columns={
-                'centroids': '# measured cells',
-                'points': '# simulated cells'},
-            inplace=True
-            )
-
-        sns.set_style('whitegrid')
-        sns.scatterplot(
-            x=stats['# simulated cells'],
-            y=stats['# measured cells'],
-            color='k',
-            data=stats
-            )
-        plt.savefig(
-            os.path.join(
-                spatial_dir, 'points_v_centroids.pdf'),
-            dpi=600, bbox_inches='tight')
-        plt.close('all')
-
-        stats[
-            '% cells overlapping immunomarker (normalized to simulation)'] = (
-            stats['ratio_r'] - stats['ratio_f']
-            )
-
-        stats.sort_values(
-            by=['protein', 'celltype', 'condition'],
-            ascending=[True, False, True],
-            inplace=True
-            )
-        stats.reset_index(drop=True, inplace=True)
-
-        stats['label'] = (
-            stats['protein'] + '_' +
-            stats['celltype']
-            )
-
-        sns.set_style('whitegrid')
-        sns.swarmplot(
-            x='label',
-            y='% cells overlapping immunomarker (normalized to simulation)',
-            hue='condition',
-            size=3,
-            dodge=True,
-            palette=['lightgray', 'firebrick'],
-            data=stats
-            )
-        plt.xticks(rotation=90, size=5)
-
-        plt.savefig(
-            os.path.join(
-                spatial_dir,
-                'percent cells overlapping immunomarker' +
-                ' (normalized to simulation).pdf'),
-            dpi=600, bbox_inches='tight')
-        plt.close('all')
-
-        condition_sig = {}
-        for name, group in stats.groupby(['protein', 'celltype']):
-            a = group[
-                '% cells overlapping immunomarker (normalized to simulation)'][
-                    group['condition'] == 'cd']
-            b = group[
-                '% cells overlapping immunomarker (normalized to simulation)'][
-                    group['condition'] == 'hfd']
-            t, pval = ttest_ind(
-                a, b, axis=0, equal_var=True, nan_policy='propagate')
-            condition_sig[f'{name}'] = round(pval, 3)
-
-        condition_sig_df = pd.DataFrame(condition_sig, index=range(0, 27)).T[0]
-        condition_sig_df.rename('pval', inplace=True)
-        condition_sig_df.to_csv(
-            os.path.join(spatial_dir, 'treatment_sig.csv'), header=True)
-
-        stats.to_csv(
-            os.path.join(spatial_dir, 'stats_normalized.csv'), index=False
-            )
-
-        simulation['dtype'] = 'simulation'
-
-        measurement = simulation.copy()
-        measurement['dtype'] = 'measurement'
-
-        cols = [
-            col for col in simulation.columns if
-            col not in ['ratio_r', 'centroids']
-            ]
-        simulation = simulation[cols]
-        simulation.rename(
-            columns={'ratio_f': '% cells overlapping immunomarker'},
-            inplace=True)
-
-        cols = [
-            col for col in measurement.columns if
-            col not in ['ratio_f', 'points']
-            ]
-        measurement = measurement[cols]
-
-        measurement.rename(
-            columns={
-                'ratio_r': '% cells overlapping immunomarker',
-                'centroids': 'points'}, inplace=True
+            ax.legend(
+                custom_lines,
+                list(color_dict.keys()), prop={'size': 12},
+                bbox_to_anchor=(1.05, 1.0), loc='upper left'
                 )
 
-        stats = simulation.append(measurement, sort=True, ignore_index=True)
-        del simulation
-        del measurement
+            plt.savefig(
+                os.path.join(
+                    thumbnails_dir,
+                    'cluster' + str(cluster) + '_thumbnails.pdf')
+                    )
+            plt.close('all')
 
-        stats['% cells overlapping immunomarker'] = (
-            stats['% cells overlapping immunomarker'] * 100
-            )
+            thmbnls_to_run.append(cluster)
 
-        stats.sort_values(
-            by=['protein', 'celltype', 'condition', 'dtype'],
-            ascending=[True, False, True, False],
-            inplace=True
-            )
-        stats.reset_index(drop=True, inplace=True)
+            os.chdir(thumbnails_dir)
+            f = open(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl'), 'wb')
+            pickle.dump(thmbnls_to_run, f)
+            f.close()
 
-        stats['label'] = (
-            stats['protein'] + '_' +
-            stats['celltype'] + '_' +
-            stats['condition'] + '_' +
-            stats['dtype']
-            )
-
-        cols = [
-            'protein', 'celltype', 'condition', 'dtype',
-            '% cells overlapping immunomarker', 'points',
-            'sample', 'label'
-            ]
-
-        stats = stats[cols]
-
-        sns.set_style('whitegrid')
-        sns.swarmplot(
-            x='label',
-            y='% cells overlapping immunomarker',
-            hue='dtype',
-            size=3,
-            dodge=False,
-            palette=['lightgray', 'firebrick'],
-            data=stats
-            )
-        plt.xticks(rotation=90, size=5)
-
-        plt.savefig(
-            os.path.join(
-                spatial_dir, 'percent cells overlapping immunomarker.pdf'),
-            dpi=600, bbox_inches='tight')
-        plt.close('all')
-
-        model_sig = {}
-        for name, group in stats.groupby(['protein', 'celltype', 'condition']):
-            a = group[
-                '% cells overlapping immunomarker'][
-                    group['dtype'] == 'simulation']
-            b = group[
-                '% cells overlapping immunomarker'][
-                    group['dtype'] == 'measurement']
-            t, pval = ttest_ind(
-                a, b, axis=0, equal_var=True, nan_policy='propagate')
-            model_sig[f'{name}'] = round(pval, 3)
-
-        model_sig_df = pd.DataFrame(model_sig, index=range(0, 27)).T[0]
-        model_sig_df.rename('pval', inplace=True)
-        model_sig_df.to_csv(
-            os.path.join(spatial_dir, 'model_sig.csv'), header=True
-            )
-
-        stats.to_csv(os.path.join(
-            spatial_dir, 'stats_unnormalized.csv'), index=False
-            )
+            # clearRAM(print_usage=True)
+            # del g
+            # clearRAM(print_usage=True)
         print()
-        self.data = df
-        return self.data
+
+        return data
+
+    # @module
+    # def makeZarrs(self, args):
+    #
+    #     if self.start_module == 'makeZarrs':
+    #         df = read_dataframe(
+    #             modules_list=self.modules,
+    #             start_module=self.start_module,
+    #             outDir=self.out_dir,
+    #             )
+    #     else:
+    #         df = self.data
+    #
+    #     # if self.start_module == 'makeZarrs':
+    #     #     df = pd.read_csv(
+    #     #         os.path.join(
+    #     #             self.out_dir,
+    #     #             f'dataframe_archive/getSingleCellData.csv'),
+    #     #         index_col=0
+    #     #             )
+    #     # else:
+    #     #     df = self.data
+    #
+    #     markers, dna1, dna_moniker, abx_channels = read_markers(
+    #         markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+    #         mask_object=self.mask_object,
+    #         markers_to_exclude=self.markers_to_exclude,
+    #         )
+    #
+    #     # make directory to store zarr arrays
+    #     zarrs_dir = os.path.join(self.out_dir, 'zarrs')
+    #     if not os.path.exists(zarrs_dir):
+    #         os.mkdir(zarrs_dir)
+    #
+    #     # initialize a dictionary to index and access zarr arrays
+    #     zs = {}
+    #
+    #     # select data compression algorithm for zarr arrays
+    #     compressor = Blosc(cname='zstd', clevel=3, shuffle=Blosc.SHUFFLE)
+    #
+    #     # loop over tissue samples
+    #     for sample_name in df['Sample'].unique():
+    #
+    #         # read DNA ashlar_output image
+    #         img = imread(
+    #             f'{self.in_dir}/tif/{sample_name}*.tif',
+    #             key=0  # key 0 is first dna cycle in markers.csv file
+    #             )
+    #
+    #         # initialize zarr array for DNA image, append to a dictionary
+    #         zs[f'{sample_name}_{dna1}'] = zarr.open(
+    #             f'{zarrs_dir}/{sample_name}_{dna1}.zarr', mode='w',
+    #             shape=(
+    #                 img.shape[0], img.shape[1]),
+    #             chunks=(1000, 1000), dtype='uint16', compressor=compressor
+    #             )
+    #
+    #         # update zarr array with DNA image data
+    #         zs[f'{sample_name}_{dna1}'][:] = img
+    #
+    #         # update zarr array with all antibody images
+    #         # for k, v in cycle_map.items():
+    #         abx_channels = [
+    #             i for i in markers['marker_name'] if
+    #             dna_moniker not in i
+    #             ]
+    #
+    #         for ab in abx_channels:
+    #
+    #             print(
+    #                 f'Generating Zarr array for sample {sample_name} {ab}.'
+    #                 )
+    #
+    #             channel_number = markers['channel_number'][
+    #                 markers['marker_name'] == ab].iloc[0]
+    #
+    #             # read antibody image
+    #             img = imread(
+    #                 f'{self.in_dir}/tif/{sample_name}*.tif',
+    #                 key=(channel_number-1)
+    #                 )
+    #
+    #             # initialize zarr array for image, append to a dictionary
+    #             zs[f'{sample_name}_{ab}'] = zarr.open(
+    #                 f'{zarrs_dir}/{sample_name}_{ab}.zarr', mode='w',
+    #                 shape=(
+    #                     img.shape[0], img.shape[1]),
+    #                 chunks=(1000, 1000), dtype='uint16',
+    #                 compressor=compressor
+    #                 )
+    #
+    #             # update zarr array with image data
+    #             zs[f'{sample_name}_{ab}'][:] = img
+    #     print()
+    #
+    #     # apply image rendering settings if available and desired
+    #     if os.path.exists(f'{self.out_dir}/contrast_limits.yml'):
+    #
+    #         # load settings
+    #         contrast_limits = yaml.safe_load(
+    #             open(f'{self.out_dir}/contrast_limits.yml'))
+    #
+    #         for k, v in zs.items():
+    #             if k in contrast_limits.keys():
+    #                 print(f'Applying channel signal intensity cutoffs for {k}')
+    #
+    #                 bottom_omero_cutoff = contrast_limits[k][0]
+    #                 top_omero_cutoff = contrast_limits[k][1]
+    #
+    #                 temp = img_as_float(zs[k])
+    #                 temp -= (bottom_omero_cutoff/65535)
+    #                 temp /= (
+    #                     (top_omero_cutoff/65535)-(bottom_omero_cutoff/65535)
+    #                     )
+    #                 temp = np.clip(temp, 0, 1)
+    #
+    #                 zs[k][:] = img_as_uint(temp)
+    #
+    #     save_dataframe(
+    #         df=df, outDir=self.out_dir, moduleName='makeZarrs'
+    #         )
+    #     print()
+    #     # self.data = df
+    #     return data
+
+    # @module
+    # def cellDensities(self, args):
+    #
+    #     if self.start_module == 'cellDensities':
+    #         df = read_dataframe(
+    #             modules_list=self.modules,
+    #             start_module=self.start_module,
+    #             outDir=self.out_dir,
+    #             )
+    #     else:
+    #         df = self.data
+    #
+    #     facet_input = df[df['cluster'] >= 0]
+    #
+    #     facet_input = facet_input.groupby(
+    #         ['Condition', 'Sample', 'cluster']).size().reset_index()
+    #     facet_input.rename(columns={0: 'count'}, inplace=True)
+    #
+    #     # divide cluster cell counts by total number of cells per sample
+    #     for name, group in facet_input.groupby(['Sample']):
+    #
+    #         total_cells = group['count'].sum()
+    #
+    #         facet_input.loc[group.index, 'cluster_conc'] = (
+    #             group['count']/total_cells
+    #             )
+    #
+    #     # pad counts tables, some clusters may be absent from samples
+    #     pad = pd.DataFrame()
+    #     for cluster in sorted(facet_input['cluster'].unique()):
+    #         to_append = pd.DataFrame(
+    #             {'Sample': natsorted(facet_input['Sample'].unique()),
+    #              'cluster': [cluster]*len(facet_input['Sample'].unique())})
+    #         pad = pad.append(to_append)
+    #     pad.reset_index(drop=True, inplace=True)
+    #     pad['Condition'] = [self.sample_conditions[i] for i in pad['Sample']]
+    #
+    #     facet_input = facet_input.merge(
+    #         pad, how='right', on=['Condition', 'Sample', 'cluster'])
+    #     facet_input.fillna(value=0, inplace=True)
+    #
+    #     new_df = pd.DataFrame()
+    #     for cluster in facet_input.groupby(['cluster']):
+    #         for name in cluster[1].groupby(['Condition']):
+    #             cluster[1].loc[
+    #                 name[1]['cluster_conc'].index, 'ave_cluster_conc'
+    #                 ] = name[1]['cluster_conc'].mean()
+    #         conds = cluster[1].drop_duplicates(subset=['Condition']).copy()
+    #         conds.sort_values(
+    #             by='ave_cluster_conc', ascending=False, inplace=True
+    #             )
+    #         conds.reset_index(drop=True, inplace=True)
+    #         conds.reset_index(drop=False, inplace=True)
+    #
+    #         conds_dict = dict(zip(conds['Condition'], conds['index']))
+    #         cluster[1]['index'] = [
+    #             conds_dict[i] for i in cluster[1]['Condition']
+    #             ]
+    #
+    #         new_df = new_df.append(cluster[1])
+    #
+    #     new_df.sort_values(
+    #         by=['cluster', 'ave_cluster_conc'],
+    #         ascending=[True, False], inplace=True)
+    #
+    #     # build cmap
+    #     cmap = categorical_cmap(
+    #         numUniqueSamples=len(facet_input['Condition'].unique()),
+    #         numCatagories=10,
+    #         cmap='tab10',
+    #         continuous=False
+    #         )
+    #
+    #     sns.set(font_scale=0.4)
+    #
+    #     g = sns.FacetGrid(
+    #         data=new_df, col='cluster', col_wrap=10,
+    #         sharex=False, sharey=False, height=1.5, aspect=1.3
+    #         )
+    #
+    #     g.map(
+    #         sns.barplot, 'Condition', 'cluster_conc',
+    #         linewidth=0.0, order=None, errwidth=0.2, palette=cmap.colors)
+    #
+    #     [
+    #         plt.setp(ax.get_xticklabels(), rotation=90, size=0.5) for
+    #         ax in g.axes.flat
+    #         ]
+    #
+    #     new_bar_width = 0.6
+    #     for ax, title in zip(
+    #         g.axes.flatten(), new_df['cluster'].unique()
+    #       ):
+    #
+    #         ax.set_title(title, size=6, weight='bold')
+    #         ax.set_xlabel('')
+    #
+    #         for patch in ax.patches:
+    #             current_width = patch.get_width()
+    #             diff = current_width - new_bar_width
+    #
+    #             # change the bar width
+    #             patch.set_width(new_bar_width)
+    #
+    #             # recenter the bar
+    #             patch.set_x(patch.get_x() + diff * 0.5)
+    #
+    #     plt.tight_layout()
+    #
+    #     plt.savefig(
+    #         os.path.join(self.out_dir, 'facetGrid.png'), dpi=800
+    #         )
+    #
+    #     plt.show(block=True)
+    #
+    #     save_dataframe(
+    #         df=df, outDir=self.out_dir,
+    #         moduleName='performTSNE'
+    #         )
+    #     print()
+    #     # self.data = df
+    #     return data
+
+    # @module
+    # def frequencyStats(self, args):
+    #
+    #     if self.start_module == 'frequencyStats':
+    #         df = read_dataframe(
+    #             modules_list=self.modules,
+    #             start_module=self.start_module,
+    #             outDir=self.out_dir,
+    #             )
+    #     else:
+    #         df = self.data
+    #
+    #     stats_input = df[df['cluster'] >= 0]
+    #
+    #     frequency_dir = os.path.join(self.out_dir, 'frequency_stats')
+    #     if not os.path.exists(frequency_dir):
+    #         os.mkdir(frequency_dir)
+    #
+    #     conditions = sorted(list(set(self.samples.values())))
+    #
+    #     # create single-column dataFrame of all sample names
+    #     # to pad counts tables with zeros if a celltype is not in a tissue
+    #     pad = pd.DataFrame(
+    #         sorted(stats_input['sample'].unique())).rename(
+    #             columns={0: 'sample'}
+    #             )
+    #
+    #     cluster_list = []
+    #     ratio_list = []
+    #     dif_list = []
+    #     pval_list = []
+    #
+    #     # intialize a dataframe to collect catplot data
+    #     catplot_input = pd.DataFrame()
+    #
+    #     # loop over clusters
+    #     for w, group in stats_input.groupby('cluster'):
+    #
+    #         print(
+    #             f'Calculating log2({conditions[1]}/{conditions[0]})'
+    #             f'of mean cell density for the {str(w)} cluster.'
+    #             )
+    #
+    #         group = group.groupby(
+    #             ['sample', 'condition', 'replicate', 'cluster']
+    #             ).size().reset_index(
+    #             drop=False).rename(columns={0: 'count'}).sort_values(
+    #             by='count', ascending=False)
+    #
+    #         group = group.merge(pad, how='right', on='sample')
+    #
+    #         # guard against NaNs induced by the absence
+    #         # of a given cluster in one or
+    #         # more of the tissue samples
+    #         group['count'] = [
+    #             0 if np.isnan(i) else i for i in group['count']]
+    #         group['condition'] = [
+    #             'cd' if 'cd' in i else 'hfd' for i in group['sample']
+    #             ]
+    #         group['replicate'] = [
+    #             re.sub("\\D", "", i) for i in group['sample']
+    #             ]
+    #         group['cluster'] = w
+    #
+    #         # get denominator cell count of each sample
+    #         if self.denominator_cluster is None:
+    #             group['tissue_count'] = [
+    #                 len(stats_input[stats_input['sample'] == i]) for
+    #                 i in group['sample']]
+    #         else:
+    #             group['tissue_count'] = [
+    #                 len(stats_input[(stats_input['sample'] == i) &
+    #                     (stats_input[
+    #                         'cluster'] == self.denominator_cluster)]) for
+    #                 i in group['sample']]
+    #
+    #         # compute density of cells per sample corresponding to
+    #         # current variable
+    #         group['density'] = group['count']/group['tissue_count']
+    #
+    #         # append group data to catplot_input
+    #         catplot_input = catplot_input.append(group)
+    #
+    #         cnd1_values = group['density'][group['condition'] == conditions[0]]
+    #         cnd2_values = group['density'][group['condition'] == conditions[1]]
+    #
+    #         stat, pval = ttest_ind(
+    #             cnd1_values, cnd2_values,
+    #             axis=0, equal_var=True, nan_policy='propagate')
+    #
+    #         cnd1_mean = np.mean(cnd1_values)
+    #         cnd2_mean = np.mean(cnd2_values)
+    #
+    #         ratio = np.log2((cnd2_mean + 0.000001)/(cnd1_mean + 0.000001))
+    #
+    #         dif = cnd2_mean-cnd1_mean
+    #
+    #         cluster_list.append(w)
+    #         ratio_list.append(ratio)
+    #         dif_list.append(dif)
+    #         pval_list.append(pval)
+    #
+    #     statistics = pd.DataFrame(
+    #         list(zip(cluster_list, ratio_list, dif_list, pval_list)),
+    #         columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
+    #             by='dif')
+    #
+    #     statistics.to_csv(
+    #         os.path.join(
+    #             frequency_dir, 'stats.csv'), index=False)
+    #
+    #     stats = importr('stats')
+    #
+    #     p_adjust = stats.p_adjust(
+    #         FloatVector(statistics['pval'].tolist()),
+    #         method='BH')
+    #
+    #     statistics['qval'] = p_adjust
+    #
+    #     if self.FDRCorrection:
+    #         stat = 'qval'
+    #
+    #     else:
+    #         stat = 'pval'
+    #
+    #     significant = statistics[
+    #         statistics[stat] <= 0.05].sort_values(by='dif')
+    #
+    #     significant.to_csv(
+    #         os.path.join(
+    #             frequency_dir, 'sig_difs.csv'), index=False)
+    #
+    #     sns.set_style('whitegrid')
+    #     fig, ax = plt.subplots()
+    #     plt.scatter(abs(significant['dif']), significant['ratio'])
+    #
+    #     for label, qval, x, y in zip(
+    #       significant['cluster'], significant[stat],
+    #       abs(significant['dif']), significant['ratio']):
+    #
+    #         plt.annotate(
+    #             (label, f'{stat[0]}=' + str(round(qval, 4))), size=3,
+    #             xy=(x, y), xytext=(10, 10),
+    #             textcoords='offset points', ha='right', va='bottom',
+    #             bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
+    #                       alpha=0.0))
+    #
+    #     for tick in ax.xaxis.get_major_ticks():
+    #         tick.label.set_fontsize(5)
+    #
+    #     plt.title(f'cnd1 vs. cnd2 {stat[0]}<0.05)', fontsize=12)
+    #     plt.xlabel(f'abs({conditions[1]} - {conditions[0]})', fontsize=10)
+    #     plt.ylabel(f'log2({conditions[1]} / {conditions[0]})', fontsize=10)
+    #     plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
+    #     plt.close()
+    #
+    #     catplot_input.reset_index(drop=True, inplace=True)
+    #
+    #     catplot_input[stat] = [
+    #          '' if i not in significant['cluster'].unique() else
+    #          round(
+    #             significant[stat][significant['cluster'] == i].values[0], 6)
+    #          for i in catplot_input['cluster']]
+    #
+    #     # catplot_input['label'] = catplot_input['cluster'].map(str) + \
+    #     #     ', ' + 'q=' + catplot_input['qval'].astype(str)
+    #     #
+    #     # catplot_input['label'] = [
+    #     #     i.split(',')[0] if not i.split(',')[0] in
+    #     #     significant['cluster'].unique().astype(str) else i for
+    #     #     i in catplot_input['label']]
+    #
+    #     catplot_input.sort_values(
+    #         ['cluster', 'condition', 'replicate'], inplace=True)
+    #
+    #     # catplot_input.drop('cluster', axis=1, inplace=True)
+    #
+    #     # catplot_input.rename(columns={'label': 'cluster'}, inplace=True)
+    #
+    #     sns.set(font_scale=0.4)
+    #     g = sns.catplot(
+    #         x='condition', y='density',
+    #         hue='replicate', col='cluster', col_wrap=14,
+    #         data=catplot_input, kind='strip', palette='tab20',
+    #         height=2, aspect=0.8, sharey=False, legend=False)
+    #
+    #     g.set(ylim=(0.0, None))
+    #     plt.legend(markerscale=0.5)
+    #
+    #     plt.tight_layout()
+    #     plt.savefig(os.path.join(frequency_dir, 'catplot.pdf'))
+    #     plt.close('all')
+    #     print()
+    #     # self.data = df
+    #     return data
+    #
+    # @module
+    # def clusterBoxplots(self, args):
+    #
+    #     if self.start_module == 'clusterBoxplots':
+    #         df = read_dataframe(
+    #             modules_list=self.modules,
+    #             start_module=self.start_module,
+    #             outDir=self.out_dir,
+    #             )
+    #     else:
+    #         df = self.data
+    #
+    #     cmap = categorical_cmap(
+    #         numCatagories=10, numSubcatagories=2,
+    #         cmap='tab10', continuous=False
+    #         )
+    #
+    #     boxplot_input = df[df['cluster'] >= 0]
+    #
+    #     # get tidy input data
+    #     boxplot_input = (
+    #         boxplot_input[[
+    #             'cluster', 'sample', 'condition'] + self.markers]
+    #         .melt(
+    #             id_vars=['cluster', 'sample', 'condition'],
+    #             var_name='protein', value_name='log10(intensity)'))
+    #
+    #     boxplot_input = boxplot_input.sample(frac=1.0)
+    #
+    #     boxplot_input['label'] = (
+    #         boxplot_input['protein'] + '_'
+    #         + boxplot_input['cluster'].map(str) + '_'
+    #         + boxplot_input['condition']
+    #         )
+    #
+    #     boxplot_input.sort_values(by='label', inplace=True)
+    #
+    #     boxplot_input.rename(
+    #         columns={'log10(intensity)': '$log_{10}(intensity)$'},
+    #         inplace=True)
+    #
+    #     sns.set(font_scale=0.27)
+    #     sns.set_style('whitegrid')
+    #
+    #     g = sns.FacetGrid(
+    #         boxplot_input, row='cluster', col='protein',
+    #         sharex=False, sharey=False, height=1, aspect=1.5)
+    #
+    #     hue_dict = dict(
+    #         zip(boxplot_input['cluster'].unique(), cmap.colors)
+    #         )
+    #
+    #     g.map(
+    #         lambda x, y, z, color:
+    #             sns.boxplot(
+    #                 data=boxplot_input, x=x, y=y,
+    #                 hue=z, palette=hue_dict,
+    #                 linewidth=0.95, width=0.75,
+    #                 fliersize=0.95),
+    #             'condition', '$log_{10}(intensity)$', 'cluster')
+    #
+    #     def statistics(label):
+    #
+    #         conditions = sorted(list(set(self.samples.values())))
+    #         cond_dict = {
+    #             conditions[0]: conditions[1], conditions[1]: conditions[0]
+    #             }
+    #         label = label.values[0]
+    #         cond_name = label.split('_')[-1]
+    #         opposite_label = label.replace(cond_name, cond_dict[cond_name])
+    #
+    #         means1 = boxplot_input[
+    #                 boxplot_input['label'] == label].groupby(
+    #                     'sample').mean()['$log_{10}(intensity)$']
+    #
+    #         means2 = boxplot_input[
+    #                 boxplot_input['label'] == opposite_label].groupby(
+    #                     'sample').mean()['$log_{10}(intensity)$']
+    #
+    #         # perform Welch's unequal variances t-test
+    #         stat, pval = ttest_ind(
+    #             means1, means2,
+    #             axis=0, equal_var=False, nan_policy='propagate')
+    #
+    #         if self.bonferroniCorrection:
+    #
+    #             # perform Bonferroni correction
+    #             p_adj = pval * len(boxplot_input['label'].unique())/2
+    #
+    #             if p_adj <= 0.05:
+    #                 ax = plt.gca()
+    #                 ax.text(
+    #                     0.5, 0.85,
+    #                     r'$p_{adj} = $' + '%.1E' % Decimal(str(p_adj)),
+    #                     fontweight='normal', fontsize=11.0,
+    #                     color='k', ha='center', va='center',
+    #                     transform=ax.transAxes
+    #                     )
+    #         else:
+    #             # DO NOT perform Bonferroni correction
+    #             if pval <= 0.05:
+    #                 ax = plt.gca()
+    #                 ax.text(
+    #                     0.5, 0.85, r'$p = $' + '%.1E' % Decimal(str(pval)),
+    #                     fontweight='normal', fontsize=11.0,
+    #                     color='k', ha='center', va='center',
+    #                     transform=ax.transAxes
+    #                     )
+    #
+    #     g.map(
+    #         lambda label, color:
+    #             statistics(label=label), 'label')
+    #
+    #     plt.savefig(
+    #         os.path.join(self.out_dir, 'cluster_boxplots.pdf'), bbox='tight')
+    #     plt.close('all')
+    #     print()
+    #     # self.data = df
+    #     return data
+    #
+    # @module
+    # def spatialAnalysis(self, args):
+    #
+    #     if self.start_module == 'spatialAnalysis':
+    #         df = read_dataframe(
+    #             modules_list=self.modules,
+    #             start_module=self.start_module,
+    #             outDir=self.out_dir,
+    #             )
+    #     else:
+    #         df = self.data
+    #
+    #     zs = loadZarrs(
+    #         df=df, outDir=self.out_dir,
+    #         markers_filepath=os.path.join(self.in_dir, 'markers.csv')
+    #         )
+    #
+    #     spatial_dir = os.path.join(self.out_dir, 'spatial_analysis')
+    #     if not os.path.exists(spatial_dir):
+    #         os.makedirs(spatial_dir)
+    #
+    #     stats = pd.DataFrame(
+    #         columns=[
+    #             'protein', 'sample', 'celltype', 'ratio_r',
+    #             'centroids', 'ratio_f', 'points']
+    #         )
+    #
+    #     stats_row_idx = 0
+    #     for protein, binary_cutoff in self.spatialDict1.items():
+    #         for sample in df['sample'].unique():
+    #
+    #             if sample in self.cropDict.keys():
+    #                 section = self.cropDict[sample][0]
+    #                 cut_point = self.cropDict[sample][1]
+    #
+    #                 if section == 'bottom':
+    #                     dna = zs[f'{sample}_dna'][cut_point:]
+    #                     img = zs[f'{sample}_{protein}'][cut_point:]
+    #
+    #                 elif section == 'top':
+    #                     dna = zs[f'{sample}_dna'][:cut_point]
+    #                     img = zs[f'{sample}_{protein}'][:cut_point]
+    #
+    #             else:
+    #                 dna = zs[f'{sample}_dna'][:]
+    #                 img = zs[f'{sample}_{protein}'][:]
+    #
+    #             for celltype, cluster in self.spatialDict2.items():
+    #
+    #                 print(celltype, protein, sample)
+    #
+    #                 total_centroids = df[['x', 'y']][
+    #                     (df['sample'] == sample) &
+    #                     (df['cluster'] == cluster)].astype(int)
+    #
+    #                 if sample in self.cropDict.keys():
+    #                     section = self.cropDict[sample][0]
+    #                     cut_point = self.cropDict[sample][1]
+    #
+    #                     if section == 'bottom':
+    #                         total_centroids = total_centroids[
+    #                             total_centroids['y'] >= cut_point]
+    #
+    #                         total_centroids['y'] = (
+    #                             total_centroids['y']-cut_point
+    #                             )
+    #
+    #                     elif section == 'top':
+    #                         total_centroids = total_centroids[
+    #                             total_centroids['y'] < cut_point]
+    #
+    #                 if len(total_centroids) > 1:
+    #                     y_min = total_centroids['y'].min()
+    #                     y_max = total_centroids['y'].max()
+    #                     y_range = y_max - y_min
+    #
+    #                     print(y_min, y_max)
+    #
+    #                     x_min = total_centroids['x'].min()
+    #                     x_max = total_centroids['x'].max()
+    #                     x_range = x_max - x_min
+    #
+    #                     dna_blurred = gaussian(dna, sigma=12)
+    #                     dna_mask = np.where(dna_blurred > 0.05, 1, 0)
+    #
+    #                     area_mask = dna_mask[y_min:y_max, :]
+    #                     area_mask = area_mask[:, x_min:x_max]
+    #
+    #                     inside_tumor = np.argwhere(area_mask == 1)
+    #                     outside_tumor = np.argwhere(area_mask == 0)
+    #
+    #                     frac_area_out = outside_tumor.shape[0]/(
+    #                         outside_tumor.shape[0] + inside_tumor.shape[0])
+    #
+    #                     img_blurred = gaussian(img, sigma=12)
+    #                     img_mask_real = np.where(
+    #                         img_blurred > binary_cutoff, 1, 0
+    #                         )
+    #                     img_mask_fake = img_mask_real.copy()
+    #
+    #                     (img_mask_real[total_centroids['y'],
+    #                      total_centroids['x']]
+    #                      ) += 10
+    #
+    #                     outside_centroids = np.argwhere(img_mask_real == 10)
+    #                     outside_centroids = pd.DataFrame(
+    #                         outside_centroids, columns=['y', 'x'])
+    #
+    #                     inside_centroids = np.argwhere(img_mask_real == 11)
+    #                     inside_centroids = pd.DataFrame(
+    #                         inside_centroids, columns=['y', 'x'])
+    #
+    #                     radii = []
+    #                     num_points = []
+    #                     for radius in range(
+    #                         self.radiusRange[0], self.radiusRange[1]
+    #                       ):
+    #                         total_poisson_points = pd.DataFrame(
+    #                             poisson_disc_samples(
+    #                                 width=x_range, height=y_range, r=radius),
+    #                             columns=['x', 'y'])
+    #                         print(radius, len(total_poisson_points))
+    #                         radii.append(radius)
+    #                         num_points.append(len(total_poisson_points))
+    #
+    #                     def closest(lst, K):
+    #                         return lst[
+    #                             min(
+    #                                 range(
+    #                                     len(lst)),
+    #                                 key=lambda i: abs(lst[i]-K))]
+    #
+    #                     optimal_points = closest(
+    #                         num_points, len(total_centroids) +
+    #                         (int(len(total_centroids) * frac_area_out)))
+    #                     optimal_radius = radii[
+    #                         num_points.index(optimal_points)-2
+    #                         ]
+    #
+    #                     total_poisson_points = pd.DataFrame(
+    #                         poisson_disc_samples(
+    #                             width=x_range, height=y_range,
+    #                             r=optimal_radius),
+    #                         columns=['x', 'y']).astype(int)
+    #
+    #                     # ensure simulation contains at least 2 points
+    #                     while len(total_poisson_points) < 2:
+    #                         optimal_radius -= 1
+    #                         total_poisson_points = pd.DataFrame(
+    #                             poisson_disc_samples(
+    #                                 width=x_range, height=y_range,
+    #                                 r=optimal_radius),
+    #                             columns=['x', 'y']).astype(int)
+    #
+    #                     total_poisson_points['x'] = (
+    #                         total_poisson_points['x'] + x_min
+    #                         )
+    #                     total_poisson_points['y'] = (
+    #                         total_poisson_points['y'] + y_min
+    #                         )
+    #
+    #                     (dna_mask[total_poisson_points['y'],
+    #                               total_poisson_points['x']]
+    #                      ) += 10
+    #
+    #                     total_poisson_points = np.argwhere(dna_mask == 11)
+    #                     total_poisson_points = pd.DataFrame(
+    #                         total_poisson_points, columns=['y', 'x'])
+    #
+    #                     (img_mask_fake[total_poisson_points['y'],
+    #                      total_poisson_points['x']]
+    #                      ) += 10
+    #
+    #                     outside_poisson_points = np.argwhere(
+    #                         img_mask_fake == 10
+    #                         )
+    #                     outside_poisson_points = pd.DataFrame(
+    #                         outside_poisson_points, columns=['y', 'x'])
+    #
+    #                     inside_poisson_points = np.argwhere(
+    #                         img_mask_fake == 11
+    #                         )
+    #                     inside_poisson_points = pd.DataFrame(
+    #                         inside_poisson_points, columns=['y', 'x'])
+    #
+    #                     rgb_img = img_as_float(img)
+    #                     rgb_img = gray2rgb(rgb_img)
+    #                     rgb_img = (rgb_img * (0.5, 0.5, 0.5))
+    #
+    #                     plt.imshow(rgb_img)
+    #                     plt.scatter(
+    #                         inside_centroids['x'],
+    #                         inside_centroids['y'], s=0.5, ec='none', c='g'
+    #                         )
+    #
+    #                     plt.scatter(
+    #                         outside_centroids['x'],
+    #                         outside_centroids['y'], s=0.5, ec='none', c='r')
+    #
+    #                     legend_elements = []
+    #                     legend_elements.append(
+    #                         Line2D([0], [0], marker='o', color='none',
+    #                                label='inside',
+    #                                markerfacecolor='g',
+    #                                markeredgecolor='none', lw=0.001,
+    #                                markersize=6)
+    #                                )
+    #                     legend_elements.append(
+    #                         Line2D([0], [0], marker='o', color='none',
+    #                                label='outside',
+    #                                markerfacecolor='r',
+    #                                markeredgecolor='none', lw=0.001,
+    #                                markersize=6)
+    #                                )
+    #
+    #                     plt.legend(
+    #                         handles=legend_elements, prop={'size': 6},
+    #                         bbox_to_anchor=[1.0, 1.0])
+    #
+    #                     ratio_real = str(
+    #                         round(
+    #                             len(inside_centroids)/len(total_centroids), 2)
+    #                             )
+    #                     total_cells = str(len(total_centroids))
+    #                     title_statement = (
+    #                         f'{sample}-{celltype}, inside/total: {ratio_real},'
+    #                         + f' total cells={total_cells}'
+    #                         )
+    #                     plt.title(title_statement, fontsize=10)
+    #
+    #                     plt.grid(False)
+    #                     plt.savefig(
+    #                         os.path.join(
+    #                             spatial_dir,
+    #                             f'{protein}_{celltype}_{sample}.png'), dpi=800)
+    #                     plt.close('all')
+    #
+    #                     plt.imshow(rgb_img)
+    #
+    #                     plt.scatter(
+    #                         inside_poisson_points['x'],
+    #                         inside_poisson_points['y'],
+    #                         s=0.5, ec='none', c='g'
+    #                         )
+    #
+    #                     plt.scatter(
+    #                         outside_poisson_points['x'],
+    #                         outside_poisson_points['y'],
+    #                         s=0.5, ec='none', c='r'
+    #                         )
+    #
+    #                     legend_elements = []
+    #                     legend_elements.append(
+    #                         Line2D([0], [0], marker='o', color='none',
+    #                                label='inside',
+    #                                markerfacecolor='g',
+    #                                markeredgecolor='none', lw=0.001,
+    #                                markersize=6)
+    #                                )
+    #                     legend_elements.append(
+    #                         Line2D([0], [0], marker='o', color='none',
+    #                                label='outside',
+    #                                markerfacecolor='r',
+    #                                markeredgecolor='none', lw=0.001,
+    #                                markersize=6)
+    #                                )
+    #
+    #                     plt.legend(
+    #                         handles=legend_elements, prop={'size': 6},
+    #                         bbox_to_anchor=[1.0, 1.0])
+    #
+    #                     if not len(total_poisson_points) == 0:
+    #                         ratio_fake = str(
+    #                             round(
+    #                                 len(inside_poisson_points) /
+    #                                 len(total_poisson_points), 2))
+    #                     else:
+    #                         ratio_fake = 'divide by zero'
+    #
+    #                     poisson_points = str(len(total_poisson_points))
+    #                     title_statement = (
+    #                         f'{sample}-{celltype}_Poisson-disc,' +
+    #                         f' inside/total: {ratio_fake},' +
+    #                         f' total points={poisson_points}'
+    #                         )
+    #                     plt.title(title_statement, fontsize=10)
+    #
+    #                     plt.grid(False)
+    #                     plt.savefig(
+    #                         os.path.join(
+    #                             spatial_dir,
+    #                             f'{protein}_{celltype}_Poisson-disc_' +
+    #                             f'{sample}.png'),
+    #                         dpi=800
+    #                         )
+    #                     plt.close('all')
+    #
+    #                     stats.loc[stats_row_idx] = (
+    #                         protein, sample, celltype, float(ratio_real),
+    #                         len(total_centroids), float(ratio_fake),
+    #                         len(total_poisson_points)
+    #                         )
+    #                     stats_row_idx += 1
+    #
+    #     stats.to_csv(os.path.join(spatial_dir, 'stats.csv'))
+    #     # stats = pd.read_csv(
+    #     #     os.path.join(spatial_dir, 'stats.csv'), index_col=0)
+    #
+    #     stats = stats[stats['ratio_f'] != 'divide by zero']
+    #     stats['ratio_f'] = [float(i) for i in stats['ratio_f']]
+    #
+    #     stats['condition'] = [
+    #         re.findall(r"[^\W\d_]+|\d+", i)[0] for
+    #         i in stats['sample']
+    #         ]
+    #
+    #     simulation = stats.copy()
+    #
+    #     stats.rename(
+    #         columns={
+    #             'centroids': '# measured cells',
+    #             'points': '# simulated cells'},
+    #         inplace=True
+    #         )
+    #
+    #     sns.set_style('whitegrid')
+    #     sns.scatterplot(
+    #         x=stats['# simulated cells'],
+    #         y=stats['# measured cells'],
+    #         color='k',
+    #         data=stats
+    #         )
+    #     plt.savefig(
+    #         os.path.join(
+    #             spatial_dir, 'points_v_centroids.pdf'),
+    #         dpi=600, bbox_inches='tight')
+    #     plt.close('all')
+    #
+    #     stats[
+    #         '% cells overlapping immunomarker (normalized to simulation)'] = (
+    #         stats['ratio_r'] - stats['ratio_f']
+    #         )
+    #
+    #     stats.sort_values(
+    #         by=['protein', 'celltype', 'condition'],
+    #         ascending=[True, False, True],
+    #         inplace=True
+    #         )
+    #     stats.reset_index(drop=True, inplace=True)
+    #
+    #     stats['label'] = (
+    #         stats['protein'] + '_' +
+    #         stats['celltype']
+    #         )
+    #
+    #     sns.set_style('whitegrid')
+    #     sns.swarmplot(
+    #         x='label',
+    #         y='% cells overlapping immunomarker (normalized to simulation)',
+    #         hue='condition',
+    #         size=3,
+    #         dodge=True,
+    #         palette=['lightgray', 'firebrick'],
+    #         data=stats
+    #         )
+    #     plt.xticks(rotation=90, size=5)
+    #
+    #     plt.savefig(
+    #         os.path.join(
+    #             spatial_dir,
+    #             'percent cells overlapping immunomarker' +
+    #             ' (normalized to simulation).pdf'),
+    #         dpi=600, bbox_inches='tight')
+    #     plt.close('all')
+    #
+    #     condition_sig = {}
+    #     for name, group in stats.groupby(['protein', 'celltype']):
+    #         a = group[
+    #             '% cells overlapping immunomarker (normalized to simulation)'][
+    #                 group['condition'] == 'cd']
+    #         b = group[
+    #             '% cells overlapping immunomarker (normalized to simulation)'][
+    #                 group['condition'] == 'hfd']
+    #         t, pval = ttest_ind(
+    #             a, b, axis=0, equal_var=True, nan_policy='propagate')
+    #         condition_sig[f'{name}'] = round(pval, 3)
+    #
+    #     condition_sig_df = pd.DataFrame(condition_sig, index=range(0, 27)).T[0]
+    #     condition_sig_df.rename('pval', inplace=True)
+    #     condition_sig_df.to_csv(
+    #         os.path.join(spatial_dir, 'treatment_sig.csv'), header=True)
+    #
+    #     stats.to_csv(
+    #         os.path.join(spatial_dir, 'stats_normalized.csv'), index=False
+    #         )
+    #
+    #     simulation['dtype'] = 'simulation'
+    #
+    #     measurement = simulation.copy()
+    #     measurement['dtype'] = 'measurement'
+    #
+    #     cols = [
+    #         col for col in simulation.columns if
+    #         col not in ['ratio_r', 'centroids']
+    #         ]
+    #     simulation = simulation[cols]
+    #     simulation.rename(
+    #         columns={'ratio_f': '% cells overlapping immunomarker'},
+    #         inplace=True)
+    #
+    #     cols = [
+    #         col for col in measurement.columns if
+    #         col not in ['ratio_f', 'points']
+    #         ]
+    #     measurement = measurement[cols]
+    #
+    #     measurement.rename(
+    #         columns={
+    #             'ratio_r': '% cells overlapping immunomarker',
+    #             'centroids': 'points'}, inplace=True
+    #             )
+    #
+    #     stats = simulation.append(measurement, sort=True, ignore_index=True)
+    #     del simulation
+    #     del measurement
+    #
+    #     stats['% cells overlapping immunomarker'] = (
+    #         stats['% cells overlapping immunomarker'] * 100
+    #         )
+    #
+    #     stats.sort_values(
+    #         by=['protein', 'celltype', 'condition', 'dtype'],
+    #         ascending=[True, False, True, False],
+    #         inplace=True
+    #         )
+    #     stats.reset_index(drop=True, inplace=True)
+    #
+    #     stats['label'] = (
+    #         stats['protein'] + '_' +
+    #         stats['celltype'] + '_' +
+    #         stats['condition'] + '_' +
+    #         stats['dtype']
+    #         )
+    #
+    #     cols = [
+    #         'protein', 'celltype', 'condition', 'dtype',
+    #         '% cells overlapping immunomarker', 'points',
+    #         'sample', 'label'
+    #         ]
+    #
+    #     stats = stats[cols]
+    #
+    #     sns.set_style('whitegrid')
+    #     sns.swarmplot(
+    #         x='label',
+    #         y='% cells overlapping immunomarker',
+    #         hue='dtype',
+    #         size=3,
+    #         dodge=False,
+    #         palette=['lightgray', 'firebrick'],
+    #         data=stats
+    #         )
+    #     plt.xticks(rotation=90, size=5)
+    #
+    #     plt.savefig(
+    #         os.path.join(
+    #             spatial_dir, 'percent cells overlapping immunomarker.pdf'),
+    #         dpi=600, bbox_inches='tight')
+    #     plt.close('all')
+    #
+    #     model_sig = {}
+    #     for name, group in stats.groupby(['protein', 'celltype', 'condition']):
+    #         a = group[
+    #             '% cells overlapping immunomarker'][
+    #                 group['dtype'] == 'simulation']
+    #         b = group[
+    #             '% cells overlapping immunomarker'][
+    #                 group['dtype'] == 'measurement']
+    #         t, pval = ttest_ind(
+    #             a, b, axis=0, equal_var=True, nan_policy='propagate')
+    #         model_sig[f'{name}'] = round(pval, 3)
+    #
+    #     model_sig_df = pd.DataFrame(model_sig, index=range(0, 27)).T[0]
+    #     model_sig_df.rename('pval', inplace=True)
+    #     model_sig_df.to_csv(
+    #         os.path.join(spatial_dir, 'model_sig.csv'), header=True
+    #         )
+    #
+    #     stats.to_csv(os.path.join(
+    #         spatial_dir, 'stats_unnormalized.csv'), index=False
+    #         )
+    #     print()
+    #     # self.data = df
+    #     return data
