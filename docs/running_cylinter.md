@@ -1,10 +1,10 @@
 ---
 layout: default
-title: Running Cytolinter
+title: Running CyLinter
 nav_order: 2
 ---
 
-# Running Cytolinter
+# Running CyLinter
 
 ## Table of contents
 {: .no_toc .text-delta }

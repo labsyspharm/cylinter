@@ -16,6 +16,31 @@ from hurry.filesize import size
 import psutil
 import gc
 
+SUPPORTED_EXTENSIONS = ['.csv']
+
+
+def dataset_files(root):
+    """
+    Return a list of all supported extension
+    files in the specified directory.
+    """
+    total = os.listdir(root)
+    pruned = [i for i in total if i.endswith(tuple(SUPPORTED_EXTENSIONS))]
+    return pruned
+
+
+def log_banner(log_function, msg):
+    """Call log_function with a blank line, msg, and an underline."""
+    log_function("")
+    log_function(msg)
+    log_function("-" * len(msg))
+
+
+def log_multiline(log_function, msg):
+    """Call log_function once for each line of msg."""
+    for line in msg.split("\n"):
+        log_function(line)
+
 
 # scatter point selection tool
 class SelectFromCollection(object):

@@ -7,14 +7,14 @@ permalink: /
 last_modified_date: 2021-01-15
 ---
 
-# Cytolinter
+# CyLinter
 
-Interactive Quality Control Software for Cleaning Microscopy-derived, Single-cell Data.
+An Interactive Image Segmentation Filter for Multiplex Microscopy.
 {: .fs-6 .fw-300 }
 
-Cytolinter is an image segmentation fileter that allows for the identification and filtration of cells impacted by optical and image preprocessing artifacts in multiplexed whole tissue and tissue microarray images. The tool comprises multiple modules that improve dataset quality by allowing the user to cross reference single-cell data with the microscopy images from which they were derived so this points can be censored from downstream analysis. The pipeline is instantiated as a configurable [Python](https://www.python.org) Class whose module results are cached to allow for dynamic restarts and iterative quality control strategies.
+CyLinter identifies and removes cell segmentation instances (i.e. cells) in multiplexed whole tissue and tissue microarray images corrupted by optical and/or image preprocessing (e.g. stitching, registration, segmentation) artifacts. The tool comprises a set of user-guided, quality control (QC) modules instantiated as a configurable [Python](https://www.python.org) Class; module results are cached to allow for dynamic restarts and iterative QC strategies. The tool serves to clean image-derived, single-cell data prior to final analysis.
 
-Cytolinter development is led by [Greg Baker](https://github.com/gjbaker) at [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), Harvard Medical School.
+CyLinter development is led by [Greg Baker](https://github.com/gjbaker) at [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), Harvard Medical School.
 
 ## Funding
 
