@@ -1,6 +1,6 @@
 ![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo.png?raw=true)
 
-# CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy.
+# An Interactive Image Segmentation Filter for Multiplex Microscopy.
 
 **Funding:** This work is supported by the following:
 
