@@ -1,22 +1,29 @@
 # Installation
 
-## Install Nextflow
+## Install Python 3
 
-If not already installed, install Java: https://adoptopenjdk.net/
+If not already installed, install Python 3: https://www.python.org/downloads/mac-osx/
 
-Install [Nextflow](https://www.nextflow.io/): `curl -s https://get.nextflow.io | bash`
+## Install virtualenv and virtualenvwrapper (recommended)
 
-This command will create a `nextflow` executable in the current directory. To simplify usage, consider moving this executable to a directory that is available on `$PATH`. One common place for this is a `bin/` directory in your home folder:
+To isolate CyLinter and its dependencies from global Python settings, we recommend installing CyLinter into a dedicated Python virtual environment.
 
 ``` bash
-mkdir -p ~/bin                                      # Creates a bin directory in the home folder
-mv nextflow ~/bin                                   # Moves nextflow to that directory
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # Make the directory accessible on $PATH
-source ~/.bashrc                                    # Reload the shell configuration
+python3 -m pip install --user virtualenv   
+python3 -m virtualenv --help
+python3 -m pip install virtualenvwrapper
+echo 'export WORKON_HOME=$HOME/.virtualenvs' >> ~/.bashrc
+echo 'export PROJECT_HOME=$HOME/Devel' >> ~/.bashrc
+source /usr/local/bin/virtualenvwrapper.sh
+source ~/.bashrc
 ```
 
-Verify that Nextflow is accessible by going to your home directory (`cd ~`) and typing `nextflow` on the command line.
+## Create and step into CyLinter virtual environment
+``` bash
+mkvirtualenv -p python3 cylinter
+```
 
-## Additional steps for local installation
-
-* Install [Docker](https://docs.docker.com/install/). Ensure that the Docker engine is running by typing `docker images`. If the engine is running, it should return a (possibly empty) list of container images currently downloaded to your system.
+## Install CyLinter and its dependencies
+``` bash
+pip install cylinter
+```
