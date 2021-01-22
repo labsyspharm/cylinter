@@ -20,7 +20,7 @@ requires = [
     'hurry.filesize==0.9',
 ]
 
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
@@ -37,7 +37,7 @@ setup(
     install_requires=requires,
     entry_points={
         'console_scripts': [
-            'cylinter=cylinter.src.cylinter:main',
+            'cylinter=cylinter.cylinter:main',
         ]
     },
     classifiers=[
