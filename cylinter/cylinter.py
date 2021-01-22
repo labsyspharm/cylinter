@@ -3,8 +3,8 @@ import argparse
 import pathlib
 import logging
 # import pandas as pd
-from ..config import Config
-from .. import pipeline, components
+from .config import Config
+from . import pipeline, components
 
 logger = logging.getLogger(__name__)
 
