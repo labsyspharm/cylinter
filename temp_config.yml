@@ -3,8 +3,7 @@ out_dir: .../output/<experiment_root_dir>
 random_sample_size: 1.0  # floating point percentage value between 0.0-1.0
 mask_object: cellRingMask  # cellMask, nucleiMask, cellRingMask ...
 sample_metadata:
-  # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
-  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>]
+  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>] # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
 samples_to_exclude: ["<sample_name1>",
                      "<sample_name2>",
                      ]  # [<sampleString1>, <sampleString2>, ...]
