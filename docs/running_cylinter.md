@@ -16,4 +16,3 @@ nav_order: 2
 {% include exemplar.md %}
 {% include dir.md %}
 {% include exec.md %}
-{% include post.md %}
