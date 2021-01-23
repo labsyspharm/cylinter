@@ -20,7 +20,7 @@ requires = [
     'hurry.filesize==0.9',
 ]
 
-VERSION = '0.0.5'
+VERSION = '0.0.6'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
