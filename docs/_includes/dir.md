@@ -1,7 +1,7 @@
 # Input Directory Structure
-CyLinter takes standard output files from the [mcmicro multiplex image preprocessing pipeline](https://github.com/labsyspharm/mcmicro) as input into the pipeline.  
+CyLinter uses standard output files from the [mcmicro multiplex image preprocessing pipeline](https://github.com/labsyspharm/mcmicro) as input. Input directory structure is shown below:  
 
-Run `prep.sh` to configure mcmicro output files into CyLinter-compatible input directory structure:
+Before running CyLinter, transfer and organize the preprocessed data from o2 according to tree diagram (shown below) using the following command: `prep <source_dir_path> <dest_dir_path>`
 
 ```
 <SAMPLE_dir>
@@ -13,7 +13,11 @@ Run `prep.sh` to configure mcmicro output files into CyLinter-compatible input d
 └── tif
     ├── <sample1>.ome.tif
     └── <sample2>.ome.tif
+```
 
+In the case of TMA data, an additional "-t" flag must be passed prior to the source and destination file path variables: `prep -t <source_dir_path> <dest_dir_path>`. The file will then be organized as shown below, with subdirectories containing files from different TMA experiments:
+
+```
 <TMA_dir>
 ├── <tma1>
 │   ├── config.yml
@@ -37,10 +41,8 @@ Run `prep.sh` to configure mcmicro output files into CyLinter-compatible input d
 
 Notes:
 
-* The name of the parent input directory (e.g., `<input>`) is the experiment name.
-* The file `markers.csv` contains metadata about experimental immunomarkers and must be placed in the parent directory.
-* Tabular data (i.e. `csv files`) must be placed inside the `csv/` subdirectory.
-* Preprocessed multiplex imaging data (i.e. `ome.tif files`) must be placed inside the `tif/` subdirectory.
-* For TMA data (as opposed to whole tissue samples), subdirectories labeled by TMA name will be present in the parent input directory (`<input>`). Otherwise, the input directory structure is repeated per TMA subdirectory.
-* The pipeline can be started from any module (see below), in which case it will look for the cached output of the immediately preceding module in the auto-generated `output/checkpoints` subdirectory.
-  * For example, running the pipeline with `--module selectROIs` will start the pipeline at the region of interest (ROI) section module.
+* The basename of the destination directory path (i.e. <dest_dir_path>) is assumed to be the experiment name.
+* The file `markers.csv` contains metadata about experimental immunomarkers.
+* Tabular data (i.e. `csv files`) are located in `csv/` subdirectories.
+* Preprocessed multiplex imaging data (i.e. `ome.tif files`) are located in `tif/` subdirectories.
+* In the case of TMA data, data from different TMA slides are located in experiment-specific subdirectories.
