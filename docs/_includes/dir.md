@@ -1,5 +1,5 @@
 # Input Directory Structure
-CyLinter can take standard output files from the [mcmicro multiplex image preprocessing pipeline](https://github.com/labsyspharm/mcmicro) as input into the pipeline.  
+CyLinter takes standard output files from the [mcmicro multiplex image preprocessing pipeline](https://github.com/labsyspharm/mcmicro) as input into the pipeline.  
 
 Run `prep.sh` to configure mcmicro output files into CyLinter-compatible input directory structure:
 
