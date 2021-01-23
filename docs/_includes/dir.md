@@ -1,10 +1,14 @@
 # Input Directory Structure
-CyLinter uses standard output files from the [mcmicro multiplex image preprocessing pipeline](https://github.com/labsyspharm/mcmicro) as input. Input directory structure is shown below:  
+CyLinter uses standard output files from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline as input.
 
-Before running CyLinter, transfer and organize the preprocessed data from o2 according to tree diagram (shown below) using the following command: `prep <source_dir_path> <dest_dir_path>`
+Before running CyLinter, transfer and organize mcmicro output data files (typically on the o2 cluster) according to the below tree diagram using the following command:
+
+``` bash
+prep <source_dir_path> <dest_dir_path>
+```
 
 ```
-<SAMPLE_dir>
+<input_dir>
 ├── config.yml
 ├── csv
 │   ├── unmicst-<sample1>.csv
@@ -15,10 +19,16 @@ Before running CyLinter, transfer and organize the preprocessed data from o2 acc
     └── <sample2>.ome.tif
 ```
 
-In the case of TMA data, an additional "-t" flag must be passed prior to the source and destination file path variables: `prep -t <source_dir_path> <dest_dir_path>`. The file will then be organized as shown below, with subdirectories containing files from different TMA experiments:
+In the case of TMA data, an additional "-t" flag must be passed prior to the source and destination file path variables
+
+``` bash
+prep -t <source_dir_path> <dest_dir_path>.
+```
+
+The resulting input directory will then be organized with TMA-specific subdirectories:
 
 ```
-<TMA_dir>
+<input_dir>
 ├── <tma1>
 │   ├── config.yml
 │   ├── csv
@@ -45,4 +55,3 @@ Notes:
 * The file `markers.csv` contains metadata about experimental immunomarkers.
 * Tabular data (i.e. `csv files`) are located in `csv/` subdirectories.
 * Preprocessed multiplex imaging data (i.e. `ome.tif files`) are located in `tif/` subdirectories.
-* In the case of TMA data, data from different TMA slides are located in experiment-specific subdirectories.
