@@ -22,4 +22,10 @@ cylinter --module (optional) <input_dir_path>
 ```
 
 * Without passing --module, the pipeline starts by default at the first module `getSingleCellData`. Passing a module name will cause the pipeline to start from the specified module. In those cases, the program will look for cached parquet files from the immediately preceding module stored in the `checkpoints` subdirectory of the top-level output directory specified by the corresponding input directory's YAML configuration file.
-  * For example, running the pipeline with `cylinter --module selectROIs <input_dir_path>` will start the pipeline at the region of interest (ROI) section module and run successive modules until the user elects to terminate the program.
+  * For example,
+
+  ``` bash
+  cylinter --module selectROIs <input_dir_path>
+  ```
+
+  will start the pipeline at the region of interest (ROI) section module and run successive modules until the user elects to terminate the program.
