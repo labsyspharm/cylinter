@@ -35,9 +35,13 @@ setup(
     setup_requires=['cython>=0.29.21', 'numpy>=1.19.5'],
     packages=find_packages(),
     install_requires=requires,
+    data_files=[('', ['cylinter/config.yml']),
+                ('', ['cylinter/prep_subprocess.sh'])
+                ],
     entry_points={
         'console_scripts': [
             'cylinter=cylinter.cylinter:main',
+            'prep=cylinter.prep:main',
         ]
     },
     classifiers=[
