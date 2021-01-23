@@ -1,19 +1,6 @@
-# Pipeline execution
+# Configuration settings
 
-After installation, Cylinter can be executed as a console script at the command using the following incantation:
-
-``` bash
-cylinter --module (optional) path/to/input/dir
-```
-
-By default, the pipeline starts from the "getSingleCellData" module. Use the `--module` flag to execute from any module in the pipeline instead.
-
-By default CyLinter writes module-specific intermediate parquet files to a `checkpoints/` subdirectory inside whatever parent output directory specified in the config.yml file. (See the next section for more information on pipeline configuration settings.)
-
-
-### Specifying configuration settings
-
-Run-specific parameters are passed to a YAML configuration (`input/config.yml`), which is provided to CyLinter at the point of execution.
+Before running CyLinter, the user must specify parameter values for a series of configurations settings by editing an input directory's YAML configuration file.
 
 ``` yaml
 in_dir: path/to/input/dir
@@ -25,3 +12,14 @@ sample_metadata:
 samples_to_exclude: [<sampleString1>, <sampleString2>, ...]
 markers_to_exclude: [<markerString1>, <markerString2>, ...]
 ```
+
+# Pipeline execution
+
+To run CyLinter, point the tool at a previously-formatted input directory using the following command:
+
+``` bash
+cylinter --module (optional) <input_dir_path>
+```
+
+* Without passing --module, the pipeline starts by default at the first module `getSingleCellData`. Passing a module name will cause the pipeline to start from the specified module. In that case, the program will look for cached parquet files (compressed csv files) from the immediately preceding module stored in the `checkpoints` subdirectory of the top-level output directory specified in the corresponding input directory's YAML configuration file.
+  * For example, running the pipeline with `cylinter --module selectROIs <input_dir_path>` will start the pipeline at the region of interest (ROI) section module and run all subsequent modules until the user terminates the program.
