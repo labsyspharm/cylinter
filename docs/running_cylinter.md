@@ -13,6 +13,6 @@ nav_order: 2
 {:toc}
 ---
 
-{% include exemplar.md %}
 {% include dir.md %}
 {% include exec.md %}
+{% include exemplar.md %}
