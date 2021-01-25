@@ -18,10 +18,10 @@ requires = [
     'rpy2==3.4.2',
     'bridson==0.1.0',
     'hurry.filesize==0.9',
-    'synapseclient==2.2.2',
+    'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21 fails to transfer)
 ]
 
-VERSION = '0.0.9'
+VERSION = '0.0.10'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
