@@ -3,8 +3,8 @@
 Before running CyLinter, specify experiment-specific parameter values by editing the corresponding input directory's YAML configuration file.
 
 ``` yaml
-in_dir: absolute/path/to/input/dir
-out_dir: absolute/path/to/chosen/output/dir
+in_dir: /input/dir
+out_dir: /output/dir
 random_sample_size: 1.0 # floating point (0.0-1.0; 1.0 = full dataset)
 mask_object: cellMask  # cellMask, nucleiMask, cellRingMask; indicated by column headers in csv files; determined by mcmicro run parameters.
 sample_metadata:
@@ -18,14 +18,14 @@ markers_to_exclude: [<markerString1>, <markerString2>, ...]
 Run CyLinter by pointing the tool at a formatted input directory using the following command:
 
 ``` bash
-cylinter --module (optional) <input_dir_path>
+cylinter --module (optional) </input/dir>/config.yml
 ```
 
 * Without passing --module, the pipeline starts by default at the first module `getSingleCellData`. Passing a module name will cause the pipeline to start from the specified module. In those cases, the program will look for cached parquet files from the immediately preceding module stored in the `checkpoints` subdirectory of the top-level output directory specified by the corresponding input directory's YAML configuration file.
   * For example,
 
   ``` bash
-  cylinter --module selectROIs <input_dir_path>
+  cylinter --module selectROIs </input/dir>/config.yml
   ```
 
   will start the pipeline at the region of interest (ROI) section module and run successive modules until the user elects to terminate the program.

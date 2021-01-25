@@ -18,9 +18,10 @@ requires = [
     'rpy2==3.4.2',
     'bridson==0.1.0',
     'hurry.filesize==0.9',
+    'synapseclient==2.2.2',
 ]
 
-VERSION = '0.0.6'
+VERSION = '0.0.7'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
@@ -36,7 +37,7 @@ setup(
     packages=find_packages(),
     install_requires=requires,
     data_files=[('', ['cylinter/config.yml']),
-                ('', ['cylinter/prep_subprocess.sh'])
+                ('', ['cylinter/prep_subprocess.sh']),
                 ],
     entry_points={
         'console_scripts': [
@@ -54,7 +55,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],
-    python_requires='>=3.6',
+    python_requires='==3.8.5',
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
     license=LICENSE,
