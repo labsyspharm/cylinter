@@ -10,7 +10,7 @@ shift $(( OPTIND - 1 ))
 
 if [ "$2" == "exemplar-002" ]; then
   if [ ! -d "$3"/"$2" ]; then
-    synapse get -r syn24193163 --downloadLocation "$3" # download exemplar-002 from Sage Synapse
+    synapse get -r syn24193163 --downloadLocation "$3" --multiThreaded  # download exemplar-002 from Sage Synapse
 
     # Rename quantification and dearray subdirectories to "csv" and "tif", respectively.
     ROOT_NAME=$(basename "$2")
