@@ -10,15 +10,18 @@ Check if Python 3 is already installed.
 python3 --version
 ```
 
- Python 3 is installed if a software version number is returned by the above command. If not, install Python3 version 3.8.5 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/). Note, as of this writing CyLinter is incompatible with the latest version of Python 3 (3.9.1) ).  
+ Python 3 is installed if a version number is returned by the above command. If not installed or a version other than 3.8.5, install 3.8.5 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/).
 
 ## Create a Python virtual environment
 
-Create an isolated Python virtual environment [Python virtual environment](https://docs.python.org/3/library/venv.html) for CyLinter projects to avoid incompatibles with system-wide Python packages.
+Create an isolated Python virtual environment [Python virtual environment](https://docs.python.org/3/library/venv.html) in which to run CyLinter projects. This will avoid potential compatibility issues between CyLinter and system-wide Python dependencies.
 
 ``` bash
-python3 -m venv $HOME/cylinter  # creates a virtual environment called "cylinter" in the user's home directory
-source $HOME/cylinter/bin/activate  # activates the newly-created virtual environment
+# Create a virtual environment called "cylinter" in your home directory.
+python3 -m venv $HOME/cylinter
+
+# Activate the newly-created virtual environment.
+source $HOME/cylinter/bin/activate  
 ```
 
 ## Install CyLinter

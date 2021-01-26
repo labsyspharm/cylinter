@@ -1,23 +1,26 @@
 # Input Directory Structure
-CyLinter uses standard output files from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline as input into the program.
-
-mcmicro is typically deployed on compute clusters (e.g. Harvard Medical School's o2 cluster), but can also be run locally. Transfer and reorganize mcmicro output data files as CyLinter input by running the following command:
+CyLinter uses standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline. A CyLinter support script (`prep`) programmatically transfers this output into a target destination file then organizes the new input directory for CyLinter analysis.
 
 ``` bash
-prep <source_path> <destination_path>
-```
-To transfer mcmicro output from o2 <source_path> my be written as <userID>@transfer.rc.hms.harvard.edu:<path/to/top-level/mcmicro/output/dir>. The destination path is chosen by the user and serves as the CyLinter input directory.
-
-For TMA data, an additional "-t" flag must be passed prior to the source and destination paths, as mcmicro stores TMA data differently that whole tissue data.  
-
-``` bash
-prep -t <source_path> <destination_path>.
+# Transfer and organize mcmicro output for CyLinter analysis
+prep <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
-Resulting CyLinter input directories will take the following form:
+``` bash
+# Data may be transferred from the o2 cluster using an ssh key
+prep <userID>@transfer.rc.hms.harvard.edu:</path/to/top-level/mcmicro/output <cylinter_input_dir>
+```
+
+For TMA data, pass the "-t" flag prior to source and destination paths. This is required, as mcmicro stores TMA data differently that whole tissue data.  
 
 ``` bash
-<input_dir>  # eqivalent to <destination_path>
+prep -t <mcmicro_output_dir> <cylinter_input_dir>
+```
+
+CyLinter input directories take the following form:
+
+``` bash
+<cylinter_input_dir>
 ├── config.yml
 ├── csv
 │   ├── unmicst-<sample/core1>.csv
