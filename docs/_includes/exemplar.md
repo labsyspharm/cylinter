@@ -1,20 +1,18 @@
 # Exemplar data
 
-[mcmicro](https://github.com/labsyspharm/mcmicro) tabular and imaging output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes. A `markers.csv` file containing immunomarker metadata is also provided. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163. Registration at Sage Synapse is required to download the exemplar data; establish a free account at [Sage Synapse](https://www.synapse.org/).
+[mcmicro](https://github.com/labsyspharm/mcmicro) tabular and imaging output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes. A `markers.csv` file containing immunomarker metadata is also provided. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163. Registration at Sage Synapse is required to download the exemplar data; you can establish a free account at [https://www.synapse.org/](https://www.synapse.org/).
 
 ``` bash
-prep exemplar-002 <cylinter_input_dir>
-
-# Enter your Synapse user ID and password when prompted, then press return.
+prep exemplar-002 <cylinter_input_dir>  # Enter Synapse ID and password when prompted
 ```
 
-Once download is complete, open and edit the YAML configuration file in the CyLinter input directory with a text editor. Vim users may do this from the terminal with the following command:
+Once the download is complete, edit the template YAML configuration file (`config.yml`) added to the CyLinter input directory by the `prep` command. Vim users may use the following command:
 
 ```bash
 vim <cylinter_input_dir>/exemplar-002/config.yml>
 ```
 
-Replace the configuration template contents with the following:
+Replace the contents of the template configuration file with the following:
 
 ```yaml
 in_dir: <cylinter_input_dir>/exemplar-002
@@ -30,12 +28,14 @@ samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
 markers_to_exclude: ["AF488", "AF555", "AF647"]  # [<markerString1>, <markerString2>, ...]
 ```
 
-Run CyLinter on `exemplar-002` with the following command:
+Make sure the `in_dir` and `out_dir` fields are updated with the correct `<cylinter_input_dir>` and `cylinter_output_dir` directory paths.
+
+Run CyLinter on `exemplar-002`:
 
 ``` bash
-# Activate the CyLinter virtual environment
+# Activate the CyLinter virtual environment (if not already)
 source $HOME/cylinter/bin/activate
 
-# Pass exemplar-002 configuration file to CyLinter for analysis
+# Pass the YAML configuration file for exemplar-002 to CyLinter for analysis
 cylinter --module (optional) <cylinter_input_dir>/exemplar-002/config.yml  
 ```
