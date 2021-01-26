@@ -26,16 +26,16 @@ cylinter --module (optional) <input_dir>/config.yml
 * By default, the pipeline starts at the first module: `getSingleCellData`. Passing the name of specific modules with `--module <module_name>` causes the program to retrieve the cached parquet file returned by the preceding module.
 
 # Current modules
-`getSingleCellData`— combine tissue sample (or TMA core) data into single dataframe.
-`setContrast`— adjust upper and lower image contrast settings.
-`selectROIs`— gate tissue regions of interest. Cells within region bounds are carried forward into downstream analysis. Alternatively, gate areas to be excluded from downstream analysis.
-`dnaIntensityCutoff`— assign upper and lower cutoffs on DNA intensity.
-`dnaAreaCutoff`— assign upper and lower cutoffs on DNA area (nucleus size).
-`crossCycleCorrelation`— remove cells poorly-correlated in DNA intensity across imaging cycles.
-`log10transform`— log-transform and rescale data (per channel).
-`pruneOutliers`— assign upper and lower percentile cutoffs on immunomarker signal intensity.  
-`performPCA`— perform PCA on tissue samples (or TMA cores) using mean immunomarker intensity values.
-`performTSNE`— perform TSNE embedding and density-based clustering (HDBSCAN) on high-quality cells.
-`getClustermap`— compute and plot clusters vs. immunomarkers clustermap
-`lassoClusters`— select cells of interest from specific clusters for further analysis.
-`curateThumbnails`— curate images of cells from specific clusters for validation.
+1. `getSingleCellData:` combine whole tissue or TMA core data into a single dataframe.
+2. `setContrast:` adjust upper and lower image contrast bounds.
+3. `selectROIs:` gate regions of interest. Positive (inclusive) and negative (exclusive) selection options.
+4. `dnaIntensityCutoff:` assign upper and lower cutoffs on DNA counter stain (Hoechst, DAPI) intensity.
+5. `dnaAreaCutoff:` assign upper and lower cutoffs on DNA area (nucleus size).
+6. `crossCycleCorrelation:` filter poorly-correlated cells across imaging cycles according to DNA intensity.
+7. `log10transform:` log-transform and rescale data (per channel).
+8. `pruneOutliers:` assign upper and lower percentile cutoffs on immunomarker signal intensity.  
+9. `performPCA:` perform PCA on whole tissue or TMA core mean immunomarker intensities.
+10. `performTSNE:` perform TSNE embedding and density-based clustering (HDBSCAN) on cleaned single-cell data.
+11. `getClustermap:` compute and plot clusters vs. immunomarkers clustermap
+12. `lassoClusters:` lasso cells of interest from the embedding for further analysis.
+13. `curateThumbnails:` curate thumbnail images of cells from each cluster for visual inspection.
