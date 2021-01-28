@@ -1,6 +1,6 @@
 ![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo2.png?raw=true)
 
-# An Interactive Image Segmentation Filter for Multiplex Microscopy.
+## An Interactive Image Segmentation Filter for Multiplex Microscopy.
 
 CyLinter cleans image-derived, single-cell data by identifying and removing cell segmentation instances in multiplexed whole tissue and tissue microarray images corrupted by optical and/or image preprocessing artifacts. The tool comprises a set of user-guided, quality control (QC) modules instantiated in a configurable [Python](https://www.python.org) Class. The results of each module are cached to allow for dynamic restarts and iterative QC strategies.
 
