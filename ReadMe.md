@@ -1,4 +1,4 @@
-![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo.png?raw=true)
+![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo2.png?raw=true)
 
 # An Interactive Image Segmentation Filter for Multiplex Microscopy.
 

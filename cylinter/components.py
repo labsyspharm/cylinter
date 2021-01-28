@@ -312,7 +312,7 @@ class QC(object):
 
     @module
     def getSingleCellData(data, self, args):
-
+        breakpoint()
         files = dataset_files(f'{self.in_dir}/csv')
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
