@@ -15,8 +15,8 @@ vim <cylinter_input_dir>/exemplar-002/config.yml>
 Replace the contents of the template configuration file with the following:
 
 ```yaml
-in_dir: <cylinter_input_dir>/exemplar-002
-out_dir: <cylinter_output_dir>/exemplar-002
+in_dir: "<cylinter_input_dir>/exemplar-002"
+out_dir: "<cylinter_output_dir>/exemplar-002"
 random_sample_size: 1.0  # floating point (0.0-1.0); 1.0 is full dataset
 mask_object: cellMask  # cellMask, nucleiMask, cellRingMask ...
 sample_metadata:

@@ -7,7 +7,7 @@ permalink: /
 last_modified_date: 2021-01-15
 ---
 
-![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo.png?raw=true)
+![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo2.png?raw=true)
 
 An Interactive Image Segmentation Filter for Multiplex Microscopy.
 {: .fs-6 .fw-300 }

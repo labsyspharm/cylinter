@@ -3,14 +3,14 @@
 Edit the template YAML configuration file (`config.yml`) added to the CyLinter input directory by the `prep` command.
 
 ``` yaml
-in_dir: <cylinter_input_dir>
-out_dir: <cylinter_output_dir>  # location is arbitrary
+in_dir: "<cylinter_input_dir>"
+out_dir: "<cylinter_output_dir>"  # location is arbitrary
 random_sample_size: 1.0  # floating point (0.0-1.0); 1.0 is full dataset
 mask_object: cellMask  # cellMask, nucleiMask, cellRingMask; see csv table column headers
 sample_metadata:
-  unmicst-<sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
-samples_to_exclude: [<sampleString1>, <sampleString2>, ...]
-markers_to_exclude: [<markerString1>, <markerString2>, ...]
+  unmicst-<sampleString>: ["<fullConditionString>", "<abbrConditionString>", <replicateInteger>]
+samples_to_exclude: ["<sampleString1>", "<sampleString2>", ...]
+markers_to_exclude: ["<markerString1>", "<markerString2>", ...]
 ```
 
 # Pipeline execution
