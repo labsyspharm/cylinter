@@ -111,70 +111,53 @@ class QC(object):
                  sample_replicates=None,
                  samples_to_exclude=None,
                  markers_to_exclude=None,
-                 modules=None,
 
                  # setContrast -
-                 view_sample='1',  # '840069_0031-median_r_50'
+                 view_sample=None,
 
                  # selectROIs -
-                 delint_mode=False,
-                 show_ab_channels=False,
+                 delint_mode=None,
+                 show_ab_channels=None,
 
                  # crossCycleCorrelation -
-                 log_ratio_rnge=None,  # None or (float, float)
+                 log_ratio_rnge=None,  # Can be None or (float, float)
 
                  # pruneOutliers -
-                 hexbins=False,
-                 hexbin_grid_size=20,
+                 hexbins=None,
+                 hexbin_grid_size=None,
 
                  # performPCA module —
-                 channel_exclusions=[],
-                 numPCAComponents=2,
-                 pointSize=90.0,
-                 normalize=True,
-                 labelPoints=True,
-                 condHueDict={
-                     'cd': (0.5, 0.5, 0.5, 1.0),
-                     'hfd': (1.0, 1.0, 0.0, 1.0)
-                     },
+                 channel_exclusions=None,
+                 numPCAComponents=None,
+                 pointSize=None,
+                 normalize=None,
+                 labelPoints=None,
+                 condHueDict=None,
 
                  # performTSNE module —
-                 fracForEmbedding=0.1,
-                 numTSNEComponents=2,
-                 perplexity=50.0,
-                 earlyExaggeration=12.0,
-                 learningRate=200.0,
-                 metric='euclidean',
-                 random_state=5,
+                 fracForEmbedding=None,
+                 numTSNEComponents=None,
+                 perplexity=None,
+                 earlyExaggeration=None,
+                 learningRate=None,
+                 metric=None,
+                 random_state=None,
 
                  # frequencyStats —
-                 denominator_cluster=2,
-                 FDRCorrection=False,
+                 denominator_cluster=None,
+                 FDRCorrection=None,
 
                  # clusterBoxplots —
-                 bonferroniCorrection=False,
+                 bonferroniCorrection=None,
 
                  # curateThumbnails —
-                 numFingernails=10,
+                 numThumbnails=None,
 
                  # spatialAnalysis —
-                 cropDict={
-                     'cd13': ('top', 10000),
-                     'hfd3': ('bottom', 11000),
-                     'hfd4': ('top', 8000),
-                     'hfd8': ('bottom', 7500),
-                     'hfd9': ('top', 9500),
-                     'hfd11': ('bottom', 6600),
-                     'hfd12': ('top', 9000),
-                     'hfd13': ('top', 7000),
-                     },
-                 spatialDict1={
-                    'aco2': 0.07, 'glut1': 0.25
-                    },
-                 spatialDict2={
-                    'TCF1': 0, 'CD8T': 1
-                    },
-                 radiusRange=[40, 600],
+                 cropDict=None,
+                 spatialDict1=None,
+                 spatialDict2=None,
+                 radiusRange=None,
                  ):
         """
         Args:
@@ -246,7 +229,7 @@ class QC(object):
             Otherwise compute uncorrected p-vals
 
           curateThumbnails —
-            numFingernails: number of random examples of each HDBSCAN cluster
+            numThumbnails: number of random examples of each HDBSCAN cluster
 
           spatialAnalysis —
             cropDict: vertical crop coordinate (numpy row) and
@@ -270,8 +253,6 @@ class QC(object):
         self.sample_replicates = sample_replicates
         self.samples_to_exclude = samples_to_exclude
         self.markers_to_exclude = markers_to_exclude
-
-        self.modules = modules
 
         self.view_sample = view_sample
 
@@ -303,7 +284,7 @@ class QC(object):
 
         self.bonferroniCorrection = bonferroniCorrection
 
-        self.numFingernails = numFingernails
+        self.numThumbnails = numThumbnails
 
         self.cropDict = cropDict
         self.spatialDict1 = spatialDict1
@@ -312,7 +293,7 @@ class QC(object):
 
     @module
     def getSingleCellData(data, self, args):
-        breakpoint()
+
         files = dataset_files(f'{self.in_dir}/csv')
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
@@ -2525,9 +2506,9 @@ class QC(object):
                     drop=True, inplace=True
                     )
 
-                if self.numFingernails > len(sample_cluster_subset):
+                if self.numThumbnails > len(sample_cluster_subset):
                     dif = (
-                        self.numFingernails
+                        self.numThumbnails
                         - len(sample_cluster_subset)
                         )
 
@@ -2545,7 +2526,7 @@ class QC(object):
                 else:
                     sample_cluster_subset = (
                         sample_cluster_subset.sample(
-                            n=self.numFingernails, random_state=3)
+                            n=self.numThumbnails, random_state=3)
                         )
                 # add centroid mask to image overlay
                 centroids = sample_cluster_subset[

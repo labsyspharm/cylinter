@@ -1,4 +1,5 @@
 import sys
+import os
 import argparse
 import pathlib
 from subprocess import call
@@ -22,6 +23,8 @@ def main(argv=sys.argv):
         help='path to CyLinter input directory'
     )
     args = parser.parse_args()
+
+    os.makedirs({args.dest_dir})
 
     call([f'sh {sys.prefix}/prep_subprocess.sh {args.t} {args.source_dir} {args.dest_dir} {sys.prefix}/config.yml'], shell=True)
 

@@ -1,12 +1,117 @@
-in_dir: .../input/<experiment_root_dir>
-out_dir: .../output/<experiment_root_dir>
-random_sample_size: 1.0  # floating point percentage value between 0.0-1.0
-mask_object: cellRingMask  # cellMask, nucleiMask, cellRingMask ...
+# config.yaml —
+#   in_dir: path to csv files, segmentation masks, and ome.tiffs
+#   out_dir: path to save directory, location is arbitrary
+#   random_sample_size: analyze a random percentage of data; float (0.0-1.0)
+#   mask_object: cellMask, nucleiMask, cellRingMask ...
+#   sample_metadata: <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+#   samples_to_exclude: samples to censor from the analysis, [<sampleString1>, <sampleString2>, ...]
+#   markers_to_exclude: markers to censor from the analysis, [<markerString1>, <markerString2>, ...]
+in_dir: <cylinter_input_dir>
+out_dir: <cylinter_output_dir>
+random_sample_size: 1.0
+mask_object: cellRingMask
 sample_metadata:
-  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>] # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>]
 samples_to_exclude: ["<sample_name1>",
                      "<sample_name2>",
-                     ]  # [<sampleString1>, <sampleString2>, ...]
+                     ]
 markers_to_exclude: ["<marker_name1>",
                      "<marker_name2>",
-                     ]  # [<markerString1>, <markerString2>, ...]
+                     ]
+
+
+# CLASS MODULE CONFIGURATIONS:
+
+# setContrast —
+#     view_sample: name of sample for contrast adjustment with Napri
+view_sample: "1"
+
+# selectROIs —
+#    delint_mode: whether to drop (True) or keep (False) ROI indices.
+#    show_ab_channels: otherwise, show cycle1 DNA only.
+delint_mode: False
+show_ab_channels: False
+
+# crossCycleCorrelation —
+#    log_ratio_rnge: Tuple of floats (or None). Lower and upper cutoffs
+#    on log(cycle ratio) values for histogram plotting. Symmetrical
+#    values around zero allow for a diverging colormap to show tissue
+#    areas of increasing (green) and decreasing (pink) DNA signal
+#    intensity between successive imaging cycles. Symmetrical cutoffs
+#    centered at local minima between adjacent histogram modes allows
+#    the colormap to show relative increases and decreases
+#    in DNA intensity.
+log_ratio_rnge: None
+
+# pruneOutliers —
+#    hexbins: Boolean. If True, plot hexbins instead of scatter plots.
+#    hexbin_grid_size: Interger value. Higher values increase
+#    data point resolution. Not used when hexbins=False.
+hexbins: False,
+hexbin_grid_size: 20
+
+# performPCA module —
+#   numPCAComponents: number of PCs
+#   pointSize: scatter point size
+#   normalize: scale input vectors individually to unit norm
+#   labelPoints: annotate scatter points
+#   condHueDict: color scatter points by experimental condition
+channel_exclusions: []
+numPCAComponents: 2
+pointSize: 90.0
+normalize: True
+labelPoints: True
+condHueDict: {'cd': (0.5, 0.5, 0.5, 1.0), 'hfd': (1.0, 1.0, 0.0, 1.0)}
+
+# performTSNE module —
+#   fracForEmbedding: fraction of total cells to use in the embedding
+#   numTSNEComponents: dimension of the TSNE embedding
+#   perplexity: related to the number of nearest neighbors
+#   used in other manifold learning algorithms. Larger datasets
+#   usually require larger perplexity. Different values can
+#   result in significanlty different results.
+#   earlyExaggeration: for larger values, the space between
+#   natural clusters will be larger in the embedded space.
+#   learningRate: t-SNE learning rate: usually [10.0, 1000.0]
+#   metric: string allowed by scipy.spatial.distance.pdist for
+#   its metric parameter, or a metric listed in
+#   pairwise.PAIRWISE_DISTANCE_FUNCTIONS.
+#   random_state: integer, determines the random number generator
+#   for reproducible results across multiple function calls.
+fracForEmbedding: 0.1
+numTSNEComponents: 2
+perplexity: 50.0
+earlyExaggeration: 12.0
+learningRate: 200.0
+metric: "euclidean"
+random_state: 5
+
+# frequencyStats —
+#   denominator_cluster: HDBSCAN cluster to use as the
+#   denominator when computing cell frequency ratios
+#   FDRCorrection: Boolean; if True, compute false discovery
+#   rate q-vals. Otherwise compute uncorrected p-vals
+denominator_cluster: 2
+FDRCorrection: False
+
+# clusterBoxplots —
+#   bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.
+#   Otherwise compute uncorrected p-vals
+bonferroniCorrection: False
+
+# curateThumbnails —
+#   numThumbnails: number of random examples of each HDBSCAN cluster
+numThumbnails: 10
+
+# spatialAnalysis —
+#   cropDict: vertical crop coordinate (numpy row) and
+#   sub-image to use for t-CyCIF images containing more
+#   than one tissue section
+#   spatialDict1: cutoff for pixel-level protein signal instensities
+#   spatialDict2: map of cell state call to HDBSCAN cluster
+#   for cell states of interest
+#   radiusRange: range of radii (in pixels) for Poisson-disc sampling
+cropDict: {'cd13': ('top', 10000), 'hfd3': ('bottom', 11000), 'hfd4': ('top', 8000), 'hfd8': ('bottom', 7500), 'hfd9': ('top', 9500), 'hfd11': ('bottom', 6600), 'hfd12': ('top', 9000), 'hfd13': ('top', 7000),}
+spatialDict1: {'aco2': 0.07, 'glut1': 0.25}
+spatialDict2: {'TCF1': 0, 'CD8T': 1}
+radiusRange: [40, 600]

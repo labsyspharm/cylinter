@@ -28,7 +28,7 @@ sample_metadata:
   unmicst-3: ["tissue_c", "c", 1]
   unmicst-4: ["tissue_d", "d", 1]
 samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
-markers_to_exclude: ["AF488", "AF555", "AF647", A488_background", "A555_background", "A647_background"]  # [<markerString1>, <markerString2>, ...]
+markers_to_exclude: ["AF488", "AF555", "AF647", "A488_background", "A555_background", "A647_background"]  # [<markerString1>, <markerString2>, ...]
 ```
 
 Make sure the `in_dir` and `out_dir` fields are updated with the correct `<cylinter_input_dir>` and `cylinter_output_dir` directory paths.
