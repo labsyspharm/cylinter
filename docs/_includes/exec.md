@@ -1,6 +1,6 @@
 # Configuration settings
 
-Edit the template YAML configuration file (`config.yml`) added to the CyLinter input directory after running the `prep` command with appropriate metadata.
+Update the template YAML configuration file (`config.yml`) in the CyLinter input directory with user- and experiment- specific metadata.
 
 ``` yaml
 in_dir: "<cylinter_input_dir>"
@@ -22,7 +22,7 @@ markers_to_exclude: ["<markerString1>", "<markerString2>", ...]
 # Activate the CyLinter virtual environment.
 source $HOME/cylinter/bin/activate
 
-# Pass CyLinter configuration file to perform analysis.
+# Perform CyLinter analysis by passing the YAML configuration file.
 cylinter --module (optional) <input_dir>/config.yml
 ```
 

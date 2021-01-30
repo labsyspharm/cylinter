@@ -11,12 +11,14 @@ source $HOME/cylinter/bin/activate
 prep exemplar-002 $HOME/Desktop  # Enter Synapse ID and password when prompted.
 ```
 
-Once the download is complete, edit the `in_dir` and `out_dir` parameters of the template YAML configuration file (`config.yml`) previously added to the CyLinter input directory by the `prep` command. Note: all other parameters have been pre-configured for `exemplar-002`.
+Once the download is complete, edit the `in_dir` and `out_dir` parameters of the template YAML configuration file (`$HOME/Desktop/exemplar-002/config.yml`) previously added to the CyLinter input directory by the `prep` command. Note: all other metadata parameters have been pre-configured for `exemplar-002`.
 
-Vim users can use the following command:
-
-```bash
-vim $HOME/Desktop/exemplar-002/config.yml
+```yaml
+in_dir: /Users/<user>/Desktop/exemplar-002
+out_dir: /Users/<user>/Desktop/output
+.
+.
+.
 ```
 
 Run CyLinter on `exemplar-002`:
