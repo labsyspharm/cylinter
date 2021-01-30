@@ -20,6 +20,35 @@ class Config:
         config.samples_to_exclude = (data['samples_to_exclude'])
         config.markers_to_exclude = (data['markers_to_exclude'])
 
+        # CLASS MODULE CONFIGURATIONS
+        config.view_sample = str(data['view_sample'])
+        config.delint_mode = bool(data['delint_mode'])
+        config.show_ab_channels = bool(data['show_ab_channels'])
+        config.log_ratio_rnge = (data['log_ratio_rnge'])
+        config.hexbins = bool(data['hexbins'])
+        config.hexbin_grid_size = int(data['hexbin_grid_size'])
+        config.channel_exclusions = list(data['channel_exclusions'])
+        config.numPCAComponents = int(data['numPCAComponents'])
+        config.pointSize = float(data['pointSize'])
+        config.normalize = bool(data['normalize'])
+        config.labelPoints = bool(data['labelPoints'])
+        config.condHueDict = dict(data['condHueDict'])
+        config.fracForEmbedding = float(data['fracForEmbedding'])
+        config.numTSNEComponents = int(data['numTSNEComponents'])
+        config.perplexity = float(data['perplexity'])
+        config.earlyExaggeration = float(data['earlyExaggeration'])
+        config.learningRate = float(data['learningRate'])
+        config.metric = str(data['metric'])
+        config.random_state = int(data['random_state'])
+        config.denominator_cluster = int(data['denominator_cluster'])
+        config.FDRCorrection = bool(data['FDRCorrection'])
+        config.bonferroniCorrection = bool(data['bonferroniCorrection'])
+        config.numThumbnails = int(data['numThumbnails'])
+        config.cropDict = dict(data['cropDict'])
+        config.spatialDict1 = dict(data['spatialDict1'])
+        config.spatialDict2 = dict(data['spatialDict2'])
+        config.radiusRange = list(data['radiusRange'])
+
         return config
 
     def _parse_sample_metadata(self, value):
