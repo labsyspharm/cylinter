@@ -6,25 +6,24 @@
 #   sample_metadata: <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
 #   samples_to_exclude: samples to censor from the analysis, [<sampleString1>, <sampleString2>, ...]
 #   markers_to_exclude: markers to censor from the analysis, [<markerString1>, <markerString2>, ...]
-in_dir: <cylinter_input_dir>
-out_dir: <cylinter_output_dir>
+in_dir: /Users/<user>/Desktop/exemplar-002
+out_dir: /Users/<user>/Desktop/output
 random_sample_size: 1.0
-mask_object: cellRingMask
+mask_object: cellMask
 sample_metadata:
-  unmicst-X: ["<condition_name>", "<abbr_condition_name>", <replicate_integer>]
-samples_to_exclude: ["<sample_name1>",
-                     "<sample_name2>",
-                     ]
-markers_to_exclude: ["<marker_name1>",
-                     "<marker_name2>",
-                     ]
+  unmicst-1: ["tissue_a", "a", 1]  # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+  unmicst-2: ["tissue_b", "b", 1]
+  unmicst-3: ["tissue_c", "c", 1]
+  unmicst-4: ["tissue_d", "d", 1]
+samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
+markers_to_exclude: ["AF488", "AF555", "AF647", "A488_background", "A555_background", "A647_background"]  # [<markerString1>, <markerString2>, ...]
 
 
 # CLASS MODULE CONFIGURATIONS:
 
 # setContrast —
 #     view_sample: name of sample for contrast adjustment with Napri
-view_sample: "1"
+view_sample: "2"
 
 # selectROIs —
 #    delint_mode: whether to drop (True) or keep (False) ROI indices.

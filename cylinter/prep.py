@@ -24,7 +24,7 @@ def main(argv=sys.argv):
     )
     args = parser.parse_args()
 
-    os.makedirs({args.dest_dir})
+    os.makedirs(args.dest_dir, exist_ok=True)
 
     call([f'sh {sys.prefix}/prep_subprocess.sh {args.t} {args.source_dir} {args.dest_dir} {sys.prefix}/config.yml'], shell=True)
 
