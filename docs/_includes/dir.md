@@ -1,12 +1,30 @@
-# Input Directory Structure
-CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline as input. CyLinter comes with a support console script called `prep` that prepares mcmicro output as CyLinter input.
+# Transferring and organizing CyLinter input data
+CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input.
 
 ``` bash
 # Transfer mcmicro output to CyLinter input directory and organize files for analysis
 prep <mcmicro_output_dir> <cylinter_input_dir>
 
-# mcmicro stores TMA data differently that whole tissue data. A "-t" flag must be passed before the source and destination paths to indicate that the mcmicro output are TMA data.
+# mcmicro stores TMA data differently than whole tissue data. A "-t" flag must be passed before the source and destination paths to indicate that the mcmicro output are TMA data.
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
+```
+
+The <mcmicro_output_dir> should contain subdirectories containing all samples (or TMAs) from a given experiment:
+
+``` bash
+<mcmicro_output_dir>
+├── <sample1/TMA1>
+│   ├── markers.csv
+│   ├── quantification
+│   │   └── unmicst-<sample1/TMA1>.csv
+│   └── registration
+│       └── <sample1/TMA1>.ome.tif
+└── <sample2/TMA2>
+    ├── markers.csv
+    ├── quantification
+    │   └── unmicst-<sample2/TMA2>.csv
+    └── registration
+        └── <sample2/TMA2>.ome.tif
 ```
 
 ``` bash
@@ -30,7 +48,21 @@ CyLinter input directories take the following form:
 
 Notes:
 
-* The CyLinter input directories should be named according to their particular experiments.
-* The `markers.csv` file contains metadata about immunomarkers used in the experiment and must be present for analysis.
-* Preprocessed multiplex imaging files (i.e. ome.tif files) are located in the `tif/` subdirectory.
-* Corresponding tabular data are located in the `csv/` subdirectory.
+* Multiplex imaging files (i.e. ome.tif files) for a given TMA or set of whole tissue sections are combined in the `tif/` subdirectory.
+* Corresponding tabular data are combined in the `csv/` subdirectory.
+* The `markers.csv` file contains metadata about immunomarkers used in the experiment and should take the following form:.
+
+```
+channel_number,cycle_number,marker_name,Filter,excitation_wavelength,emission_wavelength
+1,1,<DNA1>,Hoecsht,395,431
+2,1,<abx1>,FITC,485,525
+3,1,<abx2>,Sytox,555,590
+4,1,<abx3>,Cy5,640,690
+5,2,<DNA2>,Hoecsht,395,431
+6,2,<abx4>,FITC,485,525
+7,2,<abx5>,Sytox,555,590
+8,2,<abx6>,Cy5,640,690
+.
+.
+.
+```

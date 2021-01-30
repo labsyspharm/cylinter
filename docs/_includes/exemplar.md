@@ -3,6 +3,9 @@
 [mcmicro](https://github.com/labsyspharm/mcmicro) tabular and imaging output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes. A `markers.csv` file containing immunomarker metadata is also provided. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163. Registration at Sage Synapse is required to download the exemplar data; you can establish a free account at [https://www.synapse.org/](https://www.synapse.org/).
 
 ``` bash
+# Activate the CyLinter virtual environment (if not already)
+source $HOME/cylinter/bin/activate
+
 prep exemplar-002 <cylinter_input_dir>  # Enter Synapse ID and password when prompted
 ```
 
@@ -25,7 +28,7 @@ sample_metadata:
   unmicst-3: ["tissue_c", "c", 1]
   unmicst-4: ["tissue_d", "d", 1]
 samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
-markers_to_exclude: ["AF488", "AF555", "AF647"]  # [<markerString1>, <markerString2>, ...]
+markers_to_exclude: ["AF488", "AF555", "AF647", A488_background", "A555_background", "A647_background"]  # [<markerString1>, <markerString2>, ...]
 ```
 
 Make sure the `in_dir` and `out_dir` fields are updated with the correct `<cylinter_input_dir>` and `cylinter_output_dir` directory paths.
@@ -33,9 +36,6 @@ Make sure the `in_dir` and `out_dir` fields are updated with the correct `<cylin
 Run CyLinter on `exemplar-002`:
 
 ``` bash
-# Activate the CyLinter virtual environment (if not already)
-source $HOME/cylinter/bin/activate
-
 # Pass the YAML configuration file for exemplar-002 to CyLinter for analysis
 cylinter --module (optional) <cylinter_input_dir>/exemplar-002/config.yml  
 ```
