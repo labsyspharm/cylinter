@@ -1,12 +1,8 @@
-# Transferring and organizing CyLinter input data
-CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image preprocessing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input.
+# Transferring and organizing input data
+CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image processing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input. To transfer mcmicro output to a CyLinter input directory and organize files for analysis, run the following command:
 
 ``` bash
-# Transfer mcmicro output to CyLinter input directory and organize files for analysis
 prep <mcmicro_output_dir> <cylinter_input_dir>
-
-# mcmicro stores TMA data differently than whole tissue data. A "-t" flag must be passed before the source and destination paths to indicate that the mcmicro output are TMA data.
-prep -t <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
 The <mcmicro_output_dir> should contain subdirectories containing all samples (or TMAs) from a given experiment:
@@ -27,12 +23,18 @@ The <mcmicro_output_dir> should contain subdirectories containing all samples (o
         └── <sample2/TMA2>.ome.tif
 ```
 
+mcmicro stores TMA data differently than whole tissue data. Pass a "-t" flag before the source and destination directory paths to indicate that the mcmicro output are from TMA data.
+
+``` bash
+prep -t <mcmicro_output_dir> <cylinter_input_dir>
+```
+
 ``` bash
 # SSH keys maybe used to transfer mcmicro output from remote sources such as HMS's o2 compute cluster.
 prep <userID>@transfer.rc.hms.harvard.edu:</path/to/top-level/mcmicro/output <cylinter_input_dir>
 ```
 
-CyLinter input directories take the following form:
+Correctly formatted CyLinter input directories will have the following form:
 
 ``` bash
 <cylinter_input_dir>
@@ -48,9 +50,9 @@ CyLinter input directories take the following form:
 
 Notes:
 
-* Multiplex imaging files (i.e. ome.tif files) for a given TMA or set of whole tissue sections are combined in the `tif/` subdirectory.
-* Corresponding tabular data are combined in the `csv/` subdirectory.
-* The `markers.csv` file contains metadata about immunomarkers used in the experiment and should take the following form:.
+* Single-cell data files from a given TMA or set of whole tissue sections will be combined into the `csv/` subdirectory.
+* Corresponding multiplex imaging files (i.e. ome.tif files) will be combined in the `tif/` subdirectory.
+* The `markers.csv` file contains metadata about immunomarkers used in the study and must take the following form:.
 
 ```
 channel_number,cycle_number,marker_name,Filter,excitation_wavelength,emission_wavelength

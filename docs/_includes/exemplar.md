@@ -1,6 +1,6 @@
 # Exemplar data
 
-[mcmicro](https://github.com/labsyspharm/mcmicro) tabular and imaging output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes. A `markers.csv` file containing immunomarker metadata is also provided. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163. Registration at Sage Synapse is required to download the exemplar data; you can establish a free account at [https://www.synapse.org/](https://www.synapse.org/).
+[mcmicro](https://github.com/labsyspharm/mcmicro) tabular and imaging output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes along with a `markers.csv` file containing immunomarker metadata. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163. Registration at Sage Synapse is required to download the exemplar data; you can establish a free account at [https://www.synapse.org/](https://www.synapse.org/).
 
 ``` bash
 # Activate the CyLinter virtual environment (if not already)
