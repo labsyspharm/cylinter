@@ -15,4 +15,3 @@ nav_order: 2
 
 {% include dir.md %}
 {% include exec.md %}
-{% include exemplar.md %}
