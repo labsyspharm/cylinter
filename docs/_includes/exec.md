@@ -1,6 +1,6 @@
 # Configuration settings
 
-Edit the template YAML configuration file (`config.yml`) added to the CyLinter input directory by the `prep` command.
+Edit the template YAML configuration file (`config.yml`) added to the CyLinter input directory after running the `prep` command with appropriate metadata.
 
 ``` yaml
 in_dir: "<cylinter_input_dir>"
@@ -11,15 +11,18 @@ sample_metadata:
   unmicst-<sampleString>: ["<fullConditionString>", "<abbrConditionString>", <replicateInteger>]
 samples_to_exclude: ["<sampleString1>", "<sampleString2>", ...]
 markers_to_exclude: ["<markerString1>", "<markerString2>", ...]
+.
+.
+.
 ```
 
 # Pipeline execution
 
 ``` bash
-# Activate the CyLinter virtual environment
+# Activate the CyLinter virtual environment.
 source $HOME/cylinter/bin/activate
 
-# Pass CyLinter configuration file and perform analysis
+# Pass CyLinter configuration file to perform analysis.
 cylinter --module (optional) <input_dir>/config.yml
 ```
 

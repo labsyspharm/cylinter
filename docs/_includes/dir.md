@@ -1,11 +1,13 @@
 # Transferring and organizing input data
-CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image processing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input. To transfer mcmicro output to a CyLinter input directory and organize files for analysis, run the following command:
+CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image processing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input.
+
+Transfer mcmicro output to a CyLinter input directory and organize the files for analysis using the following command:
 
 ``` bash
-prep <mcmicro_output_dir> <cylinter_input_dir>
+prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable. 
 ```
 
-The <mcmicro_output_dir> should contain subdirectories containing all samples (or TMAs) from a given experiment:
+Note: the <mcmicro_output_dir> should contain subdirectories containing data for specific samples (or TMAs) from a given experiment and take the follow form:
 
 ``` bash
 <mcmicro_output_dir>
@@ -23,7 +25,7 @@ The <mcmicro_output_dir> should contain subdirectories containing all samples (o
         └── <sample2/TMA2>.ome.tif
 ```
 
-mcmicro stores TMA data differently than whole tissue data. Pass a "-t" flag before the source and destination directory paths to indicate that the mcmicro output are from TMA data.
+Because mcmicro stores TMA data differently than whole tissue data, a "-t" flag must be passed before the source and destination directory paths when preparing TMA data.
 
 ``` bash
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
@@ -31,7 +33,7 @@ prep -t <mcmicro_output_dir> <cylinter_input_dir>
 
 ``` bash
 # SSH keys maybe used to transfer mcmicro output from remote sources such as HMS's o2 compute cluster.
-prep <userID>@transfer.rc.hms.harvard.edu:</path/to/top-level/mcmicro/output <cylinter_input_dir>
+prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_dir> <cylinter_input_dir>
 ```
 
 Correctly formatted CyLinter input directories will have the following form:
@@ -50,7 +52,7 @@ Correctly formatted CyLinter input directories will have the following form:
 
 Notes:
 
-* Single-cell data files from a given TMA or set of whole tissue sections will be combined into the `csv/` subdirectory.
+* Single-cell data files from a given TMA or batch of whole tissue sections will be combined into the `csv/` subdirectory.
 * Corresponding multiplex imaging files (i.e. ome.tif files) will be combined in the `tif/` subdirectory.
 * The `markers.csv` file contains metadata about immunomarkers used in the study and must take the following form:.
 
