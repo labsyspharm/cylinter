@@ -4,10 +4,10 @@ CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm
 Transfer mcmicro output to a CyLinter input directory and organize the files for analysis using the following command:
 
 ``` bash
-prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable. 
+prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable.
 ```
 
-Note: the <mcmicro_output_dir> should contain subdirectories containing data for specific samples (or TMAs) from a given experiment and take the follow form:
+Note: the `<mcmicro_output_dir>` should contain subdirectories containing data for specific samples (or TMAs) from a given experiment and take the follow form:
 
 ``` bash
 <mcmicro_output_dir>
@@ -31,12 +31,13 @@ Because mcmicro stores TMA data differently than whole tissue data, a "-t" flag 
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
+SSH keys maybe used to transfer mcmicro output from remote sources such as HMS's o2 compute cluster.
+
 ``` bash
-# SSH keys maybe used to transfer mcmicro output from remote sources such as HMS's o2 compute cluster.
 prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_dir> <cylinter_input_dir>
 ```
 
-Correctly formatted CyLinter input directories will have the following form:
+Correctly formatted CyLinter input directories have the following form:
 
 ``` bash
 <cylinter_input_dir>
