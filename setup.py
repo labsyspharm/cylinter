@@ -8,6 +8,7 @@ requires = [
     'pyarrow==2.0.0',
     'pandas==1.2.0',
     'hdbscan==0.8.26',
+    'joblib==0.17.0',  # newly-released joblib==1.0.0 results in issues with parallel processing with larger datasets
     'matplotlib==3.3.3',
     'seaborn==0.11.1',
     'scikit-image==0.18.1',
@@ -21,7 +22,7 @@ requires = [
     'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21 fails to transfer)
 ]
 
-VERSION = '0.0.12'
+VERSION = '0.0.13'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'

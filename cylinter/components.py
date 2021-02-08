@@ -152,6 +152,7 @@ class QC(object):
 
                  # curateThumbnails —
                  numThumbnails=None,
+                 squareWindowDimension=None,
 
                  # spatialAnalysis —
                  cropDict=None,
@@ -218,6 +219,11 @@ class QC(object):
             random_state: integer, determines the random number generator
             for reproducible results across multiple function calls.
 
+          curateThumbnails —
+            numThumbnails: number of random examples of each HDBSCAN cluster
+            squareWindowDimension: number of pixels from the reference
+            centroid in the x and y directions
+
           frequencyStats —
             denominator_cluster: HDBSCAN cluster to use as the
             denominator when computing cell frequency ratios
@@ -227,9 +233,6 @@ class QC(object):
           clusterBoxplots —
             bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.
             Otherwise compute uncorrected p-vals
-
-          curateThumbnails —
-            numThumbnails: number of random examples of each HDBSCAN cluster
 
           spatialAnalysis —
             cropDict: vertical crop coordinate (numpy row) and
@@ -279,12 +282,13 @@ class QC(object):
         self.random_state = random_state
         self.channel_exclusions = channel_exclusions
 
+        self.numThumbnails = numThumbnails
+        self.squareWindowDimension = squareWindowDimension
+
         self.denominator_cluster = denominator_cluster
         self.FDRCorrection = FDRCorrection
 
         self.bonferroniCorrection = bonferroniCorrection
-
-        self.numThumbnails = numThumbnails
 
         self.cropDict = cropDict
         self.spatialDict1 = spatialDict1
@@ -451,8 +455,6 @@ class QC(object):
     @module
     def selectROIs(data, self, args):
 
-        df_subset = data[['Sample', 'X_centroid', 'Y_centroid']].copy()
-
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
             mask_object=self.mask_object,
@@ -467,17 +469,17 @@ class QC(object):
             f = open(os.path.join(selection_dir, 'polygon_dict.pkl'), 'rb')
             polygon_dict = pickle.load(f)
             completed_samples = set(polygon_dict.keys())
-            total_samples = set(df_subset['Sample'].unique())
-            samples_to_run = total_samples.difference(completed_samples)
-            print(f'Samples to run: {len(samples_to_run)}')
+            total_samples = set(data['Sample'].unique())
+            samples_to_draw = total_samples.difference(completed_samples)
+            print(f'Samples to draw: {len(samples_to_draw)}')
 
         else:
-            samples_to_run = df_subset['Sample'].unique()
-            print(f'Samples to run: {len(samples_to_run)}')
+            samples_to_draw = data['Sample'].unique()
+            print(f'Samples to draw: {len(samples_to_draw)}')
             polygon_dict = {}
 
-        if (len(samples_to_run) > 0) or (len([name for name in os.listdir(selection_dir) if name.endswith('.txt')]) < len(df_subset['Sample'].unique())):
-            for sample_name in sorted(samples_to_run):
+        if (len(samples_to_draw) > 0) or (len([name for name in os.listdir(selection_dir) if name.endswith('.txt')]) < len(data['Sample'].unique())):
+            for sample_name in sorted(samples_to_draw):
 
                 dna = imread(
                     f'{self.in_dir}/tif/{sample_name}*.tif', key=0
@@ -557,84 +559,99 @@ class QC(object):
                 pickle.dump(polygon_dict, f)
                 f.close()
 
-            for sample_name, group in sorted(df_subset.groupby('Sample')):
+            os.chdir(selection_dir)
+            samples_for_cell_selection = set(
+                data['Sample'].unique()).difference(
+                    set([i.split('.txt')[0] for i in os.listdir()
+                         if i.endswith('.txt')]))
 
-                print(sample_name)
+            for sample_name, group in sorted(data.groupby('Sample')):
+                if sample_name in samples_for_cell_selection:
 
-                sample_data = group[['X_centroid', 'Y_centroid']].astype(int)
-                sample_data['tuple'] = list(
-                    zip(sample_data['Y_centroid'], sample_data['X_centroid'])
-                    )
+                    print(sample_name)
 
-                dna = imread(
-                    f'{self.in_dir}/tif/{sample_name}*.tif', key=0
-                    )
+                    sample_data = group[
+                        ['X_centroid', 'Y_centroid']].astype(int)
+                    sample_data['tuple'] = list(
+                        zip(sample_data['Y_centroid'],
+                            sample_data['X_centroid'])
+                        )
 
-                columns, rows = np.meshgrid(
-                    np.arange(dna.shape[1]),
-                    np.arange(dna.shape[0])
-                    )
-                columns, rows = columns.flatten(), rows.flatten()
-                pixel_coords = np.vstack((rows, columns)).T
+                    dna = imread(
+                        f'{self.in_dir}/tif/{sample_name}*.tif', key=0
+                        )
 
-                cell_coords = set(
-                    [tuple(i) for i in np.array(
-                        sample_data[['Y_centroid', 'X_centroid']])]
-                    )
+                    columns, rows = np.meshgrid(
+                        np.arange(dna.shape[1]),
+                        np.arange(dna.shape[0])
+                        )
+                    columns, rows = columns.flatten(), rows.flatten()
+                    pixel_coords = np.vstack((rows, columns)).T
 
-                clearRAM(print_usage=True)
-                del columns, rows
-                clearRAM(print_usage=True)
+                    cell_coords = set(
+                        [tuple(i) for i in np.array(
+                            sample_data[['Y_centroid', 'X_centroid']])]
+                        )
 
-                idxs = set()
-                mask_coords = set()
-                if polygon_dict[sample_name]:
-                    for poly in polygon_dict[sample_name]:
-                        selection_verts = np.round(poly).astype(int)
-                        polygon = Path(selection_verts)
-                        print('C')
-                        grid = polygon.contains_points(pixel_coords)
-                        mask = grid.reshape(
-                            dna.shape[0], dna.shape[1])
-                        print('D')
-                        mask_coords.update(
-                            [tuple(i) for i in np.argwhere(mask)]
-                            )
-                        print('E')
                     clearRAM(print_usage=True)
-                    del grid, mask, dna, pixel_coords
+                    del columns, rows
                     clearRAM(print_usage=True)
 
-                inter = mask_coords.intersection(cell_coords)
-
-                if self.delint_mode:
-                    idxs.update(
-                        [i[0] for i in sample_data.iterrows() if
-                         i[1]['tuple'] in inter]
-                         )
-                else:
+                    idxs = set()
+                    mask_coords = set()
                     if polygon_dict[sample_name]:
+                        for poly in polygon_dict[sample_name]:
+                            selection_verts = np.round(poly).astype(int)
+                            polygon = Path(selection_verts)
+                            print('C')
+                            grid = polygon.contains_points(pixel_coords)
+                            mask = grid.reshape(
+                                dna.shape[0], dna.shape[1])
+                            print('D')
+                            mask_coords.update(
+                                [tuple(i) for i in np.argwhere(mask)]
+                                )
+                            print('E')
+                        clearRAM(print_usage=True)
+                        del grid, mask, dna, pixel_coords
+                        clearRAM(print_usage=True)
 
+                    inter = mask_coords.intersection(cell_coords)
+
+                    if self.delint_mode:
                         idxs.update(
                             [i[0] for i in sample_data.iterrows() if
-                             i[1]['tuple'] not in inter]
-                             )  # take all cells if no ROIs drawn
+                             i[1]['tuple'] in inter]
+                             )
+                    else:
+                        if polygon_dict[sample_name]:
 
-                clearRAM(print_usage=True)
-                del sample_data, inter, cell_coords
-                clearRAM(print_usage=True)
+                            idxs.update(
+                                [i[0] for i in sample_data.iterrows() if
+                                 i[1]['tuple'] not in inter]
+                                 )  # take all cells if no ROIs drawn
 
-                os.chdir(selection_dir)
-                f = open(f'{sample_name}.txt', 'wb')
-                pickle.dump(idxs, f)
-                f.close()
+                    clearRAM(print_usage=True)
+                    del sample_data, inter, cell_coords
+                    clearRAM(print_usage=True)
 
-                df_subset.drop(idxs, inplace=True)
+                    os.chdir(selection_dir)
+                    f = open(f'{sample_name}.txt', 'wb')
+                    pickle.dump(idxs, f)
+                    f.close()
 
             # drop idxs from full dataframe
-            df = data.loc[df_subset.index]
+            os.chdir(selection_dir)
+            for file in os.listdir(selection_dir):
+                if file.endswith('.txt'):
+                    f = open(file, 'rb')
+                    idxs = pickle.load(f)
+                    idxs = set(idxs)
+                    data.drop(idxs, inplace=True)
 
-            return df
+            print()
+
+            return data
 
         else:
 
@@ -984,6 +1001,8 @@ class QC(object):
             os.mkdir(lasso_dir)
 
         for sample_name in df['Sample'].unique():
+
+            print(f'Plotting ROI selections for {sample_name}.')
 
             dna = imread(
                 f'{self.in_dir}/tif/{sample_name}*.tif',
@@ -1526,8 +1545,6 @@ class QC(object):
                 lowerPercentileCutoff = float(text.split(',')[0])
                 upperPercentileCutoff = float(text.split(',')[1])
 
-                ab = str(text.split(',')[2][1:])
-
                 hexbin_dict[ab] = (
                     lowerPercentileCutoff,
                     upperPercentileCutoff
@@ -1661,7 +1678,7 @@ class QC(object):
             axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
             text_box = TextBox(
                 axbox,
-                'lowerCutoff, upperCutoff, abxName',
+                'lowerCutoff, upperCutoff',
                 initial='',
                 color='0.95',
                 hovercolor='1.0',
@@ -1672,6 +1689,15 @@ class QC(object):
             text_box.on_submit(submit)
 
             plt.show(block=True)
+
+            if ab not in hexbin_dict.keys():
+
+                hexbin_dict[ab] = (0.1, 99.9)
+
+                os.chdir(hexbin_dir)
+                f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
+                pickle.dump(hexbin_dict, f)
+                f.close()
         print()
 
         return data
@@ -1720,8 +1746,8 @@ class QC(object):
 
             # switch sample names for condition names
             metadata_keys = [
-                i for i in self.sample_conditions.keys() if i.split('-')[1]
-                in scatter_input.index
+                i for i in self.sample_conditions.keys()
+                if i.split('unmicst-')[1] in scatter_input.index
                 ]
 
             scatter_input.index = [
@@ -2577,7 +2603,6 @@ class QC(object):
                 clearRAM(print_usage=True)
 
                 # crop thumbnails
-                window_dist = 35  # in pixels
                 for example, centroid in enumerate(
                   centroids.iterrows()):
 
@@ -2587,8 +2612,8 @@ class QC(object):
                     ):
 
                         blank_img = np.ones(
-                            (window_dist,
-                             window_dist))
+                            (self.squareWindowDimension,
+                             self.squareWindowDimension))
 
                         long_table = long_table.append(
                             {'sample': sample_name.split('.')[0],
@@ -2601,17 +2626,21 @@ class QC(object):
 
                         # specify window x, y ranges
                         ystart_window = int(
-                            centroid[1]['Y_centroid'] - window_dist
+                            centroid[1]['Y_centroid']
+                            - self.squareWindowDimension
                             )
                         ystop_window = int(
-                            centroid[1]['Y_centroid'] + window_dist
+                            centroid[1]['Y_centroid']
+                            + self.squareWindowDimension
                             )
 
                         xstart_window = int(
-                            centroid[1]['X_centroid'] - window_dist
+                            centroid[1]['X_centroid']
+                            - self.squareWindowDimension
                             )
                         xstop_window = int(
-                            centroid[1]['X_centroid'] + window_dist
+                            centroid[1]['X_centroid']
+                            + self.squareWindowDimension
                             )
 
                         # crop overlay image to window size
@@ -2671,7 +2700,9 @@ class QC(object):
             ax.legend(
                 custom_lines,
                 list(color_dict.keys()), prop={'size': 12},
-                bbox_to_anchor=(1.05, 1.0), loc='upper left'
+                bbox_to_anchor=(
+                    1.05, len(long_table['sample'].unique()) + 0.3),
+                loc='upper left'
                 )
 
             plt.savefig(

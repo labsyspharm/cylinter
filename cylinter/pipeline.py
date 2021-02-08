@@ -86,6 +86,7 @@ def run_pipeline(config, start_module_name):
         FDRCorrection=config.FDRCorrection,
         bonferroniCorrection=config.bonferroniCorrection,
         numThumbnails=config.numThumbnails,
+        squareWindowDimension=config.squareWindowDimension,
         cropDict=config.cropDict,
         spatialDict1=config.spatialDict1,
         spatialDict2=config.spatialDict2,
