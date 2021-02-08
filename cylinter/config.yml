@@ -16,7 +16,12 @@ sample_metadata:
   unmicst-3: ["tissue_c", "c", 1]
   unmicst-4: ["tissue_d", "d", 1]
 samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
-markers_to_exclude: ["AF488", "AF555", "AF647", "A488_background", "A555_background", "A647_background"]  # [<markerString1>, <markerString2>, ...]
+markers_to_exclude: ["AF488",  # [<markerString1>, <markerString2>, ...]
+                     "AF555",
+                     "AF647",
+                     "A488_background",
+                     "A555_background",
+                     "A647_background"]
 
 
 # CLASS MODULE CONFIGURATIONS:
@@ -40,7 +45,7 @@ show_ab_channels: False
 #    centered at local minima between adjacent histogram modes allows
 #    the colormap to show relative increases and decreases
 #    in DNA intensity.
-log_ratio_rnge: None
+log_ratio_rnge: null
 
 # pruneOutliers —
 #    hexbins: Boolean. If True, plot hexbins instead of scatter plots.
@@ -85,6 +90,13 @@ learningRate: 200.0
 metric: "euclidean"
 random_state: 5
 
+# curateThumbnails —
+#   numThumbnails: number of random examples of each HDBSCAN cluster
+#   squareWindowDimension: number of pixels from the reference centroid in
+#   the x and y directions
+numThumbnails: 10
+squareWindowDimension: 35
+
 # frequencyStats —
 #   denominator_cluster: HDBSCAN cluster to use as the
 #   denominator when computing cell frequency ratios
@@ -97,10 +109,6 @@ FDRCorrection: False
 #   bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.
 #   Otherwise compute uncorrected p-vals
 bonferroniCorrection: False
-
-# curateThumbnails —
-#   numThumbnails: number of random examples of each HDBSCAN cluster
-numThumbnails: 10
 
 # spatialAnalysis —
 #   cropDict: vertical crop coordinate (numpy row) and
