@@ -1,13 +1,14 @@
 # Transferring and organizing input data
-CyLinter takes standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image processing pipeline as input and comes with a support console script called `prep` that programmatically organizes this output as CyLinter input.
+CyLinter can use standard output from the [mcmicro](https://github.com/labsyspharm/mcmicro) multiplex image processing pipeline as input and comes with a support console script called `prep` that programmatically organizes mcmicro output as CyLinter input.
 
-Transfer mcmicro output to a CyLinter input directory and organize the files for analysis using the following command:
+ using the following command:
 
 ``` bash
+# Transfer and organize mcmicro output into a CyLinter input directory.
 prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable.
 ```
 
-Note: the `<mcmicro_output_dir>` should contain subdirectories containing data for specific samples (or TMAs) from a given experiment and take the follow form:
+The `<mcmicro_output_dir>` is expected to contain sample-specific subdirectories and be organized in the following way:
 
 ``` bash
 <mcmicro_output_dir>
@@ -25,19 +26,19 @@ Note: the `<mcmicro_output_dir>` should contain subdirectories containing data f
         └── <sample2/TMA2>.ome.tif
 ```
 
-Because mcmicro stores TMA data differently than whole tissue data, a "-t" flag must be passed before the source and destination directory paths when preparing TMA data.
+Because mcmicro stores TMA data differently than whole tissue data, pass a "-t" flag before the source and destination directory paths to prepare TMA data.
 
 ``` bash
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
-SSH keys maybe used to transfer mcmicro output from remote sources such as HMS's o2 compute cluster.
+SSH keys can used to transfer mcmicro output from remote sources (e.g. HMS o2 cluster).
 
 ``` bash
 prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_dir> <cylinter_input_dir>
 ```
 
-Correctly formatted CyLinter input directories have the following form:
+A correctly formatted CyLinter input directory will have the following form:
 
 ``` bash
 <cylinter_input_dir>
@@ -51,11 +52,11 @@ Correctly formatted CyLinter input directories have the following form:
     └── <sample/core2>.ome.tif
 ```
 
-Notes:
-
 * Single-cell data files from a given TMA or batch of whole tissue sections will be combined into the `csv/` subdirectory.
 * Corresponding multiplex imaging files (i.e. ome.tif files) will be combined in the `tif/` subdirectory.
-* The `markers.csv` file contains metadata about immunomarkers used in the study and must take the following form:.
+
+# Immunomarker metadata
+The `markers.csv` file contains metadata about immunomarkers used in the study and must have the following form:.
 
 ```
 channel_number,cycle_number,marker_name,Filter,excitation_wavelength,emission_wavelength

@@ -10,13 +10,19 @@ in_dir: /Users/<user>/Desktop/exemplar-002
 out_dir: /Users/<user>/Desktop/output
 random_sample_size: 1.0
 mask_object: cellMask
+
+# <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
 sample_metadata:
-  unmicst-1: ["tissue_a", "a", 1]  # <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+  unmicst-1: ["tissue_a", "a", 1]
   unmicst-2: ["tissue_b", "b", 1]
   unmicst-3: ["tissue_c", "c", 1]
   unmicst-4: ["tissue_d", "d", 1]
-samples_to_exclude: []  # [<sampleString1>, <sampleString2>, ...]
-markers_to_exclude: ["AF488",  # [<markerString1>, <markerString2>, ...]
+
+# [<sampleString1>, <sampleString2>, ...]
+samples_to_exclude: []
+
+# [<markerString1>, <markerString2>, ...]
+markers_to_exclude: ["AF488",
                      "AF555",
                      "AF647",
                      "A488_background",
@@ -51,7 +57,7 @@ log_ratio_rnge: null
 #    hexbins: Boolean. If True, plot hexbins instead of scatter plots.
 #    hexbin_grid_size: Interger value. Higher values increase
 #    data point resolution. Not used when hexbins=False.
-hexbins: False,
+hexbins: False
 hexbin_grid_size: 20
 
 # performPCA module —

@@ -402,45 +402,45 @@ class QC(object):
     @module
     def setContrast(data, self, args):
 
-        markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
-            mask_object=self.mask_object,
-            markers_to_exclude=self.markers_to_exclude,
-            )
-
-        dna = imread(
-            f'{self.in_dir}/tif/{self.view_sample}*.tif', key=0
-            )
-
-        with napari.gui_qt():
-            viewer = napari.view_image(
-                dna, rgb=False,
-                blending='additive', colormap='gray',
-                name=dna1
-                )
-
-            for ch in abx_channels:
-                ch = ch.split(f'_{self.mask_object}')[0]
-                channel_number = markers['channel_number'][
-                            markers['marker_name'] == ch]
-
-                # read antibody image
-                img = imread(
-                    f'{self.in_dir}/tif/{self.view_sample}*.tif',
-                    key=(channel_number-1)
-                    )
-
-                viewer.add_image(
-                    img, rgb=False, blending='additive',
-                    colormap='green', visible=False,
-                    name=ch
-                    )
-
-        # create channel settings configuration file,
-        # update with chosen constrast limits
         if not os.path.exists(
           os.path.join(self.out_dir, 'contrast_limits.yml')):
 
+            markers, dna1, dna_moniker, abx_channels = read_markers(
+                markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+                mask_object=self.mask_object,
+                markers_to_exclude=self.markers_to_exclude,
+                )
+
+            dna = imread(
+                f'{self.in_dir}/tif/{self.view_sample}*.tif', key=0
+                )
+
+            with napari.gui_qt():
+                viewer = napari.view_image(
+                    dna, rgb=False,
+                    blending='additive', colormap='gray',
+                    name=dna1
+                    )
+
+                for ch in abx_channels:
+                    ch = ch.split(f'_{self.mask_object}')[0]
+                    channel_number = markers['channel_number'][
+                                markers['marker_name'] == ch]
+
+                    # read antibody image
+                    img = imread(
+                        f'{self.in_dir}/tif/{self.view_sample}*.tif',
+                        key=(channel_number-1)
+                        )
+
+                    viewer.add_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False,
+                        name=ch
+                        )
+
+            # create channel settings configuration file,
+            # update with chosen constrast limits
             contrast_limits = {}
             for ch in [dna1] + abx_channels:
                 ch = ch.split(f'_{self.mask_object}')[0]
@@ -448,9 +448,15 @@ class QC(object):
 
             with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
                 yaml.dump(contrast_limits, file)
-        print()
+            print()
 
-        return data
+            return data
+
+        else:
+            print('Contrast limits previously defined. Remove ' +
+                  '"<cylinter_output>/contrast_limits.yml" and re-run ' +
+                  '"setContrast" module to redefine.')
+            return data
 
     @module
     def selectROIs(data, self, args):
@@ -571,7 +577,7 @@ class QC(object):
                     print(sample_name)
 
                     sample_data = group[
-                        ['X_centroid', 'Y_centroid']].astype(int)
+                        ['X_centroid', 'Y_centroid', 'CellID']].astype(int)
                     sample_data['tuple'] = list(
                         zip(sample_data['Y_centroid'],
                             sample_data['X_centroid'])
@@ -597,7 +603,7 @@ class QC(object):
                     del columns, rows
                     clearRAM(print_usage=True)
 
-                    idxs = set()
+                    cell_ids = set()
                     mask_coords = set()
                     if polygon_dict[sample_name]:
                         for poly in polygon_dict[sample_name]:
@@ -619,16 +625,15 @@ class QC(object):
                     inter = mask_coords.intersection(cell_coords)
 
                     if self.delint_mode:
-                        idxs.update(
-                            [i[0] for i in sample_data.iterrows() if
+                        cell_ids.update(
+                            [i[1]['CellID'] for i in sample_data.iterrows() if
                              i[1]['tuple'] in inter]
                              )
                     else:
                         if polygon_dict[sample_name]:
-
-                            idxs.update(
-                                [i[0] for i in sample_data.iterrows() if
-                                 i[1]['tuple'] not in inter]
+                            cell_ids.update(
+                                [i[1]['CellID'] for i in sample_data.iterrows()
+                                 if i[1]['tuple'] not in inter]
                                  )  # take all cells if no ROIs drawn
 
                     clearRAM(print_usage=True)
@@ -637,35 +642,45 @@ class QC(object):
 
                     os.chdir(selection_dir)
                     f = open(f'{sample_name}.txt', 'wb')
-                    pickle.dump(idxs, f)
+                    pickle.dump(cell_ids, f)
                     f.close()
 
-            # drop idxs from full dataframe
+            # drop cell IDs from full dataframe
+            print('Dropping cells from samples.')
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
+                    file_name = file.split('.txt')[0]
                     f = open(file, 'rb')
-                    idxs = pickle.load(f)
-                    idxs = set(idxs)
-                    data.drop(idxs, inplace=True)
-
+                    cell_ids = pickle.load(f)
+                    cell_ids = set(cell_ids)
+                    global_idxs = data[
+                        (data['Sample'] == file_name)
+                        & (data['CellID'].isin(cell_ids))
+                        ].index
+                    data.drop(global_idxs, inplace=True)
             print()
 
             return data
 
         else:
 
-            # drop idxs from full dataframe
+            # drop cell IDs from full dataframe
+            print('Dropping cells from samples.')
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
+                    file_name = file.split('.txt')[0]
                     f = open(file, 'rb')
-                    idxs = pickle.load(f)
-                    idxs = set(idxs)
-                    data.drop(idxs, inplace=True)
-        print()
+                    cell_ids = pickle.load(f)
+                    cell_ids = set(cell_ids)
+                    global_idxs = data[
+                        (data['Sample'] == file_name)
+                        & (data['CellID'].isin(cell_ids))
+                        ].index
+                    data.drop(global_idxs, inplace=True)
 
-        return data
+            return data
 
     @module
     def dnaIntensityCutoff(data, self, args):
@@ -1446,32 +1461,35 @@ class QC(object):
             hexbin_dict = pickle.load(f)
             total_markers = set(abx_channels)
             completed_markers = set(hexbin_dict.keys())
-            scrambled_markers_to_run = total_markers.difference(
+            scrambled_markers_to_prune = total_markers.difference(
                 completed_markers
                 )
             # revert scrambled markers back to marker.csv order
             # (unnecessary step, but tidy)
             markers_dict = dict(zip(abx_channels, range(0, len(abx_channels))))
             sorted_marker_idxs = sorted(
-                [markers_dict[i] for i in scrambled_markers_to_run]
+                [markers_dict[i] for i in scrambled_markers_to_prune]
             )
-            markers_to_run = [
+            markers_to_prune = [
                 list(markers_dict.keys())[list(markers_dict.values()).index(i)]
                 for i in sorted_marker_idxs
                 ]
-            print(f'Markers to run: {len(markers_to_run)}')
+            print(f'Markers to prune: {len(markers_to_prune)}')
+            os.chdir(hexbin_dir)
+            data_copy1 = pd.read_parquet('data_copy1.parquet')
         else:
-            markers_to_run = abx_channels
-            print(f'Markers to run: {len(markers_to_run)}')
+            markers_to_prune = abx_channels
+            print(f'Markers to prune: {len(markers_to_prune)}')
             hexbin_dict = {}
+            data_copy1 = data.copy()
 
         # plot raw signal intensity hexbins for inspection
-        for ab in markers_to_run:
+        for ab in sorted(markers_to_prune):
 
             print(ab)
 
             hist_facet = (
-                data[['Sample', 'Condition', 'Area'] + [ab]]
+                data_copy1[['Sample', 'Condition', 'Area'] + [ab]]
                 .sample(frac=1.0)
                 .melt(
                     id_vars=['Sample', 'Condition', 'Area'],
@@ -1481,7 +1499,7 @@ class QC(object):
             # sort and create labels column for plotting
             hist_facet.sort_values(by=['Condition', 'Sample'], inplace=True)
             hist_facet['for_plot'] = (
-                hist_facet['Condition'] + '_' +
+                hist_facet['Condition'] + ', ' +
                 hist_facet['Sample']
                 )
 
@@ -1508,7 +1526,7 @@ class QC(object):
                 size=1.5, pad=0.75
                 )
 
-            g.fig.suptitle(ab, y=0.97)
+            g.fig.suptitle(ab, y=1.1, size=8.0)
 
             for ax in g.axes.flatten():
                 ax.tick_params(
@@ -1532,7 +1550,8 @@ class QC(object):
 
             plt.savefig(
                 os.path.join(
-                    hexbin_dir, f'{ab}_hexbins(raw).pdf'))
+                    hexbin_dir, f'{ab}_hexbins(raw).pdf'),
+                bbox_inches='tight')
 
             plt.close()
 
@@ -1555,9 +1574,9 @@ class QC(object):
                 pickle.dump(hexbin_dict, f)
                 f.close()
 
-                # for s in data['Sample'].unique():
+                data_copy2 = data_copy1.copy()
 
-                channel_data = data[ab]
+                channel_data = data_copy2[ab]
 
                 indices_to_drop = []
 
@@ -1574,12 +1593,12 @@ class QC(object):
                         channel_data > np.percentile(
                             channel_data, upperPercentileCutoff)])
 
-                data.drop(
+                data_copy2.drop(
                     labels=set(indices_to_drop), axis=0,
                     inplace=True, errors='raise'
                     )
 
-                pruned_data = data[ab]
+                pruned_data = data_copy2[ab]
 
                 # rescale channel signal intensities
                 scaler = (
@@ -1595,11 +1614,11 @@ class QC(object):
                     index=pruned_data.index,
                     ).rename(columns={0: ab})
 
-                data.update(rescaled_data)
+                data_copy2.update(rescaled_data)
 
                 # plot pruned and rescaled signal intensity histrograms
                 hist_facet = (
-                    data[['Sample', 'Condition', 'Area'] + [ab]]
+                    data_copy2[['Sample', 'Condition', 'Area'] + [ab]]
                     .sample(frac=1.0)
                     .melt(
                         id_vars=['Sample', 'Condition', 'Area'],
@@ -1611,7 +1630,7 @@ class QC(object):
                     by=['Condition', 'Sample'], inplace=True
                     )
                 hist_facet['for_plot'] = (
-                    hist_facet['Condition'] + '_' +
+                    hist_facet['Condition'] + ', ' +
                     hist_facet['Sample']
                     )
 
@@ -1637,7 +1656,7 @@ class QC(object):
                     size=1.5, pad=0.75
                     )
 
-                g.fig.suptitle(ab, y=0.97)
+                g.fig.suptitle(ab, y=1.1, size=8.0)
 
                 for ax in g.axes.flatten():
                     ax.tick_params(
@@ -1662,7 +1681,8 @@ class QC(object):
                 plt.savefig(
                     os.path.join(
                         hexbin_dir,
-                        f'{ab}_hexbins(pruned_rescaled).pdf')
+                        f'{ab}_hexbins(pruned_rescaled).pdf'),
+                    bbox_inches='tight'
                         )
 
                 plt.close()
@@ -1698,6 +1718,96 @@ class QC(object):
                 f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
                 pickle.dump(hexbin_dict, f)
                 f.close()
+
+            channel_data = data_copy1[ab]
+
+            indices_to_drop = []
+
+            # add row index to list if column value < lower bound
+            indices_to_drop.extend(
+                channel_data.index[
+                    channel_data < np.percentile(
+                        channel_data,
+                        hexbin_dict[ab][0])]
+                    )
+
+            # add row index to list if column value > upper bound
+            indices_to_drop.extend(
+                channel_data.index[
+                    channel_data > np.percentile(
+                        channel_data,
+                        hexbin_dict[ab][1])])
+
+            data_copy1.drop(
+                labels=set(indices_to_drop), axis=0,
+                inplace=True, errors='raise'
+                )
+
+            pruned_data = data_copy1[ab]
+
+            # rescale channel signal intensities
+            scaler = (
+                MinMaxScaler(feature_range=(0, 1), copy=True)
+                .fit(pruned_data.values.reshape(-1, 1))
+                    )
+            rescaled_data = scaler.transform(
+                pruned_data.values.reshape(-1, 1)
+                )
+
+            rescaled_data = pd.DataFrame(
+                data=rescaled_data,
+                index=pruned_data.index,
+                ).rename(columns={0: ab})
+
+            data_copy1.update(rescaled_data)
+
+            os.chdir(hexbin_dir)
+            data_copy1.to_parquet('data_copy1.parquet')
+
+        # apply percentile cutoffs to their respective channels
+        # in the same order as originally curated
+        for k, v in sorted(hexbin_dict.items()):
+            print(f'Applying percentile cutoffs to the {k} channel.')
+            channel_data = data[k]
+
+            indices_to_drop = []
+
+            # add row index to list if column value < lower bound
+            indices_to_drop.extend(
+                channel_data.index[
+                    channel_data < np.percentile(
+                        channel_data, v[0])]
+                    )
+
+            # add row index to list if column value > upper bound
+            indices_to_drop.extend(
+                channel_data.index[
+                    channel_data > np.percentile(
+                        channel_data, v[1])])
+
+            data.drop(
+                labels=set(indices_to_drop), axis=0,
+                inplace=True, errors='raise'
+                )
+
+            pruned_data = data[k]
+
+            # rescale channel signal intensities
+            scaler = (
+                MinMaxScaler(feature_range=(0, 1), copy=True)
+                .fit(pruned_data.values.reshape(-1, 1))
+                    )
+            rescaled_data = scaler.transform(
+                pruned_data.values.reshape(-1, 1)
+                )
+
+            rescaled_data = pd.DataFrame(
+                data=rescaled_data,
+                index=pruned_data.index,
+                ).rename(columns={0: k})
+
+            data.update(rescaled_data)
+
         print()
 
         return data
