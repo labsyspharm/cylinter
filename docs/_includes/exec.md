@@ -1,6 +1,6 @@
 # Configuration settings
 
-Update the template YAML configuration file (`config.yml`) in the CyLinter input directory with user- and experiment- specific metadata.
+Update the template configuration file (`config.yml`) in <cylinter_input_dir> with experiment-specific metadata.
 
 ``` yaml
 in_dir: "<cylinter_input_dir>"
@@ -20,20 +20,20 @@ markers_to_exclude: ["<markerString1>", "<markerString2>", ...]
 
 ``` bash
 # Activate the CyLinter virtual environment.
-source $HOME/cylinter/bin/activate
+source ~/cylinter/bin/activate
 
 # Perform CyLinter analysis by passing the YAML configuration file.
-cylinter --module (optional) <input_dir>/config.yml
+cylinter --module (optional) <cylinter_input_dir>/config.yml
 ```
 
-* By default, the pipeline starts at the first module: `getSingleCellData`. Passing the name of specific modules with `--module <module_name>` causes the program to retrieve the cached parquet file returned by the preceding module.
+* By default, the pipeline starts at the first module: `getSingleCellData`. Passing the name of a specific module with `--module <module_name>` causes the program to read the cached parquet file returned by the preceding module.
 
 # User guide
-CyLinter, presents to the user a series of graphical-user-interface (GUI) windows for image inspection, parameter selection, and data visualization. The program proceeds by passing a Pandas dataframe containing the combined single-cell data from all tissue samples through the following ordered series of QC modules:
+CyLinter users are presented a series of graphical-user-interface (GUI) windows for image inspection, parameter selection, and data visualization to filter of image-derived single-cell data. The program proceeds by passing a dataframe of single-cell data (cells x feature) containing the combined data from all tissue samples evaluated in a particular experiment. QC modules are run in the following ordered series:
 
-1. `getSingleCellData`: Combine tabular data from whole tissue sections or TMA cores into a single dataframe (this module is automated).
+1. `getSingleCellData`: Combines tabular data from whole tissue sections or TMA cores into one dataframe. This module is automated.
 
-2. `setContrast`: Adjust upper and lower image contrast bounds. Visualize a channel by clicking on its corresponding button at the left-hand side of the Napari viewer that comes up. Use the contrast limit slider at the upper-left corner of the window to increase the image gain by sliding the right end of the slider to the left. Remove background signal intensities by sliding the left end of the slider to the right. Once thresholds for all channels have been assigned, close the Napari viewer by clicking the button at the far upper-left corner of the window.
+2. `setContrast`: Adjust upper and lower image contrast bounds. Visualize immunomarker channels by clicking on their corresponding buttons at the left-hand side of the Napari viewer. Use the contrast limit slider at the upper-left of the Napari viewer to increase image gain by sliding the right side of the slider to the left; remove background signal intensities by sliding the left side of the slider to the right. Once thresholds for all channels have been set, close the Napari viewer by clicking on the button at the upper-left of the window.
 
 3. `selectROIs`: Select tissue regions-of-interest (ROIs). Positive and negative selection modes are available. Set configuration parameter `delint_mode` to `false` to positive selection: single-cell data corresponding to selected regions will be included in downstream analysis. Set `delint_mode` to `true` for negative selection: single-cell data corresponding to selected regions will be excluded from downstream analysis. Draw gates using a mouse or track pad after clicking the triangle icon in the upper-left of the Napari viewer. Multiple ROIs are permissible per tissue section. Click the up-arrow key to begin drawing a new ROI. Close the Napari viewer after ROI(s) for a given tissue have been drawn to save the ROIs and advance to the next tissue in the experiment. Saved ROIs are stored as key:value pairs (sample_name: [polygon vertices]) in the `<cylinter_output_dir>/ROI` subdirectory. The ROI selection step will be skipped in all future runs of the `selectROIs` module and the existing ROIs will be applied. Remove `<cylinter_output_dir>/ROI/polygon_dict.pkl` to redefine ROIs.
 
@@ -45,7 +45,7 @@ CyLinter, presents to the user a series of graphical-user-interface (GUI) window
 
 7. `log10transform`: Log-transform and rescale data per channel. This module is automated; may become configurable in a future release.
 
-8. `pruneOutliers`: Assign upper and lower percentile cutoffs on immunomarker signal intensity. Users are presented with single-cell immunomarker intensity distributions (as scatter or hexbin plots; see `hexbins` config parameter) for all tissue samples. Y-axes show nuclei area to help in discerning cell types based on size and aid in visualizing scant cell populations. Inspect the plots then type reasonable lower and upper percentile cutoff values in the provided text box window separated by commas. Select return and a new window will come up to show the signal intensity distributions after the cutoffs have been applied (axis scales are maintained for comparability). Close the plot and text box windows to advance to the next channel. If no cutoffs are supplied and the text box window is closed, lower and upper cutoff values of 0.1 and 99.9 will be automatically applied by default. Percentile cutoffs are stored as key:value pairs (sample_name: (upperCutoff, lowerCutoff)) in the `<cylinter_output_dir>/hexbins` subdirectory. The cutoff selection step will be skipped in all future runs of the `pruneOutliers` module and the existing cutoffs will be applied. Remove `<cylinter_output_dir>/hexbins/hexbin_dict.pkl` to redefine percentile cutoffs.
+8. `pruneOutliers`: Assign upper and lower percentile cutoffs on immunomarker signal intensity. Users are presented with hexbins or scatter plots of immunomarker signal intensity (x-axes) vs. nuclear area (y-axes) for every tissue in the experiment (see `hexbins` config parameter). After inspecting the plots, type reasonable lower and upper percentile cutoffs (scale: 0.0-100.0) separated by a comma into the text box window and press the return key. New plots (post-pruning) will come up for inspection; enter new cutoffs and repeat if necessary. Once the optimal cutoffs have been evaluated (assumed to be the last applied) and the text box window is closed, a copy of the log10transform.parquet file will be filtered with the selected cutoffs. If nothing is entered into the text box window, and the window is closed, lower and upper cutoff values of 0.1 and 99.9 will be automatically applied. Subsequent channel cutoffs will be applied to the dataframe copy. Cutoff values are stored as key:value pairs (i.e. sampleName: (upperCutoff, lowerCutoff)) in `<cylinter_output_dir>/hexbins`. Once cutoffs for all channels have been curated, the program will loop through the cutoff dictionary and drop cells after applying the cutoffs in the same order in which they were curated. The cutoff selection step will be skipped in future runs of this module and existing cutoffs will be applied. Remove `<cylinter_output_dir>/hexbins/hexbin_dict.pkl` to redefine percentile cutoffs.
 
 9. `performPCA`: Perform PCA on mean immunomarker signal intensities from whole tissue sections or TMA cores. This module is automated and configurable; for parameters and their descriptions, see `config.yml`.
 
