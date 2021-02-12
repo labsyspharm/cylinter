@@ -6,12 +6,12 @@ Registration at Sage Synapse is required to download the exemplar data; registra
 
 ``` bash
 # Activate the CyLinter virtual environment (if not already).
-source $HOME/cylinter/bin/activate
+source ~/cylinter/bin/activate
 
-prep exemplar-002 $HOME/Desktop  # Enter Synapse ID and password when prompted.
+prep exemplar-002 ~/Desktop  # Enter Synapse ID and password when prompted.
 ```
 
-Once the download is complete, edit the `in_dir` and `out_dir` parameters of the template YAML configuration file (`$HOME/Desktop/exemplar-002/config.yml`) previously added to the CyLinter input directory by the `prep` command. Note: all other metadata parameters have been pre-configured for `exemplar-002`.
+Once the download is complete, edit the `in_dir` and `out_dir` parameters of the template YAML configuration file (`~/Desktop/exemplar-002/config.yml`) previously added to the CyLinter input directory by the `prep` command. Note: all other metadata parameters have been pre-configured for `exemplar-002`.
 
 ```yaml
 in_dir: /Users/<user>/Desktop/exemplar-002
@@ -25,5 +25,5 @@ Run CyLinter on `exemplar-002`:
 
 ``` bash
 # Pass the YAML configuration file for exemplar-002 to CyLinter for analysis
-cylinter --module (optional) $HOME/Desktop/exemplar-002/config.yml  
+cylinter --module (optional) ~/Desktop/exemplar-002/config.yml  
 ```
