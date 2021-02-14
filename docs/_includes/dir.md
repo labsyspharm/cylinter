@@ -8,22 +8,22 @@ CyLinter can use standard output from the [mcmicro](https://github.com/labsyspha
 prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable.
 ```
 
-The `<mcmicro_output_dir>` is expected to contain sample-specific subdirectories and be organized in the following way:
+mcmicro output directories containing WHOLE TISSUE data are expected to be organized in the following way:
 
 ``` bash
 <mcmicro_output_dir>
-├── <sample1/TMA1>
+├── <tissue1>
 │   ├── markers.csv
 │   ├── quantification
-│   │   └── unmicst-<sample1/TMA1>.csv
+│   │   └── unmicst-<tissue1>.csv
 │   └── registration
-│       └── <sample1/TMA1>.ome.tif
-└── <sample2/TMA2>
+│       └── <tissue1>.ome.tif
+└── <tissue2>
     ├── markers.csv
     ├── quantification
-    │   └── unmicst-<sample2/TMA2>.csv
+    │   └── unmicst-<tissue2>.csv
     └── registration
-        └── <sample2/TMA2>.ome.tif
+        └── <tissue2>.ome.tif
 ```
 
 Because mcmicro stores TMA data differently than whole tissue data, pass a "-t" flag before the source and destination directory paths to prepare TMA data.
@@ -32,24 +32,41 @@ Because mcmicro stores TMA data differently than whole tissue data, pass a "-t" 
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
+mcmicro output directories containing TMA data are expected to be organized in the following way:
+
+``` bash
+<mcmicro_output_dir>
+├── dearray
+│   ├── <core1>.ome.tif
+│   ├── <core2>.ome.tif
+│   ├── <core3>.ome.tif
+│   └── <core4>.ome.tif
+├── markers.csv
+└── quantification
+    ├── unmicst-<core1>.csv
+    ├── unmicst-<core2>.csv
+    ├── unmicst-<core3>.csv
+    └── unmicst-<core4>.csv
+```
+
 SSH keys can used to transfer mcmicro output from remote sources (e.g. HMS o2 cluster).
 
 ``` bash
 prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_dir> <cylinter_input_dir>
 ```
 
-A correctly formatted CyLinter input directory will have the following form:
+A correctly formatted CyLinter input directory takes the following form:
 
 ``` bash
 <cylinter_input_dir>
 ├── config.yml
 ├── csv
-│   ├── unmicst-<sample/core1>.csv
-│   └── unmicst-<sample/core2>.csv
+│   ├── unmicst-<tissue/core1>.csv
+│   └── unmicst-<tissue/core2>.csv
 ├── markers.csv
 └── tif
-    ├── <sample/core1>.ome.tif
-    └── <sample/core2>.ome.tif
+    ├── <tissue/core1>.ome.tif
+    └── <tissue/core2>.ome.tif
 ```
 
 * Single-cell data files from a given TMA or batch of whole tissue sections will be combined into the `csv/` subdirectory.
