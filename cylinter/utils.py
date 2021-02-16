@@ -164,6 +164,10 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
         ccolors = plt.get_cmap(cmap)(np.linspace(0, 1, numCatagories))
     else:
         ccolors = plt.get_cmap(cmap)(np.arange(numCatagories, dtype=int))
+        # rearrange hue order to taste
+        myorder = [0, 1, 2, 3, 4, 6, 9, 8, 5, 7]
+        ccolors = [ccolors[i] for i in myorder]
+
     cols = np.zeros((numCatagories * numSubcatagories, 3))
     for i, c in enumerate(ccolors):
         chsv = colors.rgb_to_hsv(c[:3])

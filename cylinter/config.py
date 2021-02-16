@@ -35,7 +35,7 @@ class Config:
         config.pointSize = float(data['pointSize'])
         config.normalize = bool(data['normalize'])
         config.labelPoints = bool(data['labelPoints'])
-        config.condHueDict = dict(data['condHueDict'])
+        config.distanceCutoff = float(data['distanceCutoff'])
         config.fracForEmbedding = float(data['fracForEmbedding'])
         config.numTSNEComponents = int(data['numTSNEComponents'])
         config.perplexity = float(data['perplexity'])

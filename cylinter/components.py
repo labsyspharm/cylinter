@@ -132,7 +132,7 @@ class QC(object):
                  pointSize=None,
                  normalize=None,
                  labelPoints=None,
-                 condHueDict=None,
+                 distanceCutoff=None,
 
                  # performTSNE module —
                  fracForEmbedding=None,
@@ -201,7 +201,8 @@ class QC(object):
             pointSize: scatter point size
             normalize: scale input vectors individually to unit norm
             labelPoints: annotate scatter points
-            condHueDict: color scatter points by experimental condition
+            distanceCutoff: use a common annotation for points
+            within distanceCutoff
 
           performTSNE module —
             fracForEmbedding: fraction of total cells to use in the embedding
@@ -271,7 +272,7 @@ class QC(object):
         self.pointSize = pointSize
         self.normalize = normalize
         self.labelPoints = labelPoints
-        self.condHueDict = condHueDict
+        self.distanceCutoff = distanceCutoff
 
         self.fracForEmbedding = fracForEmbedding
         self.numTSNEComponents = numTSNEComponents
@@ -402,18 +403,60 @@ class QC(object):
     @module
     def setContrast(data, self, args):
 
-        if not os.path.exists(
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
+
+        dna = imread(
+            f'{self.in_dir}/tif/{self.view_sample}.*tif', key=0
+            )
+
+        if os.path.exists(
           os.path.join(self.out_dir, 'contrast_limits.yml')):
 
-            markers, dna1, dna_moniker, abx_channels = read_markers(
-                markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
-                mask_object=self.mask_object,
-                markers_to_exclude=self.markers_to_exclude,
+            contrast_limits = yaml.safe_load(
+                open(f'{self.out_dir}/contrast_limits.yml')
                 )
 
-            dna = imread(
-                f'{self.in_dir}/tif/{self.view_sample}*.tif', key=0
-                )
+            print ('Applying current channel contrast settings.')
+
+            with napari.gui_qt():
+                viewer = napari.view_image(
+                    dna, rgb=False,
+                    blending='additive', colormap='gray',
+                    name=dna1
+                    )
+
+                viewer.layers[dna1].contrast_limits = (
+                    contrast_limits[dna1][0], contrast_limits[dna1][1]
+                    )
+
+                for ch in abx_channels:
+                    ch = ch.split(f'_{self.mask_object}')[0]
+                    channel_number = markers['channel_number'][
+                                markers['marker_name'] == ch]
+
+                    # read antibody image
+                    img = imread(
+                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
+                        key=(channel_number-1)
+                        )
+
+                    viewer.add_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False,
+                        name=ch
+                        )
+
+                    viewer.layers[ch].contrast_limits = (
+                        contrast_limits[ch][0], contrast_limits[ch][1]
+                        )
+
+        else:
+
+            print ('Channel contrast settings have not been defined.')
 
             with napari.gui_qt():
                 viewer = napari.view_image(
@@ -429,7 +472,7 @@ class QC(object):
 
                     # read antibody image
                     img = imread(
-                        f'{self.in_dir}/tif/{self.view_sample}*.tif',
+                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
                         key=(channel_number-1)
                         )
 
@@ -439,24 +482,18 @@ class QC(object):
                         name=ch
                         )
 
-            # create channel settings configuration file,
-            # update with chosen constrast limits
-            contrast_limits = {}
-            for ch in [dna1] + abx_channels:
-                ch = ch.split(f'_{self.mask_object}')[0]
-                contrast_limits[ch] = viewer.layers[ch].contrast_limits
+        # create channel settings configuration file,
+        # update with chosen constrast limits
+        contrast_limits = {}
+        for ch in [dna1] + abx_channels:
+            ch = ch.split(f'_{self.mask_object}')[0]
+            contrast_limits[ch] = viewer.layers[ch].contrast_limits
 
-            with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
-                yaml.dump(contrast_limits, file)
-            print()
+        with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
+            yaml.dump(contrast_limits, file)
+        print()
 
-            return data
-
-        else:
-            print('Contrast limits previously defined. Remove ' +
-                  '"<cylinter_output>/contrast_limits.yml" and re-run ' +
-                  '"setContrast" module to redefine.')
-            return data
+        return data
 
     @module
     def selectROIs(data, self, args):
@@ -485,10 +522,10 @@ class QC(object):
             polygon_dict = {}
 
         if (len(samples_to_draw) > 0) or (len([name for name in os.listdir(selection_dir) if name.endswith('.txt')]) < len(data['Sample'].unique())):
-            for sample_name in sorted(samples_to_draw):
+            for sample_name in natsorted(samples_to_draw):
 
                 dna = imread(
-                    f'{self.in_dir}/tif/{sample_name}*.tif', key=0
+                    f'{self.in_dir}/tif/{sample_name}.*tif', key=0
                     )
 
                 polygons = []
@@ -508,7 +545,7 @@ class QC(object):
                             # read antibody image
                             img = imread(
                                 f'{self.in_dir}/tif/' +
-                                f'{sample_name}*.tif',
+                                f'{sample_name}.*tif',
                                 key=(channel_number-1)
                                 )
 
@@ -521,6 +558,7 @@ class QC(object):
                     if len(polygons) == 0:
                         selection_layer = viewer.add_shapes(
                             shape_type='polygon',
+                            ndim=2,
                             face_color=[1.0, 1.0, 1.0, 0.2],
                             edge_color=[0.0, 0.66, 1.0, 1.0],
                             edge_width=10.0,
@@ -530,6 +568,7 @@ class QC(object):
                         selection_layer = viewer.add_shapes(
                             polygons,
                             shape_type='polygon',
+                            ndim=2,
                             face_color=[1.0, 1.0, 1.0, 0.2],
                             edge_color=[0.0, 0.66, 1.0, 1.0],
                             edge_width=10.0,
@@ -571,7 +610,7 @@ class QC(object):
                     set([i.split('.txt')[0] for i in os.listdir()
                          if i.endswith('.txt')]))
 
-            for sample_name, group in sorted(data.groupby('Sample')):
+            for sample_name, group in natsorted(data.groupby('Sample')):
                 if sample_name in samples_for_cell_selection:
 
                     print(sample_name)
@@ -584,7 +623,7 @@ class QC(object):
                         )
 
                     dna = imread(
-                        f'{self.in_dir}/tif/{sample_name}*.tif', key=0
+                        f'{self.in_dir}/tif/{sample_name}.*tif', key=0
                         )
 
                     columns, rows = np.meshgrid(
@@ -760,7 +799,7 @@ class QC(object):
             if text in data['Sample'].unique():
 
                 dna = imread(
-                    f'{self.in_dir}/tif/{text}*.tif',
+                    f'{self.in_dir}/tif/{text}.*tif',
                     key=0
                     )
 
@@ -925,7 +964,7 @@ class QC(object):
             if text in data['Sample'].unique():
 
                 dna = imread(
-                    f'{self.in_dir}/tif/{text}*.tif',
+                    f'{self.in_dir}/tif/{text}.*tif',
                     key=0
                     )
 
@@ -1015,14 +1054,11 @@ class QC(object):
         if not os.path.exists(lasso_dir):
             os.mkdir(lasso_dir)
 
-        for sample_name in df['Sample'].unique():
+        for sample_name in natsorted(df['Sample'].unique()):
 
             print(f'Plotting ROI selections for {sample_name}.')
 
-            dna = imread(
-                f'{self.in_dir}/tif/{sample_name}*.tif',
-                key=0
-                )
+            dna = imread(f'{self.in_dir}/tif/{sample_name}.*tif', key=0)
 
             fig, ax = plt.subplots()
             ax.imshow(dna, cmap='gray')
@@ -1150,7 +1186,7 @@ class QC(object):
 
                         dna = imread(
                             f'{self.in_dir}/tif/' +
-                            f'{sample_to_inspect}*.tif',
+                            f'{sample_to_inspect}.*tif',
                             key=i
                             )
 
@@ -1869,48 +1905,6 @@ class QC(object):
                 for i in metadata_keys
                 ]
 
-            # scatter_input.rename(
-            #     index={'high grade serous ovarian carcinoma':
-            #            'High grade serous ovarian carcinoma'}, inplace=True)
-
-            # tissue_abbr_map = {
-            #      'Marker control': 'MC',
-            #      'Metastatic melanoma': 'MM',
-            #      'Appendix-acute appendicitis': 'APX',
-            #      'Tonsil': 'TSL',
-            #      'Hepatocellular carcinoma': 'HC',
-            #      'Non-neoplastic colon': 'NNC',
-            #      'Pancreatic adenocarcinoma': 'PA',
-            #      'Lung adenocarcinoma': 'LA',
-            #      'Non-neoplastic lung': 'NNL',
-            #      'Lung squamous cell carcinoma': 'LSC',
-            #      'Renal cell carcinoma': 'RCC',
-            #      'Glioblastoma': 'GBM',
-            #      'Meningioma': 'MGM',
-            #      'Colon adenocarcinoma': 'CA',
-            #      'Mesothelioma': 'MTO',
-            #      'Seminoma': 'SMA',
-            #      'Ductal carcinoma': 'DC',
-            #      'Spleen': 'SPL',
-            #      'Colon lymph node': 'CLN',
-            #      'Cirrhotic liver': 'CL',
-            #      'Diverticulitis': 'DVL',
-            #      'Non-neoplastic pancreas': 'NNP',
-            #      'Normal kidney cortex': 'NKC',
-            #      'Prostatic adenocarcinoma': 'PA',
-            #      'Colon normal epithelium': 'CNE',
-            #      'Gastrointestinal stromal tumor': 'GST',
-            #      'Leiomyosarcoma': 'LMS',
-            #      'Ductal/lobular carcinoma': 'DLC',
-            #      'Non-neoplastic small intestine': 'NNS',
-            #      'High grade serous ovarian carcinoma': 'HSO',
-            #      'Skin/Hair Follicle Shaft': 'SFS',
-            #      'Dedifferentiated Liposarcoma': 'DL',
-            #      'non-neoplastic ovary': 'NNO',
-            #      'Pulmonary lymph node': 'PLN',
-            #      'Normal prostate': 'NP'
-            #      }
-
             # build cmap
             cmap = categorical_cmap(
                 numUniqueSamples=len(scatter_input.index.unique()),
@@ -1921,7 +1915,7 @@ class QC(object):
 
             sample_color_dict = dict(
                 zip(
-                    scatter_input.index.unique(),
+                    natsorted(scatter_input.index.unique()),
                     cmap.colors)
                     )
 
@@ -1945,6 +1939,7 @@ class QC(object):
                 scatter_input = scatter_input.reset_index().rename(
                     columns={'index': 'tissue_type'}
                     )
+
                 # generate squareform distance matrix
                 sq = squareform(
                     pdist(scatter_input[['PC1', 'PC2']], metric='euclidean')
@@ -1957,7 +1952,7 @@ class QC(object):
                 # upper triangle
                 d1 = d.where(np.triu(np.ones(d.shape)).astype(np.bool))
                 # apply distance cutoff
-                d2 = d1[d1 < 0.007]
+                d2 = d1[d1 < self.distanceCutoff]
                 # flatten, set multi-index as columns (core1, core2)
                 d3 = (
                     d2
@@ -2056,19 +2051,36 @@ class QC(object):
             # get n per tissue type
             n_per_tissue_type = (
                 scatter_input
-                .groupby(['tissue_type'])
+                .groupby(['condition'])
                 .count()
-                .reindex(scatter_input['tissue_type'])['PC1'].values
+                .reindex(scatter_input['condition'])['PC1'].values
+                )
+            scatter_input['n'] = n_per_tissue_type
+
+            legend_data = (
+                scatter_input
+                .drop(
+                    ['PC1', 'PC2'], axis=1)
+                .drop_duplicates()
                 )
 
+            # natural sort on "tissue_type" column.
+            legend_data['tissue_type'] = pd.Categorical(
+                legend_data['tissue_type'],
+                ordered=True,
+                categories=natsorted(legend_data['tissue_type'].unique())
+                )
+            legend_data.sort_values('tissue_type', inplace=True)
+
             legend_handles = []
-            for label, cond, n in zip(
-              scatter_input['tissue_type'],
-              scatter_input['condition'], n_per_tissue_type):
+            for i in legend_data.iterrows():
+                abbr = i[1]['tissue_type']
+                cond = i[1]['condition']
+                n = i[1]['n']
                 legend_handles.append(
                     Line2D([0], [0], marker='o', color='none',
-                           label=f'{label} ({cond}, n={n})',
-                           markerfacecolor=sample_color_dict[label],
+                           label=f'{abbr} ({cond}, n={n})',
+                           markerfacecolor=sample_color_dict[abbr],
                            markeredgecolor='k', markeredgewidth=0.2,
                            markersize=5.0)
                            )
@@ -2086,8 +2098,10 @@ class QC(object):
                 f'PC2 ({round((pca.explained_variance_ratio_[1] * 100), 2)}'
                 '% of variance)', fontsize=10, labelpad=4.0)
             plt.tick_params(axis='both', which='major', labelsize=7.0)
-            plt.tight_layout()
-            plt.savefig(os.path.join(self.out_dir, 'pcaScoresPlot.pdf'))
+            plt.savefig(
+                os.path.join(self.out_dir, 'pcaScoresPlot.pdf'),
+                bbox_inches='tight'
+                )
             plt.close('all')
         print()
 
@@ -2880,7 +2894,7 @@ class QC(object):
     #
     #         # read DNA ashlar_output image
     #         img = imread(
-    #             f'{self.in_dir}/tif/{sample_name}*.tif',
+    #             f'{self.in_dir}/tif/{sample_name}.*tif',
     #             key=0  # key 0 is first dna cycle in markers.csv file
     #             )
     #
@@ -2913,7 +2927,7 @@ class QC(object):
     #
     #             # read antibody image
     #             img = imread(
-    #                 f'{self.in_dir}/tif/{sample_name}*.tif',
+    #                 f'{self.in_dir}/tif/{sample_name}.*tif',
     #                 key=(channel_number-1)
     #                 )
     #
