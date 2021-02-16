@@ -71,7 +71,7 @@ numPCAComponents: 2
 pointSize: 90.0
 normalize: True
 labelPoints: True
-condHueDict: {'cd': (0.5, 0.5, 0.5, 1.0), 'hfd': (1.0, 1.0, 0.0, 1.0)}
+distanceCutoff: 0.02
 
 # performTSNE module —
 #   fracForEmbedding: fraction of total cells to use in the embedding

@@ -74,7 +74,7 @@ def run_pipeline(config, start_module_name):
         pointSize=config.pointSize,
         normalize=config.normalize,
         labelPoints=config.labelPoints,
-        condHueDict=config.condHueDict,
+        distanceCutoff=config.distanceCutoff,
         fracForEmbedding=config.fracForEmbedding,
         numTSNEComponents=config.numTSNEComponents,
         perplexity=config.perplexity,
