@@ -30,12 +30,14 @@ class Config:
             config.log_ratio_rnge = tuple(data['log_ratio_rnge'])
         config.hexbins = bool(data['hexbins'])
         config.hexbin_grid_size = int(data['hexbin_grid_size'])
-        config.channel_exclusions = list(data['channel_exclusions'])
+        config.channelExclusionsPCA = list(data['channelExclusionsPCA'])
         config.numPCAComponents = int(data['numPCAComponents'])
         config.pointSize = float(data['pointSize'])
         config.normalize = bool(data['normalize'])
         config.labelPoints = bool(data['labelPoints'])
         config.distanceCutoff = float(data['distanceCutoff'])
+        config.samplesToSilhouette = list(data['samplesToSilhouette'])
+        config.channelExclusionsTSNE = list(data['channelExclusionsTSNE'])
         config.fracForEmbedding = float(data['fracForEmbedding'])
         config.numTSNEComponents = int(data['numTSNEComponents'])
         config.perplexity = float(data['perplexity'])
@@ -45,7 +47,11 @@ class Config:
         config.random_state = int(data['random_state'])
         config.numThumbnails = int(data['numThumbnails'])
         config.squareWindowDimension = int(data['squareWindowDimension'])
-        config.denominator_cluster = int(data['denominator_cluster'])
+        config.controlGroups = list(data['controlGroups'])
+        if (data['denominatorCluster']) is None:
+            config.denominatorCluster = (data['denominatorCluster'])
+        else:
+            config.denominatorCluster = int(data['denominatorCluster'])
         config.FDRCorrection = bool(data['FDRCorrection'])
         config.bonferroniCorrection = bool(data['bonferroniCorrection'])
         config.cropDict = dict(data['cropDict'])
@@ -56,9 +62,10 @@ class Config:
         return config
 
     def _parse_sample_metadata(self, value):
-        self.conditions = {}
-        self.abbreviations = {}
-        self.replicates = {}
+        self.sample_conditions = {}
+        self.sample_abbreviations = {}
+        self.sample_statuses = {}
+        self.sample_replicates = {}
 
         if value is None:
             return
@@ -67,11 +74,13 @@ class Config:
 
             condition = str(terms[0])
             abbreviation = str(terms[1])
-            replicate = int(terms[2])
+            status = str(terms[2])
+            replicate = int(terms[3])
 
-            self.conditions[name] = condition
-            self.abbreviations[name] = abbreviation
-            self.replicates[name] = replicate
+            self.sample_conditions[name] = condition
+            self.sample_abbreviations[name] = abbreviation
+            self.sample_statuses[name] = status
+            self.sample_replicates[name] = replicate
 
     @property
     def checkpoint_path(self):
