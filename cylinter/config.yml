@@ -11,12 +11,12 @@ out_dir: /Users/<user>/Desktop/output
 random_sample_size: 1.0
 mask_object: cellMask
 
-# <sampleString>: [<fullConditionString>, <abbrConditionString>, <replicateInteger>]
+# <sampleString>: [<conditionString>, <AbbrConditionString>, <statusesString>, <replicateInteger>]
 sample_metadata:
-  unmicst-1: ["tissue_a", "a", 1]
-  unmicst-2: ["tissue_b", "b", 1]
-  unmicst-3: ["tissue_c", "c", 1]
-  unmicst-4: ["tissue_d", "d", 1]
+  unmicst-1: ["Gastrointestinal stromal tumor", "STOMACH", "CANCER-TRUE", 1]
+  unmicst-2: ["Non-neoplastic colon", "COLON", "CANCER-FALSE", 1]
+  unmicst-3: ["Meningioma", "BRAIN", "CANCER-TRUE", 1]
+  unmicst-4: ["Meningioma", "BRAIN", "CANCER-TRUE", 2]
 
 # [<sampleString1>, <sampleString2>, ...]
 samples_to_exclude: []
@@ -61,19 +61,23 @@ hexbins: False
 hexbin_grid_size: 20
 
 # performPCA module —
+#   channelExclusionsPCA: immunomarkers to exlude from PCA analysis
 #   numPCAComponents: number of PCs
 #   pointSize: scatter point size
 #   normalize: scale input vectors individually to unit norm
 #   labelPoints: annotate scatter points
-#   condHueDict: color scatter points by experimental condition
-channel_exclusions: []
+#   samplesToSilhouette: samples to greyout, unannotate, and
+#   send to the back of other points
+channelExclusionsPCA: []
 numPCAComponents: 2
 pointSize: 90.0
 normalize: True
 labelPoints: True
 distanceCutoff: 0.02
+samplesToSilhouette: []
 
 # performTSNE module —
+#   channelExclusionsTSNE: immunomarkers to exlude from TSNE/HDBSCAN analysis
 #   fracForEmbedding: fraction of total cells to use in the embedding
 #   numTSNEComponents: dimension of the TSNE embedding
 #   perplexity: related to the number of nearest neighbors
@@ -88,6 +92,7 @@ distanceCutoff: 0.02
 #   pairwise.PAIRWISE_DISTANCE_FUNCTIONS.
 #   random_state: integer, determines the random number generator
 #   for reproducible results across multiple function calls.
+channelExclusionsTSNE: []
 fracForEmbedding: 0.1
 numTSNEComponents: 2
 perplexity: 50.0
@@ -96,20 +101,22 @@ learningRate: 200.0
 metric: "euclidean"
 random_state: 5
 
+# frequencyStats —
+#   controlGroups: control group labels from metadata <abbrConditionString>
+#   denominatorCluster: HDBSCAN cluster to use as the
+#   denominator when computing cell frequency ratios
+#   FDRCorrection: Boolean; if True, compute false discovery
+#   rate q-vals. Otherwise compute uncorrected p-vals
+controlGroups: ["CANCER-FALSE"]
+denominatorCluster: null
+FDRCorrection: False
+
 # curateThumbnails —
 #   numThumbnails: number of random examples of each HDBSCAN cluster
 #   squareWindowDimension: number of pixels from the reference centroid in
 #   the x and y directions
 numThumbnails: 10
 squareWindowDimension: 35
-
-# frequencyStats —
-#   denominator_cluster: HDBSCAN cluster to use as the
-#   denominator when computing cell frequency ratios
-#   FDRCorrection: Boolean; if True, compute false discovery
-#   rate q-vals. Otherwise compute uncorrected p-vals
-denominator_cluster: 2
-FDRCorrection: False
 
 # clusterBoxplots —
 #   bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.

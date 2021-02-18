@@ -55,6 +55,8 @@ CyLinter presents users with a series of graphical-user-interface (GUI) windows 
 
 12. `lassoClusters`: Lasso cells of interest from the embedding for further analysis. Using a mouse or track pad, lasso cells of interest in the t-SNE embedding to print their 3 most-highly expressed immunomarkers to the terminal window. Currently, this module does not filter the single-cell data, but may become useful for performing off-hand, exploratory analysis in future releases.
 
-13. `curateThumbnails`: Curate thumbnail images of cells from each cluster for visualization. This module is automated but configurable; see `config.yml` for parameters and their descriptions. Thumbnail images are saved to the `<cylinter_output_dir>/thumbnails` subdirectory.
+12. `frequencyStats`: Compute statistics for each pair of variables specified in the statuses string (`<statusesString>`) of the `sample_metadata` parameter in `config.yml`. This module is automated but configurable; see `config.yml` for parameters and their descriptions. Results are saved to the `<cylinter_output_dir>/frequency_stats` subdirectory.
+
+14. `curateThumbnails`: Curate thumbnail images of cells from each cluster for visualization. This module is automated but configurable; see `config.yml` for parameters and their descriptions. Thumbnail images are saved to the `<cylinter_output_dir>/thumbnails` subdirectory.
 
 Parquet files containing the dataframe filtrate returned by each module are found in the `<cylinter_output_dir>/checkpoints` subdirectory and available for use in downstream analyses.

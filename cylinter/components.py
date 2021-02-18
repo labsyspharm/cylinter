@@ -108,6 +108,7 @@ class QC(object):
                  start_module=None,
                  sample_conditions=None,
                  sample_abbreviations=None,
+                 sample_statuses=None,
                  sample_replicates=None,
                  samples_to_exclude=None,
                  markers_to_exclude=None,
@@ -127,14 +128,16 @@ class QC(object):
                  hexbin_grid_size=None,
 
                  # performPCA module —
-                 channel_exclusions=None,
+                 channelExclusionsPCA=None,
                  numPCAComponents=None,
                  pointSize=None,
                  normalize=None,
                  labelPoints=None,
                  distanceCutoff=None,
+                 samplesToSilhouette=None,
 
                  # performTSNE module —
+                 channelExclusionsTSNE=None,
                  fracForEmbedding=None,
                  numTSNEComponents=None,
                  perplexity=None,
@@ -144,7 +147,8 @@ class QC(object):
                  random_state=None,
 
                  # frequencyStats —
-                 denominator_cluster=None,
+                 controlGroups=None,
+                 denominatorCluster=None,
                  FDRCorrection=None,
 
                  # clusterBoxplots —
@@ -170,6 +174,8 @@ class QC(object):
             start_module: module from which to begin running the pipeline
             sample_conditions: {<sample1>: <cond1>, <sample2>: <cond2>}
             sample_abbreviations: {<sample1>: <abbrv1>, <sample2>: <abbrv2>}
+            sample_statuses: {<sample1>: <"<status1>, <status2>, ...",
+            <sample2>: <"<status1>, <status2>, ..."}
             sample_replicates: {<sample1>: <rep1>, <sample2>: <rep2>}
             samples_to_exclude: samples to censor from the analysis
             markers_to_exclude: markers to censor from the analysis
@@ -197,14 +203,19 @@ class QC(object):
            data point resolution. Not used when hexbins=False.
 
           performPCA module —
+            channelExclusionsPCA: immunomarkers to exlude from PCA analysis
             numPCAComponents: number of PCs
             pointSize: scatter point size
             normalize: scale input vectors individually to unit norm
             labelPoints: annotate scatter points
             distanceCutoff: use a common annotation for points
             within distanceCutoff
+            samplesToSilhouette: samples to greyout, unannotate, and send
+            to the back of other points
 
           performTSNE module —
+            channelExclusionsTSNE: immunomarkers to exlude from
+            TSNE/HDBSCAN analysis
             fracForEmbedding: fraction of total cells to use in the embedding
             numTSNEComponents: dimension of the TSNE embedding
             perplexity: related to the number of nearest neighbors
@@ -220,16 +231,18 @@ class QC(object):
             random_state: integer, determines the random number generator
             for reproducible results across multiple function calls.
 
+          frequencyStats —
+            controlGroups: control group labels from
+            metadata <abbrConditionString>
+            denominatorCluster: HDBSCAN cluster to use as the
+            denominator when computing cell frequency ratios
+            FDRCorrection: Boolean; if True, compute false discovery
+            rate q-vals. Otherwise compute uncorrected p-vals
+
           curateThumbnails —
             numThumbnails: number of random examples of each HDBSCAN cluster
             squareWindowDimension: number of pixels from the reference
             centroid in the x and y directions
-
-          frequencyStats —
-            denominator_cluster: HDBSCAN cluster to use as the
-            denominator when computing cell frequency ratios
-            FDRCorrection: Boolean; if True, compute false discovery
-            rate q-vals. Otherwise compute uncorrected p-vals
 
           clusterBoxplots —
             bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.
@@ -254,6 +267,7 @@ class QC(object):
         self.start_module = start_module
         self.sample_conditions = sample_conditions
         self.sample_abbreviations = sample_abbreviations
+        self.sample_statuses = sample_statuses
         self.sample_replicates = sample_replicates
         self.samples_to_exclude = samples_to_exclude
         self.markers_to_exclude = markers_to_exclude
@@ -268,12 +282,15 @@ class QC(object):
         self.hexbins = hexbins
         self.hexbin_grid_size = hexbin_grid_size
 
+        self.channelExclusionsPCA = channelExclusionsPCA
         self.numPCAComponents = numPCAComponents
         self.pointSize = pointSize
         self.normalize = normalize
         self.labelPoints = labelPoints
         self.distanceCutoff = distanceCutoff
+        self.samplesToSilhouette = samplesToSilhouette
 
+        self.channelExclusionsTSNE = channelExclusionsTSNE
         self.fracForEmbedding = fracForEmbedding
         self.numTSNEComponents = numTSNEComponents
         self.perplexity = perplexity
@@ -281,12 +298,13 @@ class QC(object):
         self.learningRate = learningRate
         self.metric = metric
         self.random_state = random_state
-        self.channel_exclusions = channel_exclusions
+        self.channelExclusionsTSNE = channelExclusionsTSNE
 
         self.numThumbnails = numThumbnails
         self.squareWindowDimension = squareWindowDimension
 
-        self.denominator_cluster = denominator_cluster
+        self.controlGroups = controlGroups
+        self.denominatorCluster = denominatorCluster
         self.FDRCorrection = FDRCorrection
 
         self.bonferroniCorrection = bonferroniCorrection
@@ -456,7 +474,7 @@ class QC(object):
 
         else:
 
-            print ('Channel contrast settings have not been defined.')
+            print ('Channel contrast settings have not yet been defined.')
 
             with napari.gui_qt():
                 viewer = napari.view_image(
@@ -1860,7 +1878,7 @@ class QC(object):
                 )
 
             abx_channels = [
-                i for i in abx_channels if i not in self.channel_exclusions
+                i for i in abx_channels if i not in self.channelExclusionsPCA
                 ]
 
             medians = (
@@ -1890,12 +1908,13 @@ class QC(object):
             scatter_input = pd.DataFrame(data=projected, index=idx)
             scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
 
-            # switch sample names for condition names
+            # get sample metadata keys from configuration file
             metadata_keys = [
                 i for i in self.sample_conditions.keys()
-                if i.split('unmicst-')[1] in scatter_input.index
+                if i.split('-', 1)[1] in scatter_input.index
                 ]
 
+            # index metadata keys to set sample abbreviations as plot input idx
             scatter_input.index = [
                 self.sample_abbreviations[i]
                 for i in metadata_keys
@@ -1905,9 +1924,15 @@ class QC(object):
                 for i in metadata_keys
                 ]
 
+            ordered_samples = (
+                natsorted(
+                    set(scatter_input.index.unique())
+                    .difference(set(self.samplesToSilhouette)))
+                    )
+
             # build cmap
             cmap = categorical_cmap(
-                numUniqueSamples=len(scatter_input.index.unique()),
+                numUniqueSamples=len(ordered_samples),
                 numCatagories=10,
                 cmap='tab10',
                 continuous=False
@@ -1915,18 +1940,36 @@ class QC(object):
 
             sample_color_dict = dict(
                 zip(
-                    natsorted(scatter_input.index.unique()),
+                    ordered_samples,
                     cmap.colors)
                     )
 
-            # plot scores plot for first 2 PCs
-            sns.set_style('whitegrid')
-            g = sns.scatterplot(
-                data=scatter_input, x='PC1', y='PC2',
-                hue=scatter_input.index, palette=sample_color_dict,
-                edgecolor='k', linewidth=0.2, s=self.pointSize,
-                alpha=1.0, legend=False
-                )
+            for s in self.samplesToSilhouette:
+                sample_color_dict[s] = [0.863, 0.863, 0.863]
+
+            # loop over plot input data
+            for e, sample in enumerate(scatter_input.iterrows()):
+                if sample[0] in self.samplesToSilhouette:
+                    sns.set_style('whitegrid')
+                    data_point = pd.DataFrame(scatter_input.iloc[e]).T
+                    g = sns.scatterplot(
+                        data=data_point, x='PC1', y='PC2',
+                        hue=data_point.index,
+                        palette=sample_color_dict,
+                        edgecolor='gainsboro', linewidth=0.2, zorder=2,
+                        s=self.pointSize, alpha=1.0, legend=False
+                        )
+                else:
+                    # plot scores plot for first 2 PCs
+                    sns.set_style('whitegrid')
+                    data_point = pd.DataFrame(scatter_input.iloc[e]).T
+                    g = sns.scatterplot(
+                        data=data_point, x='PC1', y='PC2',
+                        hue=data_point.index,
+                        palette=sample_color_dict,
+                        edgecolor='k', linewidth=0.2, zorder=3,
+                        s=self.pointSize, alpha=1.0, legend=False
+                        )
 
             # make PC1 and PC2 axis have equivalent range
             g.set_ylim(g.get_xlim())
@@ -1936,8 +1979,9 @@ class QC(object):
 
             # annotate data points
             if self.labelPoints is True:
+
                 scatter_input = scatter_input.reset_index().rename(
-                    columns={'index': 'tissue_type'}
+                    columns={'index': 'abbreviation'}
                     )
 
                 # generate squareform distance matrix
@@ -1966,10 +2010,12 @@ class QC(object):
                         )
                     )
                 d3['core1_tissue'] = [
-                    scatter_input.loc[i, 'tissue_type'] for i in d3['core1_id']
+                    scatter_input.loc[i, 'abbreviation']
+                    for i in d3['core1_id']
                     ]
                 d3['core2_tissue'] = [
-                    scatter_input.loc[i, 'tissue_type'] for i in d3['core2_id']
+                    scatter_input.loc[i, 'abbreviation']
+                    for i in d3['core2_id']
                     ]
                 # drop diagonal values
                 d4 = d3[d3['dist'] != 0.0].dropna()
@@ -1986,7 +2032,7 @@ class QC(object):
                 unique_labels = set()
                 neighbors_set = set()
                 for e, (label, x, y) in enumerate(zip(
-                  scatter_input['tissue_type'],
+                  scatter_input['abbreviation'],
                   scatter_input['PC1'], scatter_input['PC2'])):
 
                     if e in proximal_labels:
@@ -2012,14 +2058,36 @@ class QC(object):
                                 sum(pc2) / len(neighbors_df)
                                 )
 
+                            if label not in self.samplesToSilhouette:
+
+                                text = plt.annotate(
+                                    label,
+                                    xy=(centroid[0], centroid[1]),
+                                    xytext=(0, 0), size=4.75,
+                                    fontweight='bold',
+                                    color=sample_color_dict[label],
+                                    textcoords='offset points', ha='center',
+                                    va='center',
+                                    bbox=dict(
+                                        boxstyle='round,pad=0.1',
+                                        fc='yellow', alpha=0.0)
+                                        )
+                                unique_labels.add(label)
+
+                                text.set_path_effects(
+                                    [path_effects.Stroke(
+                                        linewidth=0.75, foreground='k'),
+                                     path_effects.Normal()]
+                                    )
+                    else:
+                        if label not in self.samplesToSilhouette:
+
                             text = plt.annotate(
-                                label,
-                                xy=(centroid[0], centroid[1]),
+                                label, xy=(x, y),
                                 xytext=(0, 0), size=4.75, fontweight='bold',
                                 color=sample_color_dict[label],
                                 textcoords='offset points', ha='center',
-                                va='center',
-                                bbox=dict(
+                                va='center', bbox=dict(
                                     boxstyle='round,pad=0.1',
                                     fc='yellow', alpha=0.0)
                                     )
@@ -2027,33 +2095,16 @@ class QC(object):
 
                             text.set_path_effects(
                                 [path_effects.Stroke(
-                                    linewidth=0.75, foreground='black'),
+                                    linewidth=0.75, foreground='k'),
                                  path_effects.Normal()]
                                 )
-                    else:
-                        text = plt.annotate(
-                            label, xy=(x, y),
-                            xytext=(0, 0), size=4.75, fontweight='bold',
-                            color=sample_color_dict[label],
-                            textcoords='offset points', ha='center',
-                            va='center', bbox=dict(
-                                boxstyle='round,pad=0.1',
-                                fc='yellow', alpha=0.0)
-                                )
-                        unique_labels.add(label)
-
-                        text.set_path_effects(
-                            [path_effects.Stroke(
-                                linewidth=0.75, foreground='black'),
-                             path_effects.Normal()]
-                            )
 
             # get n per tissue type
             n_per_tissue_type = (
                 scatter_input
-                .groupby(['condition'])
+                .groupby(['abbreviation'])
                 .count()
-                .reindex(scatter_input['condition'])['PC1'].values
+                .reindex(scatter_input['abbreviation'])['PC1'].values
                 )
             scatter_input['n'] = n_per_tissue_type
 
@@ -2064,24 +2115,33 @@ class QC(object):
                 .drop_duplicates()
                 )
 
-            # natural sort on "tissue_type" column.
-            legend_data['tissue_type'] = pd.Categorical(
-                legend_data['tissue_type'],
+            # natural sort on abbreviation column.
+            legend_data['abbreviation'] = pd.Categorical(
+                legend_data['abbreviation'],
                 ordered=True,
-                categories=natsorted(legend_data['tissue_type'].unique())
+                categories=natsorted(legend_data['abbreviation'].unique())
                 )
-            legend_data.sort_values('tissue_type', inplace=True)
+            legend_data.sort_values('abbreviation', inplace=True)
 
             legend_handles = []
             for i in legend_data.iterrows():
-                abbr = i[1]['tissue_type']
                 cond = i[1]['condition']
+                abbr = i[1]['abbreviation']
                 n = i[1]['n']
+
+                if abbr in self.samplesToSilhouette:
+                    markerfacecolor = 'gainsboro'
+                    markeredgecolor = 'gainsboro'
+                else:
+                    markerfacecolor = sample_color_dict[abbr]
+                    markeredgecolor = 'k'
+
                 legend_handles.append(
                     Line2D([0], [0], marker='o', color='none',
                            label=f'{abbr} ({cond}, n={n})',
-                           markerfacecolor=sample_color_dict[abbr],
-                           markeredgecolor='k', markeredgewidth=0.2,
+                           markerfacecolor=markerfacecolor,
+                           markeredgecolor=markeredgecolor,
+                           markeredgewidth=0.2,
                            markersize=5.0)
                            )
 
@@ -2116,7 +2176,7 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
-            i for i in abx_channels if i not in self.channel_exclusions
+            i for i in abx_channels if i not in self.channelExclusionsTSNE
             ]
 
         if os.path.exists(os.path.join(self.out_dir, 'embedding.npy')):
@@ -2161,7 +2221,7 @@ class QC(object):
                 markers_to_exclude=self.markers_to_exclude,
                 )
             abx_channels = [
-                i for i in abx_channels if i not in self.channel_exclusions
+                i for i in abx_channels if i not in self.channelExclusionsTSNE
                 ]
 
             numerical_input = text.split('.')[0].strip()
@@ -2197,10 +2257,6 @@ class QC(object):
 
                     plt.rcParams['figure.figsize'] = (15, 7)
                     fig, (ax1, ax2) = plt.subplots(1, 2)
-                    fig.suptitle(
-                        f'min cluster size = {min_cluster_size}',
-                        fontsize=10
-                        )
 
                     plt.subplots_adjust(
                         wspace=0.7,
@@ -2252,7 +2308,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=35000/len(df),
+                                s=105000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -2312,7 +2368,7 @@ class QC(object):
                                 df['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                s=35000/len(df),
+                                s=105000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
                                     i in df[color_by]
@@ -2356,7 +2412,7 @@ class QC(object):
                         plt.savefig(
                             os.path.join(
                                 self.out_dir,
-                                f'tsne_{color_by}.png'),
+                                f'tsne_{color_by}_{min_cluster_size}.png'),
                             bbox_extra_artists=(cluster_lgd, sample_lgd),
                             bbox_inches='tight', dpi=1000
                             )
@@ -2525,6 +2581,246 @@ class QC(object):
         return data
 
     @module
+    def frequencyStats(data, self, args):
+
+        stats_input = data[['Sample', 'Replicate', 'cluster']][
+            data['cluster'] >= 0]
+
+        for i in range(
+          len(list(self.sample_statuses.values())[0].split(', '))):
+
+            comparison = set(
+                [j.split(', ')[i] for j in self.sample_statuses.values()]
+                )
+
+            test = [i for i in comparison if i not in self.controlGroups][0]
+            control = [i for i in comparison if i in self.controlGroups][0]
+
+            frequency_dir = os.path.join(
+                self.out_dir, 'frequency_stats',
+                f"{test}_v_{control}"
+                )
+            if not os.path.exists(frequency_dir):
+                os.makedirs(frequency_dir)
+
+            # create single-column dataFrame containing all sample names
+            # to pad counts tables with zeros if a celltype is not in a tissue
+            pad = pd.DataFrame(
+                natsorted(stats_input['Sample'].unique())).rename(
+                    columns={0: 'Sample'}
+                    )
+
+            unmicst_version = list(
+                self.sample_statuses.keys()
+                )[0].split('-', 1)[0]
+
+            cluster_list = []
+            ratio_list = []
+            dif_list = []
+            pval_list = []
+
+            # intialize a dataframe to collect catplot data
+            catplot_input = pd.DataFrame()
+
+            # loop over clusters
+            for w, group in stats_input.groupby('cluster'):
+
+                print(
+                    f'Calculating log2({test}/{control})'
+                    f' of mean cell density for cluster {str(w)}.'
+                    )
+
+                group = (
+                    group.groupby(['Sample', 'Replicate', 'cluster'])
+                    .size()
+                    .reset_index(drop=False)
+                    .rename(columns={0: 'count'})
+                    )
+
+                group = (
+                    group
+                    .merge(pad, how='right', on='Sample')
+                    .sort_values(by='count', ascending=False)
+                    )
+
+                # guard against NaNs induced by the absence
+                # of a given cluster in one or
+                # more of the tissue samples
+                group['count'] = [
+                    0 if np.isnan(i) else int(i) for i in group['count']]
+
+                group['status'] = [
+                    self.sample_statuses[f"{unmicst_version}-{j}"]
+                    .split(', ')[i] for j in group['Sample']
+                    ]
+
+                group['Replicate'] = [
+                    self.sample_replicates[f"{unmicst_version}-{i}"]
+                    for i in group['Sample']
+                    ]
+
+                group['cluster'] = w
+                group.reset_index(drop=True, inplace=True)
+
+                # get denominator cell count for each sample
+                if self.denominatorCluster is None:
+                    group['tissue_count'] = [
+                        len(stats_input[stats_input['Sample'] == i]) for
+                        i in group['Sample']]
+                else:
+                    group['tissue_count'] = [
+                        len(stats_input[(stats_input['Sample'] == i) &
+                            (stats_input['cluster'] ==
+                             self.denominatorCluster)])
+                        for i in group['Sample']
+                        ]
+
+                # compute density of cells per sample
+                group['density'] = group['count']/group['tissue_count']
+
+                # append group data to catplot_input
+                catplot_input = catplot_input.append(group)
+
+                cnd1_values = group['density'][group['status'] == test]
+                cnd2_values = group['density'][group['status'] == control]
+
+                stat, pval = ttest_ind(
+                    cnd1_values, cnd2_values,
+                    axis=0, equal_var=True, nan_policy='propagate')
+
+                cnd1_mean = np.mean(cnd1_values)
+                cnd2_mean = np.mean(cnd2_values)
+
+                ratio = np.log2((cnd1_mean + 0.000001)/(cnd2_mean + 0.000001))
+
+                dif = cnd1_mean-cnd2_mean
+
+                cluster_list.append(w)
+                ratio_list.append(ratio)
+                dif_list.append(dif)
+                pval_list.append(pval)
+
+            statistics = pd.DataFrame(
+                list(zip(cluster_list, ratio_list, dif_list, pval_list)),
+                columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
+                    by='cluster')
+
+            statistics.to_csv(
+                os.path.join(
+                    frequency_dir, 'stats_total.csv'), index=False)
+
+            stats = importr('stats')
+
+            p_adjust = stats.p_adjust(
+                FloatVector(statistics['pval'].tolist()),
+                method='BH')
+
+            statistics['qval'] = p_adjust
+
+            if self.FDRCorrection:
+                stat = 'qval'
+
+            else:
+                stat = 'pval'
+
+            significant = statistics[
+                statistics[stat] <= 0.05].sort_values(by=stat)
+
+            significant.to_csv(
+                os.path.join(
+                    frequency_dir, 'stats_sig.csv'), index=False)
+
+            sns.set_style('whitegrid')
+            fig, ax = plt.subplots()
+            plt.scatter(abs(significant['dif']), significant['ratio'])
+
+            for label, qval, x, y in zip(
+              significant['cluster'], significant[stat],
+              abs(significant['dif']), significant['ratio']):
+
+                plt.annotate(
+                    (label, f'{stat[0]}=' + str(round(qval, 4))), size=3,
+                    xy=(x, y), xytext=(10, 10),
+                    textcoords='offset points', ha='right', va='bottom',
+                    bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
+                              alpha=0.0))
+
+            for tick in ax.xaxis.get_major_ticks():
+                tick.label.set_fontsize(5)
+
+            plt.title(
+                f'{test} vs. {control} ({stat[0]}<0.05)',
+                fontsize=12
+                )
+            plt.xlabel(
+                f'abs({test} - {control})', fontsize=10
+                )
+            plt.ylabel(
+                f'log2({test} / {control})',
+                fontsize=10
+                )
+            plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
+            plt.close()
+
+            catplot_input.reset_index(drop=True, inplace=True)
+
+            catplot_input[stat] = [
+                 '' if i not in significant['cluster'].unique() else
+                 round(
+                    significant[stat][significant['cluster'] == i].values[0], 6
+                    )
+                 for i in catplot_input['cluster']]
+
+            # build cmap
+            cmap = categorical_cmap(
+                numUniqueSamples=len(catplot_input['Sample'].unique()),
+                numCatagories=10,
+                cmap='tab10',
+                continuous=False
+                )
+
+            sample_color_dict = dict(
+                zip(
+                    natsorted(catplot_input['Sample'].unique()),
+                    cmap.colors)
+                    )
+
+            sns.set(font_scale=0.4)
+            g = sns.catplot(
+                x='status', y='density',
+                hue=catplot_input['Sample'], col='cluster', col_wrap=7,
+                data=catplot_input, kind='strip', palette=sample_color_dict,
+                height=2, aspect=0.8, sharey=False, edgecolor='k',
+                linewidth=0.2, legend=False
+                )
+
+            g.set(ylim=(0.0, None))
+
+            legend_handles = []
+            for i in natsorted(catplot_input['Sample'].unique()):
+                legend_handles.append(
+                    Line2D([0], [0], marker='o', color='none',
+                           label=i, markerfacecolor=sample_color_dict[i],
+                           markeredgecolor='k', markeredgewidth=0.2,
+                           markersize=5.0)
+                           )
+
+            plt.legend(
+                handles=legend_handles,
+                prop={'size': 5.0},
+                bbox_to_anchor=[1.03, 1.0]
+                )
+
+            plt.savefig(
+                os.path.join(frequency_dir, 'catplot.pdf'),
+                bbox_inches='tight'
+                )
+            plt.close('all')
+            print()
+
+        return data
+
+    @module
     def curateThumbnails(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
@@ -2533,7 +2829,7 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
-            i for i in abx_channels if i not in self.channel_exclusions
+            i for i in abx_channels if i not in self.channelExclusionsTSNE
             ]
 
         thumbnails_dir = os.path.join(self.out_dir, 'thumbnails')
@@ -3097,202 +3393,6 @@ class QC(object):
     #     # self.data = df
     #     return data
 
-    # @module
-    # def frequencyStats(self, args):
-    #
-    #     if self.start_module == 'frequencyStats':
-    #         df = read_dataframe(
-    #             modules_list=self.modules,
-    #             start_module=self.start_module,
-    #             outDir=self.out_dir,
-    #             )
-    #     else:
-    #         df = self.data
-    #
-    #     stats_input = df[df['cluster'] >= 0]
-    #
-    #     frequency_dir = os.path.join(self.out_dir, 'frequency_stats')
-    #     if not os.path.exists(frequency_dir):
-    #         os.mkdir(frequency_dir)
-    #
-    #     conditions = sorted(list(set(self.samples.values())))
-    #
-    #     # create single-column dataFrame of all sample names
-    #     # to pad counts tables with zeros if a celltype is not in a tissue
-    #     pad = pd.DataFrame(
-    #         sorted(stats_input['sample'].unique())).rename(
-    #             columns={0: 'sample'}
-    #             )
-    #
-    #     cluster_list = []
-    #     ratio_list = []
-    #     dif_list = []
-    #     pval_list = []
-    #
-    #     # intialize a dataframe to collect catplot data
-    #     catplot_input = pd.DataFrame()
-    #
-    #     # loop over clusters
-    #     for w, group in stats_input.groupby('cluster'):
-    #
-    #         print(
-    #             f'Calculating log2({conditions[1]}/{conditions[0]})'
-    #             f'of mean cell density for the {str(w)} cluster.'
-    #             )
-    #
-    #         group = group.groupby(
-    #             ['sample', 'condition', 'replicate', 'cluster']
-    #             ).size().reset_index(
-    #             drop=False).rename(columns={0: 'count'}).sort_values(
-    #             by='count', ascending=False)
-    #
-    #         group = group.merge(pad, how='right', on='sample')
-    #
-    #         # guard against NaNs induced by the absence
-    #         # of a given cluster in one or
-    #         # more of the tissue samples
-    #         group['count'] = [
-    #             0 if np.isnan(i) else i for i in group['count']]
-    #         group['condition'] = [
-    #             'cd' if 'cd' in i else 'hfd' for i in group['sample']
-    #             ]
-    #         group['replicate'] = [
-    #             re.sub("\\D", "", i) for i in group['sample']
-    #             ]
-    #         group['cluster'] = w
-    #
-    #         # get denominator cell count of each sample
-    #         if self.denominator_cluster is None:
-    #             group['tissue_count'] = [
-    #                 len(stats_input[stats_input['sample'] == i]) for
-    #                 i in group['sample']]
-    #         else:
-    #             group['tissue_count'] = [
-    #                 len(stats_input[(stats_input['sample'] == i) &
-    #                     (stats_input[
-    #                         'cluster'] == self.denominator_cluster)]) for
-    #                 i in group['sample']]
-    #
-    #         # compute density of cells per sample corresponding to
-    #         # current variable
-    #         group['density'] = group['count']/group['tissue_count']
-    #
-    #         # append group data to catplot_input
-    #         catplot_input = catplot_input.append(group)
-    #
-    #         cnd1_values = group['density'][group['condition'] == conditions[0]]
-    #         cnd2_values = group['density'][group['condition'] == conditions[1]]
-    #
-    #         stat, pval = ttest_ind(
-    #             cnd1_values, cnd2_values,
-    #             axis=0, equal_var=True, nan_policy='propagate')
-    #
-    #         cnd1_mean = np.mean(cnd1_values)
-    #         cnd2_mean = np.mean(cnd2_values)
-    #
-    #         ratio = np.log2((cnd2_mean + 0.000001)/(cnd1_mean + 0.000001))
-    #
-    #         dif = cnd2_mean-cnd1_mean
-    #
-    #         cluster_list.append(w)
-    #         ratio_list.append(ratio)
-    #         dif_list.append(dif)
-    #         pval_list.append(pval)
-    #
-    #     statistics = pd.DataFrame(
-    #         list(zip(cluster_list, ratio_list, dif_list, pval_list)),
-    #         columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
-    #             by='dif')
-    #
-    #     statistics.to_csv(
-    #         os.path.join(
-    #             frequency_dir, 'stats.csv'), index=False)
-    #
-    #     stats = importr('stats')
-    #
-    #     p_adjust = stats.p_adjust(
-    #         FloatVector(statistics['pval'].tolist()),
-    #         method='BH')
-    #
-    #     statistics['qval'] = p_adjust
-    #
-    #     if self.FDRCorrection:
-    #         stat = 'qval'
-    #
-    #     else:
-    #         stat = 'pval'
-    #
-    #     significant = statistics[
-    #         statistics[stat] <= 0.05].sort_values(by='dif')
-    #
-    #     significant.to_csv(
-    #         os.path.join(
-    #             frequency_dir, 'sig_difs.csv'), index=False)
-    #
-    #     sns.set_style('whitegrid')
-    #     fig, ax = plt.subplots()
-    #     plt.scatter(abs(significant['dif']), significant['ratio'])
-    #
-    #     for label, qval, x, y in zip(
-    #       significant['cluster'], significant[stat],
-    #       abs(significant['dif']), significant['ratio']):
-    #
-    #         plt.annotate(
-    #             (label, f'{stat[0]}=' + str(round(qval, 4))), size=3,
-    #             xy=(x, y), xytext=(10, 10),
-    #             textcoords='offset points', ha='right', va='bottom',
-    #             bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
-    #                       alpha=0.0))
-    #
-    #     for tick in ax.xaxis.get_major_ticks():
-    #         tick.label.set_fontsize(5)
-    #
-    #     plt.title(f'cnd1 vs. cnd2 {stat[0]}<0.05)', fontsize=12)
-    #     plt.xlabel(f'abs({conditions[1]} - {conditions[0]})', fontsize=10)
-    #     plt.ylabel(f'log2({conditions[1]} / {conditions[0]})', fontsize=10)
-    #     plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
-    #     plt.close()
-    #
-    #     catplot_input.reset_index(drop=True, inplace=True)
-    #
-    #     catplot_input[stat] = [
-    #          '' if i not in significant['cluster'].unique() else
-    #          round(
-    #             significant[stat][significant['cluster'] == i].values[0], 6)
-    #          for i in catplot_input['cluster']]
-    #
-    #     # catplot_input['label'] = catplot_input['cluster'].map(str) + \
-    #     #     ', ' + 'q=' + catplot_input['qval'].astype(str)
-    #     #
-    #     # catplot_input['label'] = [
-    #     #     i.split(',')[0] if not i.split(',')[0] in
-    #     #     significant['cluster'].unique().astype(str) else i for
-    #     #     i in catplot_input['label']]
-    #
-    #     catplot_input.sort_values(
-    #         ['cluster', 'condition', 'replicate'], inplace=True)
-    #
-    #     # catplot_input.drop('cluster', axis=1, inplace=True)
-    #
-    #     # catplot_input.rename(columns={'label': 'cluster'}, inplace=True)
-    #
-    #     sns.set(font_scale=0.4)
-    #     g = sns.catplot(
-    #         x='condition', y='density',
-    #         hue='replicate', col='cluster', col_wrap=14,
-    #         data=catplot_input, kind='strip', palette='tab20',
-    #         height=2, aspect=0.8, sharey=False, legend=False)
-    #
-    #     g.set(ylim=(0.0, None))
-    #     plt.legend(markerscale=0.5)
-    #
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(frequency_dir, 'catplot.pdf'))
-    #     plt.close('all')
-    #     print()
-    #     # self.data = df
-    #     return data
-    #
     # @module
     # def clusterBoxplots(self, args):
     #
