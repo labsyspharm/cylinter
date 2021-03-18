@@ -35,6 +35,7 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
 from sklearn.preprocessing import MinMaxScaler
+from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize as norm
@@ -52,7 +53,7 @@ from bridson import poisson_disc_samples
 from .utils import (
     dataset_files, log_banner, log_multiline,
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
-    categorical_cmap, cluster_expression, loadZarrs, clearRAM
+    categorical_cmap, cluster_expression, loadZarrs, clearRAM, unmicst_version
     )
 
 logger = logging.getLogger(__name__)
@@ -127,24 +128,34 @@ class QC(object):
                  hexbins=None,
                  hexbin_grid_size=None,
 
-                 # performPCA module —
+                 # PCA module —
                  channelExclusionsPCA=None,
-                 numPCAComponents=None,
+                 samplesToRemovePCA=None,
+                 dimensionPCA=None,
                  pointSize=None,
                  normalize=None,
                  labelPoints=None,
                  distanceCutoff=None,
                  samplesToSilhouette=None,
 
-                 # performTSNE module —
-                 channelExclusionsTSNE=None,
+                 # clustering module —
+                 embeddingAlgorithm=None,
+                 channelExclusionsClustering=None,
+                 samplesToRemoveClustering=None,
+                 normalizeTissueCounts=None,
                  fracForEmbedding=None,
-                 numTSNEComponents=None,
+                 dimensionEmbedding=None,
+
                  perplexity=None,
                  earlyExaggeration=None,
-                 learningRate=None,
+                 learningRateTSNE=None,
                  metric=None,
                  random_state=None,
+
+                 nNeighbors=None,
+                 learningRateUMAP=None,
+                 minDist=None,
+                 repulsionStrength=None,
 
                  # frequencyStats —
                  controlGroups=None,
@@ -164,99 +175,6 @@ class QC(object):
                  spatialDict2=None,
                  radiusRange=None,
                  ):
-        """
-        Args:
-          config.yaml —
-            in_dir: path to csv files, segmentation masks, and ome.tiffs
-            out_dir: path to save directory
-            random_sample_size: analyze a random data subset; float (0.0-1.0)
-            mask_object: cellMask  # cellMask, nucleiMask
-            start_module: module from which to begin running the pipeline
-            sample_conditions: {<sample1>: <cond1>, <sample2>: <cond2>}
-            sample_abbreviations: {<sample1>: <abbrv1>, <sample2>: <abbrv2>}
-            sample_statuses: {<sample1>: <"<status1>, <status2>, ...",
-            <sample2>: <"<status1>, <status2>, ..."}
-            sample_replicates: {<sample1>: <rep1>, <sample2>: <rep2>}
-            samples_to_exclude: samples to censor from the analysis
-            markers_to_exclude: markers to censor from the analysis
-
-         setContrast —
-            view_sample: name of sample for contrast adjustment with Napri
-
-        selectROIs —
-           delint_mode: whether to drop (True) or keep (False) ROI indices.
-           show_ab_channels: otherwise, show cycle1 DNA only.
-
-        crossCycleCorrelation —
-           log_ratio_rnge: Tuple of floats (or None). Lower and upper cutoffs
-           on log(cycle ratio) values for histogram plotting. Symmetrical
-           values around zero allow for a diverging colormap to show tissue
-           areas of increasing (green) and decreasing (pink) DNA signal
-           intensity between successive imaging cycles. Symmetrical cutoffs
-           centered at local minima between adjacent histogram modes allows
-           the colormap to show relative increases and decreases
-           in DNA intensity.
-
-        pruneOutliers —
-           hexbins: Boolean. If True, plot hexbins instead of scatter plots.
-           hexbin_grid_size: Interger value. Higher values increase
-           data point resolution. Not used when hexbins=False.
-
-          performPCA module —
-            channelExclusionsPCA: immunomarkers to exlude from PCA analysis
-            numPCAComponents: number of PCs
-            pointSize: scatter point size
-            normalize: scale input vectors individually to unit norm
-            labelPoints: annotate scatter points
-            distanceCutoff: use a common annotation for points
-            within distanceCutoff
-            samplesToSilhouette: samples to greyout, unannotate, and send
-            to the back of other points
-
-          performTSNE module —
-            channelExclusionsTSNE: immunomarkers to exlude from
-            TSNE/HDBSCAN analysis
-            fracForEmbedding: fraction of total cells to use in the embedding
-            numTSNEComponents: dimension of the TSNE embedding
-            perplexity: related to the number of nearest neighbors
-            used in other manifold learning algorithms. Larger datasets
-            usually require larger perplexity. Different values can
-            result in significanlty different results.
-            earlyExaggeration: for larger values, the space between
-            natural clusters will be larger in the embedded space.
-            learningRate: t-SNE learning rate: usually [10.0, 1000.0]
-            metric: string allowed by scipy.spatial.distance.pdist for
-            its metric parameter, or a metric listed in
-            pairwise.PAIRWISE_DISTANCE_FUNCTIONS.
-            random_state: integer, determines the random number generator
-            for reproducible results across multiple function calls.
-
-          frequencyStats —
-            controlGroups: control group labels from
-            metadata <abbrConditionString>
-            denominatorCluster: HDBSCAN cluster to use as the
-            denominator when computing cell frequency ratios
-            FDRCorrection: Boolean; if True, compute false discovery
-            rate q-vals. Otherwise compute uncorrected p-vals
-
-          curateThumbnails —
-            numThumbnails: number of random examples of each HDBSCAN cluster
-            squareWindowDimension: number of pixels from the reference
-            centroid in the x and y directions
-
-          clusterBoxplots —
-            bonferroniCorrection: Boolean; if True, compute Bonferroni q-vals.
-            Otherwise compute uncorrected p-vals
-
-          spatialAnalysis —
-            cropDict: vertical crop coordinate (numpy row) and
-            sub-image to use for t-CyCIF images containing more
-            than one tissue section
-            spatialDict1: cutoff for pixel-level protein signal instensities
-            spatialDict2: map of cell state call to HDBSCAN cluster
-            for cell states of interest
-            radiusRange: range of radii (in pixels) for Poisson-disc sampling
-        """
 
         # assert(SOMETHING)  # placeholder for now
 
@@ -283,22 +201,31 @@ class QC(object):
         self.hexbin_grid_size = hexbin_grid_size
 
         self.channelExclusionsPCA = channelExclusionsPCA
-        self.numPCAComponents = numPCAComponents
+        self.samplesToRemovePCA = samplesToRemovePCA
+        self.dimensionPCA = dimensionPCA
         self.pointSize = pointSize
         self.normalize = normalize
         self.labelPoints = labelPoints
         self.distanceCutoff = distanceCutoff
         self.samplesToSilhouette = samplesToSilhouette
 
-        self.channelExclusionsTSNE = channelExclusionsTSNE
+        self.embeddingAlgorithm = embeddingAlgorithm
+        self.channelExclusionsClustering = channelExclusionsClustering
+        self.samplesToRemoveClustering = samplesToRemoveClustering
+        self.normalizeTissueCounts = normalizeTissueCounts
         self.fracForEmbedding = fracForEmbedding
-        self.numTSNEComponents = numTSNEComponents
+        self.dimensionEmbedding = dimensionEmbedding
+
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
-        self.learningRate = learningRate
+        self.learningRateTSNE = learningRateTSNE
         self.metric = metric
         self.random_state = random_state
-        self.channelExclusionsTSNE = channelExclusionsTSNE
+
+        self.nNeighbors = nNeighbors
+        self.learningRateUMAP = learningRateUMAP
+        self.minDist = minDist
+        self.repulsionStrength = repulsionStrength
 
         self.numThumbnails = numThumbnails
         self.squareWindowDimension = squareWindowDimension
@@ -330,13 +257,10 @@ class QC(object):
         channel_setlist = []
         for file in files:
 
-            raw_sample_name = file.split('.')[0]
+            raw_sample_name = file.split('.', -1)[0]
 
-            if 'unmicst-' in raw_sample_name:
-                sample_name = raw_sample_name.split('unmicst-')[1]
-                raw_sample_names_dict[sample_name] = raw_sample_name
-            elif 'unmicst2-' in raw_sample_name:
-                sample_name = raw_sample_name.split('unmicst2-')[1]
+            if raw_sample_name.startswith('unmicst-'):
+                sample_name = raw_sample_name.split('-', 1)[1]
                 raw_sample_names_dict[sample_name] = raw_sample_name
             else:
                 sample_name = raw_sample_name
@@ -344,6 +268,7 @@ class QC(object):
 
             # disregard samples specified in "samples_to_exclude" config param
             if raw_sample_name not in self.samples_to_exclude:
+
                 print(f'Importing single-cell data for sample {sample_name}.')
 
                 csv = pd.read_csv(
@@ -631,7 +556,7 @@ class QC(object):
             for sample_name, group in natsorted(data.groupby('Sample')):
                 if sample_name in samples_for_cell_selection:
 
-                    print(sample_name)
+                    print(f'Selecting cells for sample {sample_name}')
 
                     sample_data = group[
                         ['X_centroid', 'Y_centroid', 'CellID']].astype(int)
@@ -703,11 +628,11 @@ class QC(object):
                     f.close()
 
             # drop cell IDs from full dataframe
-            print('Dropping cells from samples.')
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
                     file_name = file.split('.txt')[0]
+                    print(f'Dropping cells from {file_name}')
                     f = open(file, 'rb')
                     cell_ids = pickle.load(f)
                     cell_ids = set(cell_ids)
@@ -723,11 +648,11 @@ class QC(object):
         else:
 
             # drop cell IDs from full dataframe
-            print('Dropping cells from samples.')
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
                     file_name = file.split('.txt')[0]
+                    print(f'Dropping cells from {file_name}')
                     f = open(file, 'rb')
                     cell_ids = pickle.load(f)
                     cell_ids = set(cell_ids)
@@ -736,6 +661,7 @@ class QC(object):
                         & (data['CellID'].isin(cell_ids))
                         ].index
                     data.drop(global_idxs, inplace=True)
+            print()
 
             return data
 
@@ -1765,8 +1691,8 @@ class QC(object):
             plt.show(block=True)
 
             if ab not in hexbin_dict.keys():
-
-                hexbin_dict[ab] = (0.1, 99.9)
+                # default crop percentiles if not explicitly set
+                hexbin_dict[ab] = (0.1, 100.0)
 
                 os.chdir(hexbin_dir)
                 f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
@@ -1867,7 +1793,7 @@ class QC(object):
         return data
 
     @module
-    def performPCA(data, self, args):
+    def PCA(data, self, args):
 
         if len(data['Sample'].unique()) > 1:
 
@@ -1888,8 +1814,15 @@ class QC(object):
                 )
             medians = medians.reindex(natsorted(medians.index))
 
+            # cancer_cores = [
+            #     k.split('-')[1] for (k, v) in self.sample_statuses.items()
+            #     if v.split('-')[1] == 'TRUE'
+            #     ]
+            # medians = medians[medians.index.isin(cancer_cores)]
+            medians = medians[~medians.index.isin(self.samplesToRemovePCA)]
+
             # specify PCA parameters
-            pca = PCA(self.numPCAComponents)
+            pca = PCA(self.dimensionPCA, random_state=1)
 
             idx = medians.index
 
@@ -1914,7 +1847,7 @@ class QC(object):
                 if i.split('-', 1)[1] in scatter_input.index
                 ]
 
-            # index metadata keys to set sample abbreviations as plot input idx
+            # set sample abbreviations as row index
             scatter_input.index = [
                 self.sample_abbreviations[i]
                 for i in metadata_keys
@@ -1971,18 +1904,15 @@ class QC(object):
                         s=self.pointSize, alpha=1.0, legend=False
                         )
 
-            # make PC1 and PC2 axis have equivalent range
-            g.set_ylim(g.get_xlim())
-
             g.grid(color='gray', linewidth=0.05, linestyle='-', alpha=1.0)
             plt.setp(g.spines.values(), color='k', lw=0.5)
 
+            scatter_input = scatter_input.reset_index().rename(
+                columns={'index': 'abbreviation'}
+                )
+
             # annotate data points
             if self.labelPoints is True:
-
-                scatter_input = scatter_input.reset_index().rename(
-                    columns={'index': 'abbreviation'}
-                    )
 
                 # generate squareform distance matrix
                 sq = squareform(
@@ -2099,12 +2029,12 @@ class QC(object):
                                  path_effects.Normal()]
                                 )
 
-            # get n per tissue type
+            # get n per tissue type according to full sample names
             n_per_tissue_type = (
                 scatter_input
-                .groupby(['abbreviation'])
+                .groupby(['condition'])
                 .count()
-                .reindex(scatter_input['abbreviation'])['PC1'].values
+                .reindex(scatter_input['condition'])['PC1'].values
                 )
             scatter_input['n'] = n_per_tissue_type
 
@@ -2115,7 +2045,7 @@ class QC(object):
                 .drop_duplicates()
                 )
 
-            # natural sort on abbreviation column.
+            # natural sort by abbreviated sample names
             legend_data['abbreviation'] = pd.Categorical(
                 legend_data['abbreviation'],
                 ordered=True,
@@ -2168,7 +2098,7 @@ class QC(object):
         return data
 
     @module
-    def performTSNE(data, self, args):
+    def clustering(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2176,40 +2106,132 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
-            i for i in abx_channels if i not in self.channelExclusionsTSNE
+            i for i in abx_channels
+            if i not in self.channelExclusionsClustering
             ]
 
         if os.path.exists(os.path.join(self.out_dir, 'embedding.npy')):
-            # recapitulate df index at the point of embedding
-            df = data.sample(frac=self.fracForEmbedding, random_state=5)
-            df.reset_index(drop=True, inplace=True)
-            print(df)
 
-            embedded = np.load(os.path.join(self.out_dir, 'embedding.npy'))
-            df['emb1'] = embedded[:, 0]
-            df['emb2'] = embedded[:, 1]
+            # recapitulate df index at the point of embedding
+
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
+
+            if self.normalizeTissueCounts:
+
+                # calculate per tissue cell-count weighted random sample
+                groups = data.groupby('Sample')
+                sample_weights = pd.DataFrame({
+                    'weights': 1 / (groups.size() * len(groups))
+                })
+                weights = pd.merge(
+                    data[['Sample']], sample_weights,
+                    left_on='Sample', right_index=True
+                    )
+
+                df = data.sample(
+                    frac=self.fracForEmbedding, replace=False,
+                    weights=weights['weights'], random_state=5, axis=0
+                    )
+                print('Tissue counts normalized')
+
+            else:
+
+                df = data.sample(frac=self.fracForEmbedding, random_state=5)
+
+            df.reset_index(drop=True, inplace=True)
+            print(df[abx_channels])
+
+            embedding = np.load(os.path.join(self.out_dir, 'embedding.npy'))
+            df['emb1'] = embedding[:, 0]
+            df['emb2'] = embedding[:, 1]
 
         else:
             startTime = datetime.now()
-            # save df with newly scrambled row index
-            df = data.sample(frac=self.fracForEmbedding, random_state=5)
-            df.reset_index(drop=True, inplace=True)
-            print(df)
 
-            embedded = TSNE(
-                n_components=self.numTSNEComponents,
-                init='pca',
-                perplexity=self.perplexity,
-                early_exaggeration=self.earlyExaggeration,
-                learning_rate=self.learningRate,
-                metric=self.metric,
-                random_state=self.random_state,
-                n_jobs=-1).fit_transform(df[abx_channels])
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
+
+            if self.normalizeTissueCounts:
+
+                # calculate per tissue cell-count weighted random sample
+                groups = data.groupby('Sample')
+                sample_weights = pd.DataFrame({
+                    'weights': 1 / (groups.size() * len(groups))
+                })
+                weights = pd.merge(
+                    data[['Sample']], sample_weights,
+                    left_on='Sample', right_index=True
+                    )
+
+                df = data.sample(
+                    frac=self.fracForEmbedding, replace=False,
+                    weights=weights['weights'], random_state=5, axis=0
+                    )
+                print('Tissue counts normalized')
+
+            else:
+
+                df = data.sample(frac=self.fracForEmbedding, random_state=5)
+
+            df.reset_index(drop=True, inplace=True)
+            print(df[abx_channels])
+
+            if self.embeddingAlgorithm == 'TSNE':
+                print('Computing TSNE embedding.')
+                embedding = TSNE(
+                    n_components=self.dimensionEmbedding,
+                    perplexity=self.perplexity,
+                    early_exaggeration=self.earlyExaggeration,
+                    learning_rate=self.learningRateTSNE,
+                    metric=self.metric,
+                    random_state=self.random_state,
+                    init='pca', n_jobs=-1).fit_transform(df[abx_channels])
+
+            elif self.embeddingAlgorithm == 'UMAP':
+                print('Computing UMAP embedding.')
+                embedding = UMAP(
+                    n_components=self.dimensionEmbedding,
+                    n_neighbors=self.nNeighbors,
+                    learning_rate=self.learningRateUMAP,
+                    output_metric=self.metric,
+                    min_dist=self.minDist,
+                    repulsion_strength=self.repulsionStrength,
+                    random_state=3,
+                    n_epochs=1000,
+                    init='spectral',
+                    metric='euclidean',
+                    metric_kwds=None,
+                    output_metric_kwds=None,
+                    n_jobs=-1,
+                    low_memory=False,
+                    spread=1.0,
+                    local_connectivity=1.0,
+                    set_op_mix_ratio=1.0,
+                    negative_sample_rate=5,
+                    transform_queue_size=4.0,
+                    a=None,
+                    b=None,
+                    angular_rp_forest=False,
+                    target_n_neighbors=-1,
+                    target_metric='categorical',
+                    target_metric_kwds=None,
+                    target_weight=0.5,
+                    transform_seed=42,
+                    transform_mode='embedding',
+                    force_approximation_algorithm=False,
+                    verbose=False,
+                    unique=False,
+                    densmap=False,
+                    dens_lambda=2.0,
+                    dens_frac=0.6,
+                    dens_var_shift=0.1,
+                    disconnection_distance=None,
+                    output_dens=False).fit_transform(df[abx_channels])
+
             print('Embedding completed in ' + str(datetime.now() - startTime))
 
-            np.save(os.path.join(self.out_dir, 'embedding'), embedded)
-            df['emb1'] = embedded[:, 0]
-            df['emb2'] = embedded[:, 1]
+            np.save(os.path.join(self.out_dir, 'embedding'), embedding)
+            df['emb1'] = embedding[:, 0]
+            df['emb2'] = embedding[:, 1]
 
         sns.set_style('white')
 
@@ -2221,7 +2243,8 @@ class QC(object):
                 markers_to_exclude=self.markers_to_exclude,
                 )
             abx_channels = [
-                i for i in abx_channels if i not in self.channelExclusionsTSNE
+                i for i in abx_channels
+                if i not in self.channelExclusionsClustering
                 ]
 
             numerical_input = text.split('.')[0].strip()
@@ -2347,9 +2370,14 @@ class QC(object):
 
                         elif color_by == 'Condition':
 
+                            # label PCA plot points by condition and replicate
+                            df['label'] = (
+                                df[color_by] + '_' + df['Replicate'].map(str)
+                                )
+
                             # build cmap
                             cmap = categorical_cmap(
-                                numUniqueSamples=len(df[color_by].unique()),
+                                numUniqueSamples=len(df['label'].unique()),
                                 numCatagories=10,
                                 cmap='tab10',
                                 continuous=False
@@ -2357,11 +2385,11 @@ class QC(object):
 
                             sample_dict = dict(
                                 zip(
-                                    natsorted(df[color_by].unique()),
-                                    list(range(len(df[color_by].unique()))))
+                                    natsorted(df['label'].unique()),
+                                    list(range(len(df['label'].unique()))))
                                     )
 
-                            c = [sample_dict[i] for i in df[color_by]]
+                            c = [sample_dict[i] for i in df['label']]
 
                             ax2.scatter(
                                 df['emb1'],
@@ -2371,7 +2399,7 @@ class QC(object):
                                 s=105000/len(df),
                                 ec=[
                                     'k' if i == highlight else 'none' for
-                                    i in df[color_by]
+                                    i in df['label']
                                     ],
                                 linewidth=0.1
                                 )
@@ -2382,7 +2410,7 @@ class QC(object):
 
                             legend_elements = []
                             for e, i in enumerate(
-                                natsorted(df[color_by].unique())
+                                natsorted(df['label'].unique())
                               ):
 
                                 if i == highlight:
@@ -2390,9 +2418,17 @@ class QC(object):
                                 else:
                                     markeredgecolor = 'none'
 
+                                uv = unmicst_version(self.sample_conditions)
+
+                                sample_to_map = df['Sample'][
+                                    df['label'] == i].unique()[0]
+                                abbr = self.sample_abbreviations[
+                                    f"{uv}-{sample_to_map }"
+                                    ]
+
                                 legend_elements.append(
                                     Line2D([0], [0], marker='o', color='none',
-                                           label=f'Sample: {i}',
+                                           label=f'Sample: {abbr} ({i})',
                                            markerfacecolor=cmap.colors[e],
                                            markeredgecolor=markeredgecolor,
                                            lw=0.001,
@@ -2590,7 +2626,8 @@ class QC(object):
           len(list(self.sample_statuses.values())[0].split(', '))):
 
             comparison = set(
-                [j.split(', ')[i] for j in self.sample_statuses.values()]
+                [j.split(', ')[i] for j in self.sample_statuses.values()
+                 if '-UNK' not in j.split(', ')[i]]
                 )
 
             test = [i for i in comparison if i not in self.controlGroups][0]
@@ -2610,9 +2647,7 @@ class QC(object):
                     columns={0: 'Sample'}
                     )
 
-            unmicst_version = list(
-                self.sample_statuses.keys()
-                )[0].split('-', 1)[0]
+            uv = unmicst_version(self.sample_conditions)
 
             cluster_list = []
             ratio_list = []
@@ -2650,16 +2685,19 @@ class QC(object):
                     0 if np.isnan(i) else int(i) for i in group['count']]
 
                 group['status'] = [
-                    self.sample_statuses[f"{unmicst_version}-{j}"]
+                    self.sample_statuses[f"{uv}-{j}"]
                     .split(', ')[i] for j in group['Sample']
                     ]
 
                 group['Replicate'] = [
-                    self.sample_replicates[f"{unmicst_version}-{i}"]
+                    self.sample_replicates[f"{uv}-{i}"]
                     for i in group['Sample']
                     ]
 
                 group['cluster'] = w
+
+                group = group[~group['status'].str.contains('-UNK')]
+
                 group.reset_index(drop=True, inplace=True)
 
                 # get denominator cell count for each sample
@@ -2687,6 +2725,9 @@ class QC(object):
                 stat, pval = ttest_ind(
                     cnd1_values, cnd2_values,
                     axis=0, equal_var=True, nan_policy='propagate')
+
+                stat = round(stat, 3)
+                pval = round(pval, 3)
 
                 cnd1_mean = np.mean(cnd1_values)
                 cnd2_mean = np.mean(cnd2_values)
@@ -2739,7 +2780,7 @@ class QC(object):
               abs(significant['dif']), significant['ratio']):
 
                 plt.annotate(
-                    (label, f'{stat[0]}=' + str(round(qval, 4))), size=3,
+                    (label, f'{stat[0]}=' + str(qval)), size=3,
                     xy=(x, y), xytext=(10, 10),
                     textcoords='offset points', ha='right', va='bottom',
                     bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
@@ -2765,10 +2806,8 @@ class QC(object):
             catplot_input.reset_index(drop=True, inplace=True)
 
             catplot_input[stat] = [
-                 '' if i not in significant['cluster'].unique() else
-                 round(
-                    significant[stat][significant['cluster'] == i].values[0], 6
-                    )
+                 'ns' if i not in significant['cluster'].unique() else
+                 significant[stat][significant['cluster'] == i].values[0]
                  for i in catplot_input['cluster']]
 
             # build cmap
@@ -2785,22 +2824,55 @@ class QC(object):
                     cmap.colors)
                     )
 
+            catplot_input.sort_values(
+                by=['cluster', 'status', 'density'],
+                ascending=[True, False, True], inplace=True
+                )
+
+            catplot_input['cluster'] = (
+                catplot_input['cluster'].astype(str) + f'; {stat} = ' +
+                catplot_input[stat].astype(str)
+                )
+            catplot_input['cluster'] = [
+                i.split(f'; {stat} = ns')[0] for i in catplot_input['cluster']
+                ]
+
             sns.set(font_scale=0.4)
             g = sns.catplot(
                 x='status', y='density',
-                hue=catplot_input['Sample'], col='cluster', col_wrap=7,
-                data=catplot_input, kind='strip', palette=sample_color_dict,
-                height=2, aspect=0.8, sharey=False, edgecolor='k',
-                linewidth=0.2, legend=False
+                hue=catplot_input['Sample'], col='cluster', col_wrap=6,
+                data=catplot_input, kind='bar', palette=sample_color_dict,
+                height=2, aspect=0.8, sharex=True, sharey=False,
+                edgecolor='k', linewidth=0.1,
+                legend=False
                 )
 
             g.set(ylim=(0.0, None))
 
+            sample_conds = [
+                self.sample_conditions[f'{uv}-{i}']
+                for i in natsorted(catplot_input['Sample'].unique())
+                ]
+
+            sample_abbrs = [
+                self.sample_abbreviations[f'{uv}-{i}']
+                for i in natsorted(catplot_input['Sample'].unique())
+                ]
+
+            cond_abbr = [
+                f'{i}-{j}' for i, j in zip(sample_conds, sample_abbrs)
+                ]
+
+            handles_dict = dict(
+                zip(natsorted(catplot_input['Sample'].unique()),
+                    cond_abbr)
+                    )
+
             legend_handles = []
-            for i in natsorted(catplot_input['Sample'].unique()):
+            for k, v in handles_dict.items():
                 legend_handles.append(
                     Line2D([0], [0], marker='o', color='none',
-                           label=i, markerfacecolor=sample_color_dict[i],
+                           label=v, markerfacecolor=sample_color_dict[k],
                            markeredgecolor='k', markeredgewidth=0.2,
                            markersize=5.0)
                            )
@@ -2829,7 +2901,8 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
         abx_channels = [
-            i for i in abx_channels if i not in self.channelExclusionsTSNE
+            i for i in abx_channels
+            if i not in self.channelExclusionsClustering
             ]
 
         thumbnails_dir = os.path.join(self.out_dir, 'thumbnails')
@@ -3387,7 +3460,7 @@ class QC(object):
     #
     #     save_dataframe(
     #         df=df, outDir=self.out_dir,
-    #         moduleName='performTSNE'
+    #         moduleName='clustering'
     #         )
     #     print()
     #     # self.data = df
@@ -4007,3 +4080,4 @@ class QC(object):
     #     print()
     #     # self.data = df
     #     return data
+   #     return data

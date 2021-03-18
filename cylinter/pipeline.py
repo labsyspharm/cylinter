@@ -46,7 +46,7 @@ def run_pipeline(config, start_module_name):
     #  'log10transform',
     #  'pruneOutliers',
     #  'performPCA',
-    #  'performTSNE',
+    #  'performClustering',
     #  'getClustermap',
     #  'lassoClusters',
     #  'curateThumbnails',
@@ -64,33 +64,53 @@ def run_pipeline(config, start_module_name):
         sample_replicates=config.sample_replicates,
         samples_to_exclude=config.samples_to_exclude,
         markers_to_exclude=config.markers_to_exclude,
+
         view_sample=config.view_sample,
+
         delint_mode=config.delint_mode,
         show_ab_channels=config.show_ab_channels,
+
         log_ratio_rnge=config.log_ratio_rnge,
+
         hexbins=config.hexbins,
         hexbin_grid_size=config.hexbin_grid_size,
+
         channelExclusionsPCA=config.channelExclusionsPCA,
-        numPCAComponents=config.numPCAComponents,
+        samplesToRemovePCA=config.samplesToRemovePCA,
+        dimensionPCA=config.dimensionPCA,
         pointSize=config.pointSize,
         normalize=config.normalize,
         labelPoints=config.labelPoints,
         distanceCutoff=config.distanceCutoff,
         samplesToSilhouette=config.samplesToSilhouette,
-        channelExclusionsTSNE=config.channelExclusionsTSNE,
+
+        embeddingAlgorithm=config.embeddingAlgorithm,
+        channelExclusionsClustering=config.channelExclusionsClustering,
+        normalizeTissueCounts=config.normalizeTissueCounts,
+        samplesToRemoveClustering=config.samplesToRemoveClustering,
         fracForEmbedding=config.fracForEmbedding,
-        numTSNEComponents=config.numTSNEComponents,
+        dimensionEmbedding=config.dimensionEmbedding,
+
         perplexity=config.perplexity,
         earlyExaggeration=config.earlyExaggeration,
-        learningRate=config.learningRate,
+        learningRateTSNE=config.learningRateTSNE,
         metric=config.metric,
         random_state=config.random_state,
+
+        nNeighbors=config.nNeighbors,
+        learningRateUMAP=config.learningRateUMAP,
+        minDist=config.minDist,
+        repulsionStrength=config.repulsionStrength,
+
         controlGroups=config.controlGroups,
         denominatorCluster=config.denominatorCluster,
         FDRCorrection=config.FDRCorrection,
-        bonferroniCorrection=config.bonferroniCorrection,
+
         numThumbnails=config.numThumbnails,
         squareWindowDimension=config.squareWindowDimension,
+
+        bonferroniCorrection=config.bonferroniCorrection,
+
         cropDict=config.cropDict,
         spatialDict1=config.spatialDict1,
         spatialDict2=config.spatialDict2,

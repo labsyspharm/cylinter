@@ -154,6 +154,13 @@ def read_markers(markers_filepath, mask_object, markers_to_exclude):
     return markers, dna1, dna_moniker, abx_channels
 
 
+def unmicst_version(sample_conditions):
+    unmicst_version = list(
+        sample_conditions.keys()
+        )[0].split('-', 1)[0]
+    return unmicst_version
+
+
 def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=False):
 
     numSubcatagories = math.ceil(numUniqueSamples/numCatagories)
@@ -165,8 +172,23 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
     else:
         ccolors = plt.get_cmap(cmap)(np.arange(numCatagories, dtype=int))
         # rearrange hue order to taste
-        myorder = [0, 1, 2, 3, 4, 6, 9, 8, 5, 7]
+        cd = {
+            'B': 0, 'O': 1, 'G': 2, 'R': 3, 'Pu': 4,
+            'Br': 5, 'Pi': 6, 'Gr': 7, 'Y': 8, 'Cy': 9,
+            }
+        myorder = [
+            cd['B'], cd['O'], cd['G'], cd['Pu'], cd['Y'],
+            cd['R'], cd['Cy'], cd['Br'], cd['Gr'], cd['Pi']
+            ]
         ccolors = [ccolors[i] for i in myorder]
+
+        # use Okabe and Ito color-safe palette for first 6 colors
+        ccolors[0] = np.array([0.0, 0.447, 0.698, 1.0])  # blue
+        ccolors[1] = np.array([0.902, 0.624, 0.0, 1.0])  # orange
+        ccolors[2] = np.array([0.0, 0.620, 0.451, 1.0])  # bluish green
+        ccolors[3] = np.array([0.8, 0.475, 0.655, 1.0])  # reddish purple
+        ccolors[4] = np.array([0.941, 0.894, 0.259, 1.0])  # yellow
+        ccolors[5] = np.array([0.835, 0.369, 0.0, 1.0])  # vermillion
 
     cols = np.zeros((numCatagories * numSubcatagories, 3))
     for i, c in enumerate(ccolors):
