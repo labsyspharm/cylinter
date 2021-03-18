@@ -22,38 +22,61 @@ class Config:
 
         # CLASS MODULE CONFIGURATIONS
         config.view_sample = str(data['view_sample'])
+
         config.delint_mode = bool(data['delint_mode'])
         config.show_ab_channels = bool(data['show_ab_channels'])
+
         if (data['log_ratio_rnge']) is None:
             config.log_ratio_rnge = (data['log_ratio_rnge'])
         else:
             config.log_ratio_rnge = tuple(data['log_ratio_rnge'])
+
         config.hexbins = bool(data['hexbins'])
         config.hexbin_grid_size = int(data['hexbin_grid_size'])
+
         config.channelExclusionsPCA = list(data['channelExclusionsPCA'])
-        config.numPCAComponents = int(data['numPCAComponents'])
+        config.samplesToRemovePCA = list(data['samplesToRemovePCA'])
+        config.dimensionPCA = int(data['dimensionPCA'])
         config.pointSize = float(data['pointSize'])
         config.normalize = bool(data['normalize'])
         config.labelPoints = bool(data['labelPoints'])
         config.distanceCutoff = float(data['distanceCutoff'])
         config.samplesToSilhouette = list(data['samplesToSilhouette'])
-        config.channelExclusionsTSNE = list(data['channelExclusionsTSNE'])
+
+        config.embeddingAlgorithm = str(data['embeddingAlgorithm'])
+        config.channelExclusionsClustering = list(
+            data['channelExclusionsClustering']
+            )
+        config.samplesToRemoveClustering = list(
+            data['samplesToRemoveClustering']
+            )
+        config.normalizeTissueCounts = bool(data['normalizeTissueCounts'])
         config.fracForEmbedding = float(data['fracForEmbedding'])
-        config.numTSNEComponents = int(data['numTSNEComponents'])
+        config.dimensionEmbedding = int(data['dimensionEmbedding'])
+
         config.perplexity = float(data['perplexity'])
         config.earlyExaggeration = float(data['earlyExaggeration'])
-        config.learningRate = float(data['learningRate'])
+        config.learningRateTSNE = float(data['learningRateTSNE'])
         config.metric = str(data['metric'])
         config.random_state = int(data['random_state'])
+
+        config.nNeighbors = int(data['nNeighbors'])
+        config.learningRateUMAP = float(data['learningRateUMAP'])
+        config.minDist = float(data['minDist'])
+        config.repulsionStrength = float(data['repulsionStrength'])
+
         config.numThumbnails = int(data['numThumbnails'])
         config.squareWindowDimension = int(data['squareWindowDimension'])
+
         config.controlGroups = list(data['controlGroups'])
         if (data['denominatorCluster']) is None:
             config.denominatorCluster = (data['denominatorCluster'])
         else:
             config.denominatorCluster = int(data['denominatorCluster'])
         config.FDRCorrection = bool(data['FDRCorrection'])
+
         config.bonferroniCorrection = bool(data['bonferroniCorrection'])
+
         config.cropDict = dict(data['cropDict'])
         config.spatialDict1 = dict(data['spatialDict1'])
         config.spatialDict2 = dict(data['spatialDict2'])
