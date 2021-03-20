@@ -18,11 +18,12 @@ requires = [
     'natsort==7.1.0',
     'rpy2==3.4.2',
     'bridson==0.1.0',
+    'umap-learn==0.5.1',
     'hurry.filesize==0.9',
-    'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21 fails to transfer)
+    'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21) fails at transferring
 ]
 
-VERSION = '0.0.18'
+VERSION = '0.0.19'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
