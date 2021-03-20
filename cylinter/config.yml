@@ -26,7 +26,7 @@ sample_metadata:
 # Sample metadata dictionary. Keys are sample names (str dtype). Values are lists:
 # First element: full name of experimental condition (str dtype).
 # Second element: abbreviated name of experimental condition (str dtype).
-# Third element: nested list of binary declarations for len(list) pairwise statistical tests (str dytpe).
+# Third element: comma-delimited string of binary declarations for pairwise statistical comparisons (str dytpe).
 # Forth: replicate number for biological/technical replicates (int dtype)
 
 samples_to_exclude: []

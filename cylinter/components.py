@@ -912,6 +912,12 @@ class QC(object):
                     key=0
                     )
 
+                # read antibody image
+                seg = imread(
+                    f'{self.in_dir}/seg/{text}.*tif',
+                    key=0
+                    )
+
                 centroids = df_test[
                     ['Y_centroid', 'X_centroid']][df_test['Sample'] == text]
 
@@ -926,6 +932,12 @@ class QC(object):
                 with napari.gui_qt():
                     viewer = napari.view_image(
                         dna, rgb=False, name=dna1
+                        )
+
+                    viewer.add_image(
+                        seg, rgb=False, blending='additive',
+                        colormap='green', visible=False,
+                        name='segmentation'
                         )
 
                     viewer.add_points(
