@@ -29,7 +29,7 @@ else
     echo "Transferring TMA data."
 
     # Transfer mcmicro output files to CyLinter input directory.
-    rsync --dry-run -avP -m "$2"/ "$3" --include quantification/*.csv --include dearray/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
+    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include dearray/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
 
     mkdir -p "$3"/seg
 
@@ -62,7 +62,7 @@ else
     echo "Transferring whole tissue data."
 
     # Transfer mcmicro output files to CyLinter input directory.
-    rsync --dry-run -avP -m "$2"/ "$3" --include quantification/*.csv --include registration/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
+    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include registration/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
 
     # Make directories for images, data tables, and segmentation outlines
     mkdir -p "$3"/csv
