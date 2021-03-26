@@ -26,6 +26,7 @@ class Config:
         config.delint_mode = bool(data['delint_mode'])
         config.show_ab_channels = bool(data['show_ab_channels'])
 
+        config.cutoffAxis = str(data['cutoffAxis'])
         if (data['log_ratio_rnge']) is None:
             config.log_ratio_rnge = (data['log_ratio_rnge'])
         else:

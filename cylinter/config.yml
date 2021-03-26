@@ -66,6 +66,10 @@ show_ab_channels: False
 ###############################################################################
 # crossCycleCorrelation —
 
+cutoffAxis: 'x'
+# which axis of the log10(ratio) histograms to apply cutoff for
+# data inclusion in downstream analyses
+
 log_ratio_rnge: null
 # Lower and upper cutoffs on log(cycle ratio) values
 # for histogram plotting (tuple of floats (or None)).
@@ -110,6 +114,9 @@ labelPoints: True
 # annotate scatter points with sample name abbreviations
 
 distanceCutoff: 0.02
+# max distance between observations in PC space
+# (as determined by via scipy.spatial.distance.pdist) to share
+# a common label in the PCA plot.
 
 samplesToSilhouette: []
 # (list of strings) list of sample names to grey out,

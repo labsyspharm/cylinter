@@ -70,6 +70,7 @@ def run_pipeline(config, start_module_name):
         delint_mode=config.delint_mode,
         show_ab_channels=config.show_ab_channels,
 
+        cutoffAxis=config.cutoffAxis,
         log_ratio_rnge=config.log_ratio_rnge,
 
         hexbins=config.hexbins,
