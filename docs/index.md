@@ -18,8 +18,8 @@ CyLinter development is led by [Greg Baker](https://github.com/gjbaker) at the [
 
 ## Funding
 
-This work is supported by:
+This work is supported by the following:
 
-* NCI grant U2C-CA233262: Pre-cancer Atlases of Cutaneous and Hematologic Origin
-* NCI grant U54-CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs
-* Ludwig Center at Harvard Medical School and the Ludwig Cancer Research Foundation
+* *NCI grant U2C-CA233262: Pre-cancer Atlases of Cutaneous and Hematologic Origin*
+* *NIH grant U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs*
+* *Ludwig Center at Harvard Medical School and the Ludwig Cancer Research Foundation*
