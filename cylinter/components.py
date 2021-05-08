@@ -300,6 +300,7 @@ class QC(object):
                     print(
                         f'Censoring single-cell data for sample {sample_name}.'
                         )
+        print()
 
         # stack dataframes row-wise
         df = pd.concat(df_list, axis=0)
@@ -331,14 +332,21 @@ class QC(object):
         channels_set = list(set.intersection(*channel_setlist))
         channels_set.extend(['Condition', 'Replicate'])
 
-        print(f'{len(df.columns)} total measured features.')
-        print(f'{len(channels_set)} features shared among samples.')
+        print(f'{len(df.columns)} total features.')
+        print(f'{len(channels_set)} features shared among all samples.')
+        print()
 
         before = set(df.columns)
         after = set(channels_set)
-        print(
-            f'dropping exclusive channels from df: {before.difference(after)}'
-            )
+
+        if len(before.difference(after)) == 0:
+            pass
+        else:
+            markers_to_drop = list(before.difference(after))
+            print(
+                f'Features {markers_to_drop} were not probed for in all' +
+                ' samples and will be dropped from the analysis.'
+                )
         df = df[channels_set].copy()
 
         # handle data subsetting
@@ -350,101 +358,6 @@ class QC(object):
         print()
 
         return df
-
-    @module
-    def setContrast(data, self, args):
-
-        markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
-            mask_object=self.mask_object,
-            markers_to_exclude=self.markers_to_exclude,
-            )
-
-        dna = imread(
-            f'{self.in_dir}/tif/{self.view_sample}.*tif', key=0
-            )
-
-        if os.path.exists(
-          os.path.join(self.out_dir, 'contrast_limits.yml')):
-
-            contrast_limits = yaml.safe_load(
-                open(f'{self.out_dir}/contrast_limits.yml')
-                )
-
-            print ('Applying current channel contrast settings.')
-
-            with napari.gui_qt():
-                viewer = napari.view_image(
-                    dna, rgb=False,
-                    blending='additive', colormap='gray',
-                    name=dna1
-                    )
-
-                viewer.layers[dna1].contrast_limits = (
-                    contrast_limits[dna1][0], contrast_limits[dna1][1]
-                    )
-
-                for ch in abx_channels:
-                    ch = ch.split(f'_{self.mask_object}')[0]
-                    channel_number = markers['channel_number'][
-                                markers['marker_name'] == ch]
-
-                    # read antibody image
-                    img = imread(
-                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
-                        key=(channel_number-1)
-                        )
-
-                    viewer.add_image(
-                        img, rgb=False, blending='additive',
-                        colormap='green', visible=False,
-                        name=ch
-                        )
-
-                    viewer.layers[ch].contrast_limits = (
-                        contrast_limits[ch][0], contrast_limits[ch][1]
-                        )
-
-        else:
-
-            print ('Channel contrast settings have not yet been defined.')
-
-            with napari.gui_qt():
-                viewer = napari.view_image(
-                    dna, rgb=False,
-                    blending='additive', colormap='gray',
-                    name=dna1
-                    )
-
-                for ch in abx_channels:
-                    ch = ch.split(f'_{self.mask_object}')[0]
-                    channel_number = markers['channel_number'][
-                                markers['marker_name'] == ch]
-
-                    # read antibody image
-                    img = imread(
-                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
-                        key=(channel_number-1)
-                        )
-
-                    viewer.add_image(
-                        img, rgb=False, blending='additive',
-                        colormap='green', visible=False,
-                        name=ch
-                        )
-
-        # create channel settings configuration file,
-        # update with chosen constrast limits
-        contrast_limits = {}
-        for ch in [dna1] + abx_channels:
-            ch = ch.split(f'_{self.mask_object}')[0]
-            contrast_limits[ch] = viewer.layers[ch].contrast_limits
-
-        with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
-            yaml.dump(contrast_limits, file)
-        print()
-
-        return data
 
     @module
     def selectROIs(data, self, args):
@@ -469,10 +382,14 @@ class QC(object):
 
         else:
             samples_to_draw = data['Sample'].unique()
-            print(f'Samples to draw: {len(samples_to_draw)}')
+            print(f'Samples requiring ROI selection: {len(samples_to_draw)}')
+            print()
             polygon_dict = {}
 
-        if (len(samples_to_draw) > 0) or (len([name for name in os.listdir(selection_dir) if name.endswith('.txt')]) < len(data['Sample'].unique())):
+        if (
+          (len(samples_to_draw) > 0) or
+          (len([name for name in os.listdir(selection_dir) if
+           name.endswith('.txt')]) < len(data['Sample'].unique()))):
             for sample_name in natsorted(samples_to_draw):
 
                 dna = imread(
@@ -484,7 +401,7 @@ class QC(object):
                     viewer = napari.view_image(
                         dna, rgb=False, blending='additive',
                         colormap='gray', visible=True,
-                        name=f'{dna1}: {sample_name}'
+                        name=f'{dna1}:{sample_name}'
                         )
 
                     if self.show_ab_channels:
@@ -589,9 +506,9 @@ class QC(object):
                             sample_data[['Y_centroid', 'X_centroid']])]
                         )
 
-                    clearRAM(print_usage=True)
+                    clearRAM(print_usage=False)
                     del columns, rows
-                    clearRAM(print_usage=True)
+                    clearRAM(print_usage=False)
 
                     cell_ids = set()
                     mask_coords = set()
@@ -599,18 +516,18 @@ class QC(object):
                         for poly in polygon_dict[sample_name]:
                             selection_verts = np.round(poly).astype(int)
                             polygon = Path(selection_verts)
-                            print('C')
+                            # print('C')
                             grid = polygon.contains_points(pixel_coords)
                             mask = grid.reshape(
                                 dna.shape[0], dna.shape[1])
-                            print('D')
+                            # print('D')
                             mask_coords.update(
                                 [tuple(i) for i in np.argwhere(mask)]
                                 )
-                            print('E')
-                        clearRAM(print_usage=True)
+                            # print('E')
+                        clearRAM(print_usage=False)
                         del grid, mask, dna, pixel_coords
-                        clearRAM(print_usage=True)
+                        clearRAM(print_usage=False)
 
                     inter = mask_coords.intersection(cell_coords)
 
@@ -626,21 +543,22 @@ class QC(object):
                                  if i[1]['tuple'] not in inter]
                                  )  # take all cells if no ROIs drawn
 
-                    clearRAM(print_usage=True)
+                    clearRAM(print_usage=False)
                     del sample_data, inter, cell_coords
-                    clearRAM(print_usage=True)
+                    clearRAM(print_usage=False)
 
                     os.chdir(selection_dir)
                     f = open(f'{sample_name}.txt', 'wb')
                     pickle.dump(cell_ids, f)
                     f.close()
+            print()
 
             # drop cell IDs from full dataframe
             os.chdir(selection_dir)
             for file in os.listdir(selection_dir):
                 if file.endswith('.txt'):
                     file_name = file.split('.txt')[0]
-                    print(f'Dropping cells from {file_name}')
+                    print(f'Dropping cells from sample {file_name}')
                     f = open(file, 'rb')
                     cell_ids = pickle.load(f)
                     cell_ids = set(cell_ids)
@@ -704,7 +622,7 @@ class QC(object):
         axLowerCutoff = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
         axUpperCutoff = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
 
-        rnge = [0, bins.max()]
+        rnge = [bins.min(), bins.max()]
 
         sLower = Slider(
             axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
@@ -798,6 +716,10 @@ class QC(object):
             range=None, label='before'
             )
 
+        if lowerCutoff == upperCutoff:
+            lowerCutoff = data[f'{dna1}_{self.mask_object}'].min()
+            upperCutoff = data[f'{dna1}_{self.mask_object}'].max()
+
         # apply lower and upper cutoffs
         df = data[
             (data[f'{dna1}_{self.mask_object}'] > lowerCutoff) &
@@ -869,7 +791,7 @@ class QC(object):
         axLowerCutoff = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
         axUpperCutoff = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
 
-        rnge = [0, bins.max()]
+        rnge = [bins.min(), bins.max()]
 
         sLower = Slider(
             axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
@@ -976,6 +898,10 @@ class QC(object):
             range=None, label='before'
             )
 
+        if lowerCutoff == upperCutoff:
+            lowerCutoff = data['Area'].min()
+            upperCutoff = data['Area'].max()
+
         # apply lower and upper cutoffs
         df = data[
             (data['Area'] > lowerCutoff) &
@@ -1031,11 +957,12 @@ class QC(object):
                 df['Sample'] == sample_name]
             sp = ax.scatter(
                 coords['X_centroid'], coords['Y_centroid'],
-                s=coords['Area']/2500, lw=0.0,
+                s=0.35, lw=0.0,
                 c=coords['Area'], cmap='viridis'
                 )
             plt.title(
-                f'Sample {sample_name}. Lasso colored by DNA area')
+                f'Sample {sample_name}. ' +
+                'Selected cells colored by nuclear area')
             plt.colorbar(sp)
             plt.savefig(
                 os.path.join(
@@ -1058,17 +985,24 @@ class QC(object):
             markers_to_exclude=self.markers_to_exclude,
             )
 
+        dna_cycles = natsorted(
+            data.columns[data.columns.str.contains(dna_moniker)]
+            )
+
         # log(cycle 1/n) ratios
         ratios = pd.DataFrame(
             [np.log10(
                 (data[f'{dna1}_{self.mask_object}'] + 0.00001) /
-                (data[i] + 0.00001)) for i in
-                natsorted(data.columns[
-                    data.columns.str.contains(dna_moniker)])]).T
+                (data[i] + 0.00001)) for i in dna_cycles]).T
+
         list1 = [i for i in ratios.columns if i.startswith('Unnamed')]
-        list2 = [f'1/{i+1}' for i in range(1, len(list1)+1)]
+        list2 = [
+            f'{dna1}/{i}' for i in
+            [j.split(f'_{self.mask_object}')[0] for j in dna_cycles[1:]]
+            ]
+
         ratio_columns = dict(zip(list1, list2))
-        ratio_columns[f'{dna1}_{self.mask_object}'] = '1/1'
+        ratio_columns[f'{dna1}_{self.mask_object}'] = f'{dna1}/{dna1}'
         ratios.rename(columns=ratio_columns, inplace=True)
         ratios['sample'] = data['Sample']
 
@@ -1110,29 +1044,37 @@ class QC(object):
             ratios_melt.sort_values(['sample', 'cycle', 'index'])
             )
 
-        sns.set(font_scale=0.5)
-        sns.set_style('whitegrid')
+        if not os.path.exists(
+          os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf')):
 
-        g = sns.FacetGrid(
-            ratios_melt, row='sample',
-            col='cycle', sharey=False
-            )
+            sns.set(font_scale=0.5)
+            sns.set_style('whitegrid')
 
-        g = g.map(
-            plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-            ec='none', range=self.log_ratio_rnge, bins=200, density=True
-            )
+            g = sns.FacetGrid(
+                ratios_melt, row='sample',
+                col='cycle', sharey=False
+                )
 
-        plt.savefig(
-            os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf'))
-        plt.close()
+            g = g.map(
+                plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
+                ec='none', range=self.log_ratio_rnge, bins=200, density=True
+                )
 
-        subprocess.call(
-            ['open', '-a', 'Preview', os.path.join(
-                cycles_dir, 'cycle_correlation(logRatio).pdf')])
+            plt.savefig(
+                os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf'))
+            plt.close()
+
+            subprocess.call(
+                ['open', '-a', 'Preview', os.path.join(
+                    cycles_dir, 'cycle_correlation(logRatio).pdf')])
+
+        else:
+            subprocess.call(
+                ['open', '-a', 'Preview', os.path.join(
+                    cycles_dir, 'cycle_correlation(logRatio).pdf')])
 
         if self.cutoffAxis == 'y':
-            def submit(text, g):
+            def submit(text):
 
                 count_cutoff = float(text.split(', ')[0])
                 os.chdir(cycles_dir)
@@ -1279,7 +1221,7 @@ class QC(object):
                 plt.show(block=False)
                 plt.close()
 
-            plt.rcParams['figure.figsize'] = (6, 3)
+            plt.rcParams['figure.figsize'] = (6, 2)
             axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
             text_box = TextBox(
                 axbox, 'countCutoff, sampleName', initial='',
@@ -1287,63 +1229,92 @@ class QC(object):
                 hovercolor='1.0',
                 label_pad=0.05
                 )
-            text_box.label.set_size(15)
+            text_box.label.set_size(12)
 
-            text_box.on_submit(lambda val: submit(val, g))
+            text_box.on_submit(submit)
 
             plt.show(block=True)
 
-            os.chdir(cycles_dir)
-            pickle_in = open('count_cutoff.pkl', 'rb')
-            count_cutoff = pickle.load(pickle_in)
+            if os.path.exists(
+              os.path.join(cycles_dir, 'count_cutoff.pkl')):
+                os.chdir(cycles_dir)
+                pickle_in = open('count_cutoff.pkl', 'rb')
+                count_cutoff = pickle.load(pickle_in)
+            else:
+                count_cutoff = 0.0
 
-            # initialize a set to append indices to drop
-            indices_to_drop = set()
-
-            last_cycle_data = (
-                ratios_melt[
-                    ratios_melt['cycle'] == ratios_melt['cycle']
-                    .cat.categories[-1]]
-                )
-
-            for name, group in last_cycle_data.groupby(['sample']):
-
-                # get histogram elements
+                sns.set(font_scale=0.5)
                 sns.set_style('whitegrid')
-                fig, ax = plt.subplots()
-                counts, bins, patches = plt.hist(
-                    group['log10(ratio)'], color='r', histtype='stepfilled',
-                    ec='none', range=None,
+
+                g = sns.FacetGrid(
+                    ratios_melt, row='sample',
+                    col='cycle', sharey=False
+                    )
+                g = g.map(
+                    plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
+                    ec='none', range=self.log_ratio_rnge,
                     bins=200, density=True
                     )
-                plt.close('all')
 
-                # plot histogram of log(ratios)
-                # with a horizontal line at cutoff point
-                # ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
-                # plt.title(sample + '_' + col_name)
-                # plt.show(block=True)
+                for ax in g.axes.ravel():
+                    ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
 
-                # get bin values (i.e. ratios) where cell
-                # counts are > than count_cutoff
-                count_indices = np.where(counts > count_cutoff)
-                bin_values = [bins[i] for i in count_indices[0]]
+                plt.savefig(
+                    os.path.join(
+                        cycles_dir, 'cycle_correlation(logRatio).pdf')
+                        )
 
-                if len(bin_values) > 1:
-                    min_bin_val = min(bin_values)
-                    max_bin_val = max(bin_values)
+            # initialize a list to append indices to drop
+            indices_to_drop = set()
 
-                    # get indices in log(ratio) series outside
-                    # min_bin_val and max_bin_val
-                    idxs = list(
-                        group['index'][
-                            (group['log10(ratio)'] < min_bin_val) |
-                            (group['log10(ratio)'] > max_bin_val)]
+            for name, group in ratios_melt.groupby(['sample']):
+                for cycle_ratio in group['cycle'].unique():
+                    if not (
+                      cycle_ratio.split('/')[0]
+                      == cycle_ratio.split('/')[1]):
+
+                        # isolate ratio data
+                        cycle_data = group[group['cycle'] == cycle_ratio]
+
+                        # get histogram elements
+                        sns.set_style('whitegrid')
+                        fig, ax = plt.subplots()
+                        counts, bins, patches = plt.hist(
+                            cycle_data['log10(ratio)'],
+                            color='r', histtype='stepfilled',
+                            ec='none', range=None,
+                            bins=200, density=True
                             )
+                        plt.close('all')
 
-                    # append indices of uncorrelated
-                    # log(ratios) to idx_list
-                    indices_to_drop.update(set(idxs))
+                        # plot histogram of log(ratios)
+                        # with a horizontal line at cutoff point
+                        # ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
+                        # plt.title(sample + '_' + col_name)
+                        # plt.show(block=True)
+
+                        # get bin values (i.e. ratios) where cell
+                        # counts are > than count_cutoff
+                        count_indices = np.where(counts > count_cutoff)
+                        bin_values = [bins[i] for i in count_indices[0]]
+
+                        if len(bin_values) > 1:
+                            min_bin_val = min(bin_values)
+                            max_bin_val = max(bin_values)
+
+                            # get indices in log(ratio) series outside
+                            # min_bin_val and max_bin_val
+                            idxs = list(
+                                cycle_data['index'][
+                                    (cycle_data['log10(ratio)']
+                                     < min_bin_val) |
+                                    (cycle_data['log10(ratio)']
+                                     > max_bin_val)]
+                                    )
+
+                            # append indices of uncorrelated
+                            # log(ratios) to idx_list
+                            indices_to_drop.update(set(idxs))
 
             # filter dataframe by selecting indices NOT in the
             # indices_to_drop list
@@ -1372,201 +1343,212 @@ class QC(object):
                 print(f'Samples to threshold: {stt}')
                 sample_drop_idxs = {}
 
-            # isolate ratio data for last imaging cycle
-            last_cycle_data = (
-                ratios_melt[
-                    ratios_melt['cycle'] == ratios_melt['cycle']
-                    .cat.categories[-1]]
-                )
             # drop samples previously run
-            last_cycle_data = last_cycle_data[
-                ~last_cycle_data['sample'].isin(sample_drop_idxs.keys())
+            ratios_melt = ratios_melt[
+                ~ratios_melt['sample'].isin(sample_drop_idxs.keys())
                 ]
 
-            last_cycle_num = (
-                ratios_melt['cycle']
-                .cat.categories[-1]
-                .split('/')[1]
-                )
+            # indices_to_drop list
+            indices_to_drop = []
 
-            num_bins = 100
-            histtype = 'stepfilled'
-            sns.set_style('whitegrid')
+            for name, group in ratios_melt.groupby(['sample']):
+                for cycle_ratio in group['cycle'].unique():
+                    if not (
+                      cycle_ratio.split('/')[0]
+                      == cycle_ratio.split('/')[1]):
 
-            if not last_cycle_data.empty:
-                for name, group in last_cycle_data.groupby(['sample']):
+                        # isolate ratio data
+                        cycle_data = group[group['cycle'] == cycle_ratio]
 
-                    group.to_parquet(os.path.join(cycles_dir, 'group.parquet'))
+                        cycle_num = cycle_ratio.split('/')[1]
 
-                    fig, ax = plt.subplots()
-                    plt.subplots_adjust(left=0.25, bottom=0.25)
-                    counts, bins, patches = plt.hist(
-                        group['log10(ratio)'], bins=num_bins,
-                        density=False, color='grey', ec='none',
-                        alpha=0.75, histtype=histtype,
-                        range=None, label='before'
-                        )
+                        num_bins = 300
+                        histtype = 'stepfilled'
+                        sns.set_style('whitegrid')
 
-                    plt.title(
-                        f'Sample={name}   log10(cycle1/cycle{last_cycle_num})',
-                        size=10
-                        )
-                    plt.ylabel('count', size=10)
-
-                    axcolor = 'lightgoldenrodyellow'
-                    axLowerCutoff = plt.axes(
-                        [0.25, 0.15, 0.65, 0.03], facecolor=axcolor
-                        )
-                    axUpperCutoff = plt.axes(
-                        [0.25, 0.1, 0.65, 0.03], facecolor=axcolor
-                        )
-
-                    rnge = [0, bins.max()]
-
-                    sLower = Slider(
-                        axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
-                        valinit=0.00, valstep=(rnge[1]/100000)
-                        )
-                    sLower.label.set_color('b')
-
-                    sUpper = Slider(
-                        axUpperCutoff, 'upperCutoff', rnge[0], rnge[1],
-                        valinit=0.00, valstep=(rnge[1]/100000)
-                        )
-                    sUpper.label.set_color('r')
-
-                    def update(val):
-                        [i.remove() for i in ax.get_lines()]
-                        lowerCutoff = sLower.val
-                        upperCutoff = sUpper.val
-                        blueLine = ax.axvline(
-                            x=lowerCutoff, c='b', linewidth=2.5)
-                        redLine = ax.axvline(
-                            x=upperCutoff, c='r', linewidth=2.5)
-                        return lowerCutoff, upperCutoff
-
-                    sLower.on_changed(update)
-                    sUpper.on_changed(update)
-
-                    resetax = plt.axes([0.8, 0.025, 0.1, 0.04])
-                    button = Button(
-                        resetax, 'Reset', color=axcolor, hovercolor='0.975'
-                        )
-
-                    def reset(event):
-                        sLower.reset()
-                        sUpper.reset()
-                    button.on_clicked(reset)
-
-                    def submit(text):
-                        lowerCutoff, upperCutoff = update(val=None)
-
-                        # read group
-                        group = pd.read_parquet(
-                            os.path.join(cycles_dir, 'group.parquet')
-                            )
-
-                        # get indices in log(ratio) series outside
-                        # lower and upper cutoffs
-                        idxs = list(
-                            group['index'][
-                                (group['log10(ratio)'] < lowerCutoff) |
-                                (group['log10(ratio)'] > upperCutoff)]
+                        if not cycle_data.empty:
+                            cycle_data.to_parquet(
+                                os.path.join(cycles_dir, 'cycle_data.parquet')
                                 )
 
-                        if text == name:
-
-                            channel_number = markers['channel_number'][
-                                        markers['marker_name']
-                                        == f'{dna_moniker}{last_cycle_num}']
-
-                            dna_first = imread(
-                                f'{self.in_dir}/tif/{text}.*tif',
-                                key=0
+                            fig, ax = plt.subplots()
+                            plt.subplots_adjust(left=0.25, bottom=0.25)
+                            counts, bins, patches = plt.hist(
+                                cycle_data['log10(ratio)'], bins=num_bins,
+                                density=False, color='grey', ec='none',
+                                alpha=0.75, histtype=histtype,
+                                range=None, label='before'
                                 )
 
-                            dna_last = imread(
-                                f'{self.in_dir}/tif/{text}.*tif',
-                                key=channel_number - 1
+                            plt.title(
+                                f'Sample={name}   log10({dna1}/{cycle_num})',
+                                size=10
+                                )
+                            plt.ylabel('count', size=10)
+
+                            axcolor = 'lightgoldenrodyellow'
+                            axLowerCutoff = plt.axes(
+                                [0.25, 0.15, 0.65, 0.03], facecolor=axcolor
+                                )
+                            axUpperCutoff = plt.axes(
+                                [0.25, 0.1, 0.65, 0.03], facecolor=axcolor
                                 )
 
-                            # filter group data by selecting
-                            # indices NOT in idxs
-                            sample_data = data[data['Sample'] == name]
-                            drop_df = sample_data.index.isin(idxs)
-                            sample_centroids = sample_data[
-                                ['Y_centroid', 'X_centroid']][~drop_df]
+                            rnge = [bins.min(), bins.max()]
 
-                            with napari.gui_qt():
-                                viewer = napari.view_image(
-                                    dna_last, rgb=False, blending='additive',
-                                    colormap='green',
-                                    name=f'{dna_moniker}{last_cycle_num}'
+                            sLower = Slider(
+                                axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
+                                valinit=0.00, valstep=(rnge[1]/100000)
+                                )
+                            sLower.label.set_color('b')
+
+                            sUpper = Slider(
+                                axUpperCutoff, 'upperCutoff', rnge[0], rnge[1],
+                                valinit=0.00, valstep=(rnge[1]/100000)
+                                )
+                            sUpper.label.set_color('r')
+
+                            def update(val):
+                                [i.remove() for i in ax.get_lines()]
+                                lowerCutoff = sLower.val
+                                upperCutoff = sUpper.val
+                                blueLine = ax.axvline(
+                                    x=lowerCutoff, c='b', linewidth=2.5)
+                                redLine = ax.axvline(
+                                    x=upperCutoff, c='r', linewidth=2.5)
+                                return lowerCutoff, upperCutoff
+
+                            sLower.on_changed(update)
+                            sUpper.on_changed(update)
+
+                            resetax = plt.axes([0.8, 0.025, 0.1, 0.04])
+                            button = Button(
+                                resetax, 'Reset', color=axcolor,
+                                hovercolor='0.975'
+                                )
+
+                            def reset(event):
+                                sLower.reset()
+                                sUpper.reset()
+                            button.on_clicked(reset)
+
+                            def submit(text):
+                                lowerCutoff, upperCutoff = update(val=None)
+
+                                # read group
+                                cycle_data = pd.read_parquet(
+                                    os.path.join(
+                                        cycles_dir, 'cycle_data.parquet')
                                     )
 
-                                viewer.add_image(
-                                    dna_first, rgb=False, blending='additive',
-                                    colormap='red', name=f'{dna1}'
+                                # get indices in log(ratio) series outside
+                                # lower and upper cutoffs
+                                idxs = list(
+                                    cycle_data['index'][
+                                        (cycle_data['log10(ratio)']
+                                         < lowerCutoff) |
+                                        (cycle_data['log10(ratio)']
+                                         > upperCutoff)]
+                                        )
+
+                                if text == name:
+
+                                    channel_number = markers['channel_number'][
+                                                markers['marker_name']
+                                                == f'{cycle_num}']
+
+                                    dna_first = imread(
+                                        f'{self.in_dir}/tif/{text}.*tif',
+                                        key=0
+                                        )
+
+                                    dna_last = imread(
+                                        f'{self.in_dir}/tif/{text}.*tif',
+                                        key=channel_number - 1
+                                        )
+
+                                    # filter group data by selecting
+                                    # indices NOT in idxs
+                                    sample_data = data[data['Sample'] == name]
+                                    drop_df = sample_data.index.isin(idxs)
+                                    sample_centroids = sample_data[
+                                        ['Y_centroid', 'X_centroid']][~drop_df]
+
+                                    with napari.gui_qt():
+                                        viewer = napari.view_image(
+                                            dna_last, rgb=False,
+                                            blending='additive',
+                                            colormap='magenta',
+                                            name=f'{cycle_num}'
+                                            )
+                                        viewer.add_image(
+                                            dna_first, rgb=False,
+                                            blending='additive',
+                                            colormap='green', name=f'{dna1}'
+                                            )
+                                        viewer.add_points(
+                                            sample_centroids,
+                                            name='Stable Nuclei',
+                                            properties=None,
+                                            face_color='yellow',
+                                            edge_color='k',
+                                            edge_width=0.0, size=4.0
+                                            )
+                                else:
+                                    print(
+                                        'Must enter name of current' +
+                                        f' sample: {name}.'
+                                        )
+
+                            axbox = plt.axes([0.4, 0.025, 0.35, 0.045])
+                            text_box = TextBox(
+                                axbox, 'evaluation sample name', initial='',
+                                color='0.95',
+                                hovercolor='1.0',
+                                label_pad=0.05
+                                )
+                            text_box.on_submit(submit)
+                            plt.show(block=True)
+
+                            # update sample_drop_idxs dictionary
+                            lowerCutoff, upperCutoff = update(val=None)
+
+                            cycle_data = pd.read_parquet(
+                                os.path.join(cycles_dir, 'cycle_data.parquet')
+                                )
+
+                            # take all data if sliders not moved
+                            if lowerCutoff == upperCutoff:
+                                lowerCutoff = cycle_data['log10(ratio)'].min()
+                                upperCutoff = cycle_data['log10(ratio)'].max()
+
+                            idxs = list(
+                                cycle_data['index'][
+                                    (cycle_data['log10(ratio)'] < lowerCutoff)
+                                    |
+                                    (cycle_data['log10(ratio)'] > upperCutoff)]
                                     )
-                                viewer.add_points(
-                                    sample_centroids, name='Stable Nuclei',
-                                    properties=None,
-                                    face_color='cyan',
-                                    edge_color='k', edge_width=0.0, size=4.0
-                                    )
+                            sample_drop_idxs[name] = idxs
+
+                            # update drop indices pickle
+                            os.chdir(cycles_dir)
+                            f = open('sample_drop_idxs.pkl', 'wb')
+                            pickle.dump(sample_drop_idxs, f)
+                            f.close()
+
+                            # filter dataframe by selecting indices NOT in the
+                            for k, v in sample_drop_idxs.items():
+                                for j in v:
+                                    indices_to_drop.append(j)
+
                         else:
-                            print(
-                                f'Must enter name of current sample: {name}.'
-                                )
+                            # filter dataframe by selecting indices NOT in the
+                            indices_to_drop = []
+                            for k, v in sample_drop_idxs.items():
+                                for j in v:
+                                    indices_to_drop.append(j)
 
-                    axbox = plt.axes([0.4, 0.025, 0.35, 0.045])
-                    text_box = TextBox(
-                        axbox, 'evaluation sample name', initial='',
-                        color='0.95',
-                        hovercolor='1.0',
-                        label_pad=0.05
-                        )
-                    text_box.on_submit(submit)
-                    plt.show(block=True)
-
-                    # update sample_drop_idxs dictionary
-                    lowerCutoff, upperCutoff = update(val=None)
-                    group = pd.read_parquet(
-                        os.path.join(cycles_dir, 'group.parquet')
-                        )
-                    idxs = list(
-                        group['index'][
-                            (group['log10(ratio)'] < lowerCutoff) |
-                            (group['log10(ratio)'] > upperCutoff)]
-                            )
-                    sample_drop_idxs[name] = idxs
-
-                    # update drop indices pickle
-                    os.chdir(cycles_dir)
-                    f = open('sample_drop_idxs.pkl', 'wb')
-                    pickle.dump(sample_drop_idxs, f)
-                    f.close()
-
-                # filter dataframe by selecting indices NOT in the
-                # indices_to_drop list
-                indices_to_drop = []
-                for k, v in sample_drop_idxs.items():
-                    indices_to_drop.append(v)
-                indices_to_drop = [
-                    item for sublist in indices_to_drop for item in sublist
-                    ]
-                df = data.loc[~data.index.isin(indices_to_drop)]
-
-            else:
-                # filter dataframe by selecting indices NOT in the
-                # indices_to_drop list
-                indices_to_drop = []
-                for k, v in sample_drop_idxs.items():
-                    indices_to_drop.append(v)
-                indices_to_drop = [
-                    item for sublist in indices_to_drop for item in sublist
-                    ]
-                df = data.loc[~data.index.isin(indices_to_drop)]
+            df = data.loc[~data.index.isin(indices_to_drop)]
 
         # grab dna and sample columns
         facet_input = df.loc[
@@ -1577,7 +1559,7 @@ class QC(object):
             .sample(frac=1.0)
             .reset_index()
             .melt(id_vars=['Sample', 'index'], var_name='cycle',
-                  value_name=f'{dna1}_{self.mask_object}')
+                  )
             )
 
         facet_per_cycle_melt['Sample'] = pd.Categorical(
@@ -1603,11 +1585,11 @@ class QC(object):
 
         g.map(
             lambda y, color: plt.scatter(
-                facet_per_cycle_melt[f'{dna1}_{self.mask_object}'].loc[
+                facet_per_cycle_melt['value'].loc[
                     facet_per_cycle_melt['cycle']
                     == f'{dna1}_{self.mask_object}'], y,
                 s=0.05, alpha=0.1, linewidth=None,
-                marker='o', c='r'), f'{dna1}_{self.mask_object}')
+                marker='o', c='r'), 'value')
         plt.savefig(
             os.path.join(
                 cycles_dir, 'cycle_correlation(perCycle).png'), dpi=800
@@ -1644,10 +1626,10 @@ class QC(object):
                      sam.unique()[0])
                     & (facet_per_cycle_melt['cycle'] ==
                        f'{dna1}_{self.mask_object}'),
-                    f'{dna1}_{self.mask_object}'], y,
+                    'value'], y,
                 c=np.reshape(sample_color_dict[sam.unique()[0]], (-1, 3)),
                 s=0.05, linewidth=None, marker='o', **kwargs),
-            'Sample', f'{dna1}_{self.mask_object}'
+            'Sample', 'value'
             )
 
         plt.legend(markerscale=10, bbox_to_anchor=(1.1, 1.05))
@@ -1661,8 +1643,8 @@ class QC(object):
         print()
 
         # remove last sample groupby dataframe
-        if os.path.exists(os.path.join(cycles_dir, 'group.parquet')):
-            os.remove(os.path.join(cycles_dir, 'group.parquet'))
+        if os.path.exists(os.path.join(cycles_dir, 'cycle_data.parquet')):
+            os.remove(os.path.join(cycles_dir, 'cycle_data.parquet'))
 
         return df
 
@@ -1696,22 +1678,21 @@ class QC(object):
             )
 
         # save images
-        hexbin_dir = os.path.join(self.out_dir, 'hexbins')
-        if not os.path.exists(hexbin_dir):
-            os.mkdir(hexbin_dir)
+        pruning_dir = os.path.join(self.out_dir, 'pruning')
+        if not os.path.exists(pruning_dir):
+            os.mkdir(pruning_dir)
 
         # store upper and lower percentile cutoffs for antibody channels
         # pick up where left off
-        if os.path.exists(os.path.join(hexbin_dir, 'hexbin_dict.pkl')):
-            f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'rb')
-            hexbin_dict = pickle.load(f)
+        if os.path.exists(os.path.join(pruning_dir, 'pruning_dict.pkl')):
+            f = open(os.path.join(pruning_dir, 'pruning_dict.pkl'), 'rb')
+            pruning_dict = pickle.load(f)
             total_markers = set(abx_channels)
-            completed_markers = set(hexbin_dict.keys())
+            completed_markers = set(pruning_dict.keys())
             scrambled_markers_to_prune = total_markers.difference(
                 completed_markers
                 )
             # revert scrambled markers back to marker.csv order
-            # (unnecessary step, but tidy)
             markers_dict = dict(zip(abx_channels, range(0, len(abx_channels))))
             sorted_marker_idxs = sorted(
                 [markers_dict[i] for i in scrambled_markers_to_prune]
@@ -1720,19 +1701,22 @@ class QC(object):
                 list(markers_dict.keys())[list(markers_dict.values()).index(i)]
                 for i in sorted_marker_idxs
                 ]
-            print(f'Markers to prune: {len(markers_to_prune)}')
-            os.chdir(hexbin_dir)
-            data_copy1 = pd.read_parquet('data_copy1.parquet')
+            print(f'Immunomarker channels to prune: {len(markers_to_prune)}')
+            print()
+            if os.path.exists(os.path.join(pruning_dir, 'data_copy1.parquet')):
+                os.chdir(pruning_dir)
+                data_copy1 = pd.read_parquet('data_copy1.parquet')
         else:
             markers_to_prune = abx_channels
-            print(f'Markers to prune: {len(markers_to_prune)}')
-            hexbin_dict = {}
+            print(f'Immunomarker channels to prune: {len(markers_to_prune)}')
+            print()
+            pruning_dict = {}
             data_copy1 = data.copy()
 
-        # plot raw signal intensity hexbins for inspection
+        # plot raw signal intensity distributions for inspection
         for ab in sorted(markers_to_prune):
 
-            print(ab)
+            print(ab.split(f'_{self.mask_object}')[0])
 
             hist_facet = (
                 data_copy1[['Sample', 'Condition', 'Area'] + [ab]]
@@ -1752,7 +1736,7 @@ class QC(object):
             sns.set_style('white')
             g = sns.FacetGrid(
                 hist_facet, col='for_plot', col_wrap=15,
-                height=0.5, aspect=1.0, sharex=True, sharey=False
+                height=3.0, aspect=1.0, sharex=True, sharey=False,
                 )
 
             if self.hexbins:
@@ -1764,23 +1748,25 @@ class QC(object):
             else:
                 g.map(
                     lambda x, y, color: plt.scatter(
-                        x, y, s=0.02, linewidths=0.0, color='k'),
+                        x, y, s=1.0, linewidths=0.0, color='k'),
                     'signal', 'Area')
 
             g.set_titles(
                 col_template="{col_name}", fontweight='bold',
-                size=1.5, pad=0.75
+                size=9.0, pad=2.0
                 )
 
-            g.fig.suptitle(ab, y=1.1, size=8.0)
+            g.fig.suptitle(
+                ab.split(f'_{self.mask_object}')[0], y=1.1, size=20.0
+                )
 
             for ax in g.axes.flatten():
                 ax.tick_params(
                     axis='both', which='major',
-                    labelsize=1.0, pad=-5
+                    labelsize=5.0, pad=-2
                     )
-                ax.xaxis.label.set_size(2.0)
-                ax.yaxis.label.set_size(2.0)
+                ax.xaxis.label.set_size(10.0)
+                ax.yaxis.label.set_size(10.0)
 
                 if self.hexbins:
                     ax.spines['left'].set_visible(False)
@@ -1796,31 +1782,35 @@ class QC(object):
 
             plt.savefig(
                 os.path.join(
-                    hexbin_dir, f'{ab}_hexbins(raw).pdf'),
+                    pruning_dir,
+                    f'{ab.split(f"_{self.mask_object}")[0]}_raw.pdf'),
                 bbox_inches='tight')
-
             plt.close()
 
             subprocess.call(
                 ['open', '-a', 'Preview', os.path.join(
-                    hexbin_dir, f'{ab}_hexbins(raw).pdf')])
+                    pruning_dir,
+                    f'{ab.split(f"_{self.mask_object}")[0]}_raw.pdf')]
+                    )
 
             def submit(text):
 
                 lowerPercentileCutoff = float(text.split(',')[0])
                 upperPercentileCutoff = float(text.split(',')[1])
 
-                hexbin_dict[ab] = (
+                pruning_dict[ab] = (
                     lowerPercentileCutoff,
                     upperPercentileCutoff
                     )
 
-                os.chdir(hexbin_dir)
-                f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
-                pickle.dump(hexbin_dict, f)
+                os.chdir(pruning_dir)
+                f = open(os.path.join(pruning_dir, 'pruning_dict.pkl'), 'wb')
+                pickle.dump(pruning_dict, f)
                 f.close()
 
-                data_copy2 = data_copy1.copy()
+                data_copy2 = (
+                    data_copy1[['Sample', 'Condition', 'Area'] + [ab]].copy()
+                    )
 
                 channel_data = data_copy2[ab]
 
@@ -1864,7 +1854,7 @@ class QC(object):
 
                 # plot pruned and rescaled signal intensity histrograms
                 hist_facet = (
-                    data_copy2[['Sample', 'Condition', 'Area'] + [ab]]
+                    data_copy2
                     .sample(frac=1.0)
                     .melt(
                         id_vars=['Sample', 'Condition', 'Area'],
@@ -1882,7 +1872,7 @@ class QC(object):
 
                 g = sns.FacetGrid(
                     hist_facet, col='for_plot', col_wrap=15,
-                    height=0.5, aspect=1.0, sharex=True, sharey=False
+                    height=3.0, aspect=1.0, sharex=True, sharey=False
                     )
 
                 if self.hexbins:
@@ -1894,23 +1884,25 @@ class QC(object):
                 else:
                     g.map(
                         lambda x, y, color: plt.scatter(
-                            x, y, s=0.02, linewidths=0.0, color='k'),
+                            x, y, s=1.0, linewidths=0.0, color='k'),
                         'signal', 'Area')
 
                 g.set_titles(
                     col_template="{col_name}", fontweight='bold',
-                    size=1.5, pad=0.75
+                    size=9.0, pad=2.0
                     )
 
-                g.fig.suptitle(ab, y=1.1, size=8.0)
+                g.fig.suptitle(
+                    ab.split(f'_{self.mask_object}')[0], y=1.1, size=20.0
+                    )
 
                 for ax in g.axes.flatten():
                     ax.tick_params(
                         axis='both', which='major',
-                        labelsize=1.0, pad=-5
+                        labelsize=5.0, pad=-2
                         )
-                    ax.xaxis.label.set_size(2.0)
-                    ax.yaxis.label.set_size(2.0)
+                    ax.xaxis.label.set_size(10.0)
+                    ax.yaxis.label.set_size(10.0)
 
                     if self.hexbins:
                         ax.spines['left'].set_visible(False)
@@ -1926,21 +1918,22 @@ class QC(object):
 
                 plt.savefig(
                     os.path.join(
-                        hexbin_dir,
-                        f'{ab}_hexbins(pruned_rescaled).pdf'),
+                        pruning_dir,
+                        f'{ab.split(f"_{self.mask_object}")[0]}' +
+                        '_pruned_rescaled.pdf'),
                     bbox_inches='tight'
                         )
-
                 plt.close()
 
                 subprocess.call(
                     ['open', '-a', 'Preview', os.path.join(
-                        hexbin_dir,
-                        f'{ab}_hexbins(pruned_rescaled).pdf')]
+                        pruning_dir,
+                        f'{ab.split(f"_{self.mask_object}")[0]}' +
+                        '_pruned_rescaled.pdf')]
                         )
                 ##################
 
-            plt.rcParams['figure.figsize'] = (7, 3)
+            plt.rcParams['figure.figsize'] = (6, 2)
             axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
             text_box = TextBox(
                 axbox,
@@ -1950,19 +1943,19 @@ class QC(object):
                 hovercolor='1.0',
                 label_pad=0.05
                 )
-            text_box.label.set_size(10)
+            text_box.label.set_size(12)
 
             text_box.on_submit(submit)
 
             plt.show(block=True)
 
-            if ab not in hexbin_dict.keys():
+            if ab not in pruning_dict.keys():
                 # default crop percentiles if not explicitly set
-                hexbin_dict[ab] = (0.1, 100.0)
+                pruning_dict[ab] = (0.0, 100.0)
 
-                os.chdir(hexbin_dir)
-                f = open(os.path.join(hexbin_dir, 'hexbin_dict.pkl'), 'wb')
-                pickle.dump(hexbin_dict, f)
+                os.chdir(pruning_dir)
+                f = open(os.path.join(pruning_dir, 'pruning_dict.pkl'), 'wb')
+                pickle.dump(pruning_dict, f)
                 f.close()
 
             channel_data = data_copy1[ab]
@@ -1974,7 +1967,7 @@ class QC(object):
                 channel_data.index[
                     channel_data < np.percentile(
                         channel_data,
-                        hexbin_dict[ab][0])]
+                        pruning_dict[ab][0])]
                     )
 
             # add row index to list if column value > upper bound
@@ -1982,7 +1975,7 @@ class QC(object):
                 channel_data.index[
                     channel_data > np.percentile(
                         channel_data,
-                        hexbin_dict[ab][1])])
+                        pruning_dict[ab][1])])
 
             data_copy1.drop(
                 labels=set(indices_to_drop), axis=0,
@@ -2007,13 +2000,90 @@ class QC(object):
 
             data_copy1.update(rescaled_data)
 
-            os.chdir(hexbin_dir)
+            # plot pruned and rescaled signal intensity histrograms
+            hist_facet = (
+                data_copy1[['Sample', 'Condition', 'Area'] + [ab]]
+                .sample(frac=1.0)
+                .melt(
+                    id_vars=['Sample', 'Condition', 'Area'],
+                    var_name='channel', value_name='signal')
+                )
+
+            # sort and create labels column for plotting
+            hist_facet.sort_values(
+                by=['Condition', 'Sample'], inplace=True
+                )
+            hist_facet['for_plot'] = (
+                hist_facet['Condition'] + ', ' +
+                hist_facet['Sample']
+                )
+
+            g = sns.FacetGrid(
+                hist_facet, col='for_plot', col_wrap=15,
+                height=3.0, aspect=1.0, sharex=True, sharey=False
+                )
+
+            if self.hexbins:
+                g.map(
+                    lambda x, y, color: plt.hexbin(
+                        x, y, gridsize=self.hexbin_grid_size,
+                        linewidths=0.02, color='dimgrey'),
+                    'signal', 'Area')
+            else:
+                g.map(
+                    lambda x, y, color: plt.scatter(
+                        x, y, s=1.0, linewidths=0.0, color='k'),
+                    'signal', 'Area')
+
+            g.set_titles(
+                col_template="{col_name}", fontweight='bold',
+                size=9.0, pad=2.0
+                )
+
+            g.fig.suptitle(
+                ab.split(f'_{self.mask_object}')[0], y=1.1, size=20.0
+                )
+
+            for ax in g.axes.flatten():
+                ax.tick_params(
+                    axis='both', which='major',
+                    labelsize=5.0, pad=-2
+                    )
+                ax.xaxis.label.set_size(10.0)
+                ax.yaxis.label.set_size(10.0)
+
+                if self.hexbins:
+                    ax.spines['left'].set_visible(False)
+                    ax.spines['bottom'].set_visible(False)
+                else:
+                    ax.spines['left'].set_linewidth(0.1)
+                    ax.spines['bottom'].set_linewidth(0.1)
+
+            plt.subplots_adjust(
+                left=0.01, bottom=0.01, right=0.99,
+                top=0.90, hspace=0.4, wspace=0.4
+                )
+
+            plt.savefig(
+                os.path.join(
+                    pruning_dir,
+                    f'{ab.split(f"_{self.mask_object}")[0]}' +
+                    '_pruned_rescaled.pdf'),
+                bbox_inches='tight'
+                    )
+            plt.close()
+
+            os.chdir(pruning_dir)
             data_copy1.to_parquet('data_copy1.parquet')
+        print()
 
         # apply percentile cutoffs to their respective channels
         # in the same order as originally curated
-        for k, v in sorted(hexbin_dict.items()):
-            print(f'Applying percentile cutoffs to the {k} channel.')
+        for k, v in sorted(pruning_dict.items()):
+            print(
+                'Applying percentile cutoffs to the ' +
+                f'{k.split(f"_{self.mask_object}")[0]} channel.'
+                )
             channel_data = data[k]
 
             indices_to_drop = []
@@ -2055,6 +2125,12 @@ class QC(object):
             data.update(rescaled_data)
 
         print()
+
+        # remove data_copy1 file (equivalent to data returned by this module)
+        # note: data_copy1 is updated after each channel is
+        # pruned/rescaled for dynamic restarts
+        if os.path.exists(os.path.join(pruning_dir, 'data_copy1.parquet')):
+            os.remove(os.path.join(pruning_dir, 'data_copy1.parquet'))
 
         return data
 
@@ -2714,7 +2790,8 @@ class QC(object):
                         plt.savefig(
                             os.path.join(
                                 self.out_dir,
-                                f'tsne_{color_by}_{min_cluster_size}.png'),
+                                f'{self.embeddingAlgorithm}_'
+                                f'{min_cluster_size}.png'),
                             bbox_extra_artists=(cluster_lgd, sample_lgd),
                             bbox_inches='tight', dpi=1000
                             )
@@ -2753,8 +2830,8 @@ class QC(object):
                         f'min_cluster_size={i}', np.unique(clustering.labels_)
                         )
 
-        plt.rcParams['figure.figsize'] = (7, 3)
-        axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
+        plt.rcParams['figure.figsize'] = (6, 2)
+        axbox = plt.axes([0.6, 0.525, 0.35, 0.15])
         text_box = TextBox(
             axbox,
             'min_cluster_size (single # or range #-# .save)',
@@ -2763,10 +2840,12 @@ class QC(object):
             hovercolor='1.0',
             label_pad=0.05
             )
-        text_box.label.set_size(10)
+        text_box.label.set_size(12)
         text_box.on_submit(submit)
         plt.show(block=True)
         print()
+
+        df.drop(columns='label', inplace=True)
 
         return df
 
@@ -2784,7 +2863,7 @@ class QC(object):
         cluster_heatmap_input = clustermap_input[
             abx_channels + ['cluster']].groupby('cluster').mean()
 
-        sns.set(font_scale=0.4)
+        sns.set(font_scale=0.8)
         g = sns.clustermap(
             cluster_heatmap_input, cmap='viridis', standard_scale=1,
             square=False, yticklabels=1, linewidth=0.1, cbar=True
@@ -2817,6 +2896,8 @@ class QC(object):
 
         subplot_kw = dict()
 
+        plt.rcParams['figure.figsize'] = (8, 8)
+
         fig, ax = plt.subplots(subplot_kw=subplot_kw)
 
         # build cmap
@@ -2845,14 +2926,16 @@ class QC(object):
 
         def accept(event):
             if event.key == "enter":
-                print("Selected points:")
-                print(selector.xys[selector.ind])
+                # print("Selected points:")
+                # print(selector.xys[selector.ind])
                 selector.disconnect()
                 ax.set_title("")
                 fig.canvas.draw()
 
         fig.canvas.mpl_connect("key_press_event", accept)
-        ax.set_title('TSNE embedding. Press enter to accept selected points.')
+        ax.set_title(
+            f'{self.embeddingAlgorithm} embedding. ' +
+            'Press enter to accept selected points.')
         ax.set_aspect('equal')
         plt.show(block=True)
 
@@ -2988,9 +3071,10 @@ class QC(object):
                 cnd1_values = group['density'][group['status'] == test]
                 cnd2_values = group['density'][group['status'] == control]
 
+                # Welch's t-test (equal_var=False)
                 stat, pval = ttest_ind(
                     cnd1_values, cnd2_values,
-                    axis=0, equal_var=True, nan_policy='propagate')
+                    axis=0, equal_var=False, nan_policy='propagate')
 
                 stat = round(stat, 3)
                 pval = round(pval, 3)
@@ -3159,6 +3243,106 @@ class QC(object):
         return data
 
     @module
+    def setContrast(data, self, args):
+
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
+
+        dna = imread(
+            f'{self.in_dir}/tif/{self.view_sample}.*tif', key=0
+            )
+
+        if os.path.exists(
+          os.path.join(self.out_dir, 'contrast_limits.yml')):
+
+            contrast_limits = yaml.safe_load(
+                open(f'{self.out_dir}/contrast_limits.yml')
+                )
+
+            print ('Applying existing channel contrast settings.')
+
+            with napari.gui_qt():
+                viewer = napari.view_image(
+                    dna, rgb=False,
+                    blending='additive', colormap='gray',
+                    name=f'{dna1}:{self.view_sample}'
+                    )
+
+                viewer.layers[f'{dna1}:{self.view_sample}'].contrast_limits = (
+                    contrast_limits[dna1][0], contrast_limits[dna1][1]
+                    )
+
+                for ch in abx_channels:
+                    ch = ch.split(f'_{self.mask_object}')[0]
+                    channel_number = markers['channel_number'][
+                                markers['marker_name'] == ch]
+
+                    # read antibody image
+                    img = imread(
+                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
+                        key=(channel_number-1)
+                        )
+
+                    viewer.add_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False,
+                        name=ch
+                        )
+
+                    viewer.layers[ch].contrast_limits = (
+                        contrast_limits[ch][0], contrast_limits[ch][1]
+                        )
+
+        else:
+
+            print ('Channel contrast settings have not been defined.')
+
+            with napari.gui_qt():
+                viewer = napari.view_image(
+                    dna, rgb=False,
+                    blending='additive', colormap='gray',
+                    name=f'{dna1}:{self.view_sample}'
+                    )
+
+                for ch in abx_channels:
+                    ch = ch.split(f'_{self.mask_object}')[0]
+                    channel_number = markers['channel_number'][
+                                markers['marker_name'] == ch]
+
+                    # read antibody image
+                    img = imread(
+                        f'{self.in_dir}/tif/{self.view_sample}.*tif',
+                        key=(channel_number-1)
+                        )
+
+                    viewer.add_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False,
+                        name=ch
+                        )
+
+        # create channel settings configuration file,
+        # update with chosen constrast limits
+        contrast_limits = {}
+        for ch in [dna1] + abx_channels:
+            if ch == dna1:
+                contrast_limits[ch] = (
+                    viewer.layers[f'{dna1}:{self.view_sample}'].contrast_limits
+                    )
+            else:
+                ch = ch.split(f'_{self.mask_object}')[0]
+                contrast_limits[ch] = viewer.layers[ch].contrast_limits
+
+        with open(f'{self.out_dir}/contrast_limits.yml', 'w') as file:
+            yaml.dump(contrast_limits, file)
+        print()
+
+        return data
+
+    @module
     def curateThumbnails(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
@@ -3202,9 +3386,11 @@ class QC(object):
                 total_clusters.difference(completed_clusters)
                 )
             print(f'Clusters to run: {len(clusters_to_run)}')
+            print()
         else:
             clusters_to_run = natsorted(df['cluster'].unique())
             print(f'Clusters to run: {len(clusters_to_run)}')
+            print()
             thmbnls_to_run = []
 
         for cluster in clusters_to_run:
@@ -3234,7 +3420,7 @@ class QC(object):
 
             long_table = pd.DataFrame()
 
-            for sample_name in ome_tifs:  # ['840069_0031-median_r_50']
+            for sample_name in ome_tifs:
                 print(f'Sample: {sample_name}')
 
                 # import cycle1 dna channel, convert to float and rgb
@@ -3277,9 +3463,9 @@ class QC(object):
                         dna += img
 
                         print(f'overlayed {marker} image')
-                        clearRAM(print_usage=True)
+                        clearRAM(print_usage=False)
                         del img
-                        clearRAM(print_usage=True)
+                        clearRAM(print_usage=False)
 
                 # crop out thumbnail images
                 sample_cluster_subset = data[
@@ -3318,9 +3504,9 @@ class QC(object):
                     ['X_centroid', 'Y_centroid']
                     ]
 
-                clearRAM(print_usage=True)
+                clearRAM(print_usage=False)
                 del sample_cluster_subset
-                clearRAM(print_usage=True)
+                clearRAM(print_usage=False)
 
                 centroid_img = np.zeros(
                     (dna.shape[0],
@@ -3357,9 +3543,9 @@ class QC(object):
                 dna += centroid_img
 
                 print('overlayed centroids')
-                clearRAM(print_usage=True)
+                clearRAM(print_usage=False)
                 del centroid_img
-                clearRAM(print_usage=True)
+                clearRAM(print_usage=False)
 
                 # crop thumbnails
                 for example, centroid in enumerate(
@@ -3402,6 +3588,23 @@ class QC(object):
                             + self.squareWindowDimension
                             )
 
+                        # for centroids falling within
+                        # self.squareWindowDimension pixels of the edge of the
+                        # dna image, ensure that the thumbnail image is not
+                        # cropped using negative slicing values, as it will
+                        # return an empty array and lead to a runtime error
+                        # during plotting.
+                        window_list = [
+                            ystart_window, ystop_window,
+                            xstart_window, xstop_window
+                            ]
+                        (ystart_window,
+                         ystop_window,
+                         xstart_window,
+                         xstop_window) = [
+                            0 if i < 0 else i for i in window_list
+                            ]
+
                         # crop overlay image to window size
                         thumbnail = dna[
                             ystart_window:ystop_window,
@@ -3417,16 +3620,14 @@ class QC(object):
                         # thumbnail.copy() so overlay image can be gc'd
 
                 # print('before dell dna')
-                # clearRAM(print_usage=True)
+                # clearRAM(print_usage=False)
                 # del dna
                 # print('after dell dna')
-                # clearRAM(print_usage=True)
+                # clearRAM(print_usage=False)
 
             long_table['example'] = [
                 int(i) for i in long_table['example']
                 ]
-
-            print()
 
             # plot facet grid
             fig, ax = plt.subplots()
@@ -3478,10 +3679,10 @@ class QC(object):
             pickle.dump(thmbnls_to_run, f)
             f.close()
 
-            # clearRAM(print_usage=True)
+            # clearRAM(print_usage=False)
             # del g
-            # clearRAM(print_usage=True)
-        print()
+            # clearRAM(print_usage=False)
+            print()
 
         return data
 
@@ -3608,130 +3809,7 @@ class QC(object):
     #     print()
     #     # self.data = df
     #     return data
-
-    # @module
-    # def cellDensities(self, args):
     #
-    #     if self.start_module == 'cellDensities':
-    #         df = read_dataframe(
-    #             modules_list=self.modules,
-    #             start_module=self.start_module,
-    #             outDir=self.out_dir,
-    #             )
-    #     else:
-    #         df = self.data
-    #
-    #     facet_input = df[df['cluster'] >= 0]
-    #
-    #     facet_input = facet_input.groupby(
-    #         ['Condition', 'Sample', 'cluster']).size().reset_index()
-    #     facet_input.rename(columns={0: 'count'}, inplace=True)
-    #
-    #     # divide cluster cell counts by total number of cells per sample
-    #     for name, group in facet_input.groupby(['Sample']):
-    #
-    #         total_cells = group['count'].sum()
-    #
-    #         facet_input.loc[group.index, 'cluster_conc'] = (
-    #             group['count']/total_cells
-    #             )
-    #
-    #     # pad counts tables, some clusters may be absent from samples
-    #     pad = pd.DataFrame()
-    #     for cluster in sorted(facet_input['cluster'].unique()):
-    #         to_append = pd.DataFrame(
-    #             {'Sample': natsorted(facet_input['Sample'].unique()),
-    #              'cluster': [cluster]*len(facet_input['Sample'].unique())})
-    #         pad = pad.append(to_append)
-    #     pad.reset_index(drop=True, inplace=True)
-    #     pad['Condition'] = [self.sample_conditions[i] for i in pad['Sample']]
-    #
-    #     facet_input = facet_input.merge(
-    #         pad, how='right', on=['Condition', 'Sample', 'cluster'])
-    #     facet_input.fillna(value=0, inplace=True)
-    #
-    #     new_df = pd.DataFrame()
-    #     for cluster in facet_input.groupby(['cluster']):
-    #         for name in cluster[1].groupby(['Condition']):
-    #             cluster[1].loc[
-    #                 name[1]['cluster_conc'].index, 'ave_cluster_conc'
-    #                 ] = name[1]['cluster_conc'].mean()
-    #         conds = cluster[1].drop_duplicates(subset=['Condition']).copy()
-    #         conds.sort_values(
-    #             by='ave_cluster_conc', ascending=False, inplace=True
-    #             )
-    #         conds.reset_index(drop=True, inplace=True)
-    #         conds.reset_index(drop=False, inplace=True)
-    #
-    #         conds_dict = dict(zip(conds['Condition'], conds['index']))
-    #         cluster[1]['index'] = [
-    #             conds_dict[i] for i in cluster[1]['Condition']
-    #             ]
-    #
-    #         new_df = new_df.append(cluster[1])
-    #
-    #     new_df.sort_values(
-    #         by=['cluster', 'ave_cluster_conc'],
-    #         ascending=[True, False], inplace=True)
-    #
-    #     # build cmap
-    #     cmap = categorical_cmap(
-    #         numUniqueSamples=len(facet_input['Condition'].unique()),
-    #         numCatagories=10,
-    #         cmap='tab10',
-    #         continuous=False
-    #         )
-    #
-    #     sns.set(font_scale=0.4)
-    #
-    #     g = sns.FacetGrid(
-    #         data=new_df, col='cluster', col_wrap=10,
-    #         sharex=False, sharey=False, height=1.5, aspect=1.3
-    #         )
-    #
-    #     g.map(
-    #         sns.barplot, 'Condition', 'cluster_conc',
-    #         linewidth=0.0, order=None, errwidth=0.2, palette=cmap.colors)
-    #
-    #     [
-    #         plt.setp(ax.get_xticklabels(), rotation=90, size=0.5) for
-    #         ax in g.axes.flat
-    #         ]
-    #
-    #     new_bar_width = 0.6
-    #     for ax, title in zip(
-    #         g.axes.flatten(), new_df['cluster'].unique()
-    #       ):
-    #
-    #         ax.set_title(title, size=6, weight='bold')
-    #         ax.set_xlabel('')
-    #
-    #         for patch in ax.patches:
-    #             current_width = patch.get_width()
-    #             diff = current_width - new_bar_width
-    #
-    #             # change the bar width
-    #             patch.set_width(new_bar_width)
-    #
-    #             # recenter the bar
-    #             patch.set_x(patch.get_x() + diff * 0.5)
-    #
-    #     plt.tight_layout()
-    #
-    #     plt.savefig(
-    #         os.path.join(self.out_dir, 'facetGrid.png'), dpi=800
-    #         )
-    #
-    #     plt.show(block=True)
-    #
-    #     save_dataframe(
-    #         df=df, outDir=self.out_dir,
-    #         moduleName='clustering'
-    #         )
-    #     print()
-    #     # self.data = df
-    #     return data
-
     # @module
     # def clusterBoxplots(self, args):
     #

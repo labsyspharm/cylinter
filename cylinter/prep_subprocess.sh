@@ -8,10 +8,10 @@
 
 shift $(( OPTIND - 1 ))
 
-if [ "$2" == "exemplar-002" ]; then
+if [ "$2" == "emit22_demo" ]; then
 
-  # Transfer exemplar-002 from Sage Synapse
-  synapse get -r syn24193164 --downloadLocation "$3" --multiThreaded
+  # Transfer emit22_demo from Sage Synapse
+  synapse get -r syn25685780 --downloadLocation "$3" --multiThreaded
 
   # Rename quantification and dearray subdirectories to "csv" and "tif", respectively.
   if [ -d "$3"/quantification ]; then
@@ -19,7 +19,7 @@ if [ "$2" == "exemplar-002" ]; then
       mv "$3"/dearray "$3"/tif
   fi
 
-  # Copy configuration template to CyLinter input directory
+  # Copy config.yml template to CyLinter input directory
   cp "$4" "$3"
 
 else
