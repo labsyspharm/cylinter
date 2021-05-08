@@ -1,29 +1,29 @@
 # Exemplar data
 
-[mcmicro](https://github.com/labsyspharm/mcmicro) output data from a two-by-two cut-out of a TMA (`exemplar-002`) are provided for demonstration purposes along with a `markers.csv` file containing immunomarker metadata. The four cores are two meningioma tumors, one GI stroma tumor, and one normal colon specimen. The data are stored at Sage Synapse under synapseID: syn24193163.
+Multiplex immunofluorescence data of four human tissue cores from a reference TMA dataset: Exemplar Microscopy Images of Tissues (EMIT), are provided for the purpose of demonstrating CyLinter usage (Synapse ID: [syn22345750](https://www.synapse.org/#!Synapse:syn22345750). The data consist of two lung squamous cell carcinoma cores, one colon adenocarcinoma core, and one diverticulitis core.
 
-Registration at Sage Synapse is required to download the exemplar data; registration is free at [https://www.synapse.org/](https://www.synapse.org/).
+Registration at the Sage Synapse data repository ([https://www.synapse.org/](https://www.synapse.org/)) is free and required before downloading the exemplar data using the following command:
 
 ``` bash
-# Activate the CyLinter virtual environment (if not already).
+# Activate the CyLinter virtual environment.
 source ~/cylinter/bin/activate
 
-prep exemplar-002 ~/Desktop/exemplar-002  # Enter Synapse ID and password when prompted.
+prep emit22_demo ~/Desktop/emit22_demo  # Enter Synapse ID and password when prompted.
 ```
 
-Once the download is complete, edit the `in_dir` and `out_dir` parameters of the template YAML configuration file (`~/Desktop/exemplar-002/config.yml`) previously added to the CyLinter input directory by the `prep` command. Note: all other metadata parameters have been pre-configured for `exemplar-002`.
+Be sure to populate the `in_dir` and `out_dir` parameters in the YAML configuration file (`~/Desktop/emit22_demo/config.yml`) with user-specific variables before running the program; all other metadata is pre-configured for use with the EMIT-22 demonstration data.
 
 ```yaml
-in_dir: /Users/<user>/Desktop/exemplar-002
-out_dir: /Users/<user>/Desktop/output
+in_dir: /Users/<user>/Desktop/emit22_demo
+out_dir: /Users/<user>/Desktop/emit22_demo/output
 .
 .
 .
 ```
 
-Run CyLinter on `exemplar-002`:
+Run CyLinter on `emit22_demo`:
 
 ``` bash
-# Pass the YAML configuration file for exemplar-002 to CyLinter for analysis
-cylinter --module (optional) ~/Desktop/exemplar-002/config.yml  
+# Pass the YAML configuration file for emit22_demo to CyLinter for analysis
+cylinter --module (optional) ~/Desktop/emit22_demo/config.yml  
 ```

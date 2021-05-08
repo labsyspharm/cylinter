@@ -4,17 +4,17 @@ CyLinter is developed on macOS and written in Python 3.
 
 ## Install Python 3
 
-Check if Python 3 is already installed.
+Check if Python 3 is installed.
 
 ``` bash
 python3 --version
 ```
 
- Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version other than 3.8.5 is installed, install version 3.8.5 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/).
+ Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version number other than 3.8.5 is installed, it is recommended to install version 3.8.5 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/). Alternative versions of Python3 maybe be compatible with CyLinter, but have not been tested.
 
 ## Create a Python virtual environment
 
-To avoid incompatibilities between CyLinter and system-wide Python dependences, create a [Python virtual environment](https://docs.python.org/3/library/venv.html) dedicated to running CyLinter projects.
+To avoid conflicts between CyLinter and system-wide Python dependences, create a [Python virtual environment](https://docs.python.org/3/library/venv.html) dedicated to performing CyLinter analysis.
 
 ``` bash
 # Create a virtual environment called "cylinter" in the home directory.
