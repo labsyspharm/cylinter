@@ -12,7 +12,7 @@ cylinter --module (optional) <cylinter_input_dir>/config.yml
 
 * CyLinter begins by concatenating single-cell data from all feature tables into a single Pandas dataframe which is accomplished by the `getSingleCellData` module. To start the program from a different in the QC pipeline, specify the name of a desired module: `--module <module_name>`. This feature of CyLinter allows users to pick up where they left off and both within and among modules.
 
-# User guide
+# Module usage
 CyLinter presents users with a series of graphical-user-interface (GUI) windows for image inspection, parameter selection, and data visualization in the identification and removal of cell segmentation instances corrupted by microscopy artifacts. Single-cell data are passed through the following series of QC modules (in order):
 
 1. `getSingleCellData`: Combines single-cell data from whole tissue sections or individual TMA cores into a single dataframe. This module is fully automated.
@@ -31,16 +31,26 @@ CyLinter presents users with a series of graphical-user-interface (GUI) windows 
 
 8. `PCA`: Perform PCA using tissue sample mean immunomarker signal intensities. This module is automated and configurable; see `<cylinter_input_dir>/config.yml` for parameters and their descriptions.
 
-9. `clustering`: This module performs hierarchical, density-based clustering (HDBSCAN) on either tSNE or UMAP embeddings of single-cell data from all samples in the analysis. See `<cylinter_input_dir>/config.yml` for configuration parameters and their descriptions. After embedding is complete, users are presented with a text box for entering a `min_cluster_size` for HDBSCAN clustering. This parameter has a significant effect on the number of clusters. Passing a range of minimum cluster sizes causes the algorithm to print to the terminal window the number of identified clusters with that value without displaying the embedding. This allows users to identify stable clustering solutions before plotting the clustering results. Typing ".save" after the optimal `min_cluster_size` to causes the program to save the current cluster IDs as anew column in the dataframe and return the data.
+9. `clustering1`: This module performs hierarchical, density-based clustering (HDBSCAN) on either tSNE or UMAP embeddings of single-cell data from all samples in the analysis. See `<cylinter_input_dir>/config.yml` for configuration parameters and their descriptions. After embedding is complete, users are presented with a text box for entering a `min_cluster_size` for HDBSCAN clustering. This parameter has a significant effect on the number of clusters. Passing a range of minimum cluster sizes causes the algorithm to print to the terminal window the number of identified clusters with that value without displaying the embedding. This allows users to identify stable clustering solutions before plotting the clustering results. Typing ".save" after the optimal `min_cluster_size` to causes the program to save the current cluster IDs as anew column in the dataframe and return the data.
 
-10. `getClustermap`: Computes a hierarchically-clustered heatmap of mean immunomarker intensity for clusters identified by the `clustering` module (module 9 above). This module is automated. Closing the clustermap window causes the clustermap to be saved to `<cylinter_output_dir>` and the program to proceed to the next module.
+10. `getClustermap1`: Computes a hierarchically-clustered heatmap of mean immunomarker intensity for clusters identified by the `clustering` module (module 9 above). This module is automated. Closing the clustermap window causes the clustermap to be saved to `<cylinter_output_dir>` and the program to proceed to the next module.
 
 11. `lassoClusters`: In this module, cells of interest in the 2D tSNE or UMAP embedding are lassoed using a computer mouse or track pad. The three most-highly expressed immunomarkers for the selected cells are then determined and printed to terminal window. This module does not filter data, but may helpful in identifying cell subsets not captured by the current clustering solution.
 
-12. `frequencyStats`: Compute pairwise statistics for each set of binary declarations specified as the third elements of the `sample_metadata` configuration parameter. This module is automated and configurable; see `<cylinter_input_dir>/config.yml` for parameters and their descriptions. Results of statistical tests are saved to `<cylinter_output_dir>/frequency_stats`.
+12. `frequencyStats1`: Compute pairwise statistics for each set of binary declarations specified as the third elements of the `sample_metadata` configuration parameter. This module is automated and configurable; see `<cylinter_input_dir>/config.yml` for parameters and their descriptions. Results of statistical tests are saved to `<cylinter_output_dir>/frequency_stats`.
 
 13. `setContrast`: This module allows users to adjust image contrast settings. Settings are applied to image galleries curated by the `curateThumbnails` module (module 14 below). Users can toggle immunomarker channels on and off by clicking on their respectively labeled buttons at the left-hand side of the Napari image viewer. The contrast limit slider in the upper-left corner of the viewer is used to increase image gain and threshold background signal intensities. Once contrast settings have been adjusted for all immunomarkers, the Napari viewer is closed to proceed to the next module. Removal of `<cylinter_output_dir>/contrast_limits.yml` is required to re-assign image contrast settings.
 
-14. `curateThumbnails`: Create image galleries of examples of cells drawn at random from each cluster identified by the `clustering` module (module 9 above). This module is automated but configurable; see `<cylinter_input_dir>/config.yml` for parameters and their descriptions. Image contrast settings assigned by `setContrast` module are applied to increase clarity of discrete cell states. Image galleries for each cluster are saved to `<cylinter_output_dir>/thumbnails`. Clusters determined to be based on residual dataset noise (and not biology) maybe dropped from the dataframe returned by this module and re-analyzed by re-running modules 9-14.
+14. `curateThumbnails1`: Generate image galleries of examples of cells drawn at random from each cluster identified by the `clustering` module (module 9 above). This module is automated but configurable; see `<cylinter_input_dir>/config.yml` for parameters and their descriptions. Image contrast settings assigned by `setContrast` module are applied to increase clarity of discrete cell states. Image galleries for each cluster are saved to `<cylinter_output_dir>/thumbnails`. Clusters determined to be based on residual dataset noise (and not biology) maybe dropped from the dataframe returned by this module and re-analyzed by re-running modules 9-14.
+
+15. `dropClusters`: Drop clusters determined to be noise from the analysis after inspecting image galleries generated by `curatethumbnails1`. This module is automated and configurable; see `<cylinter_input_dir>/config.yml` for parameter details.
+
+16. `clustering2`: Re-cluster data. Functionality equivalent to module 9 above (`clustering1`).
+
+17. `getClustermap2`: Re-plot clustermap. Functionality equivalent to module 10 above (`getClustermap1`).
+
+18. `frequencyStats2`: Re-run frequency statistics. Functionality equivalent to module 12 above (`frequencyStats1`).
+
+19. `curateThumbnails2`: Re-generate image galleries. Functionality equivalent to module 14 above (`curateThumbnails1`).
 
 * Parquet files of redacted single-cell data returned by each module are saved to the `checkpoints` directory for use in discovery-driven analyses.

@@ -140,35 +140,54 @@ class QC(object):
                  samplesToSilhouette=None,
 
                  # clustering module —
-                 embeddingAlgorithm=None,
-                 channelExclusionsClustering=None,
-                 samplesToRemoveClustering=None,
-                 normalizeTissueCounts=None,
-                 fracForEmbedding=None,
-                 dimensionEmbedding=None,
+                 embeddingAlgorithm1=None,
+                 embeddingAlgorithm2=None,
+                 channelExclusionsClustering1=None,
+                 channelExclusionsClustering2=None,
+                 samplesToRemoveClustering1=None,
+                 samplesToRemoveClustering2=None,
+                 normalizeTissueCounts1=None,
+                 normalizeTissueCounts2=None,
+                 fracForEmbedding1=None,
+                 fracForEmbedding2=None,
+                 dimensionEmbedding1=None,
+                 dimensionEmbedding2=None,
 
-                 perplexity=None,
-                 earlyExaggeration=None,
-                 learningRateTSNE=None,
-                 metric=None,
-                 random_state=None,
+                 perplexity1=None,
+                 perplexity2=None,
+                 earlyExaggeration1=None,
+                 earlyExaggeration2=None,
+                 learningRateTSNE1=None,
+                 learningRateTSNE2=None,
+                 metric1=None,
+                 metric2=None,
+                 random_state1=None,
+                 random_state2=None,
 
-                 nNeighbors=None,
-                 learningRateUMAP=None,
-                 minDist=None,
-                 repulsionStrength=None,
+                 nNeighbors1=None,
+                 nNeighbors2=None,
+                 learningRateUMAP1=None,
+                 learningRateUMAP2=None,
+                 minDist1=None,
+                 minDist2=None,
+                 repulsionStrength1=None,
+                 repulsionStrength2=None,
 
                  # frequencyStats —
                  controlGroups=None,
-                 denominatorCluster=None,
+                 denominatorCluster1=None,
+                 denominatorCluster2=None,
                  FDRCorrection=None,
-
-                 # clusterBoxplots —
-                 bonferroniCorrection=None,
 
                  # curateThumbnails —
                  numThumbnails=None,
                  squareWindowDimension=None,
+
+                 # dropClusters
+                 clustersToDrop=None,
+
+                 # clusterBoxplots —
+                 bonferroniCorrection=None,
 
                  # spatialAnalysis —
                  cropDict=None,
@@ -211,30 +230,48 @@ class QC(object):
         self.distanceCutoff = distanceCutoff
         self.samplesToSilhouette = samplesToSilhouette
 
-        self.embeddingAlgorithm = embeddingAlgorithm
-        self.channelExclusionsClustering = channelExclusionsClustering
-        self.samplesToRemoveClustering = samplesToRemoveClustering
-        self.normalizeTissueCounts = normalizeTissueCounts
-        self.fracForEmbedding = fracForEmbedding
-        self.dimensionEmbedding = dimensionEmbedding
+        self.embeddingAlgorithm1 = embeddingAlgorithm1
+        self.embeddingAlgorithm2 = embeddingAlgorithm2
+        self.channelExclusionsClustering1 = channelExclusionsClustering1
+        self.channelExclusionsClustering2 = channelExclusionsClustering2
+        self.samplesToRemoveClustering1 = samplesToRemoveClustering1
+        self.samplesToRemoveClustering2 = samplesToRemoveClustering2
+        self.normalizeTissueCounts1 = normalizeTissueCounts1
+        self.normalizeTissueCounts2 = normalizeTissueCounts2
+        self.fracForEmbedding1 = fracForEmbedding1
+        self.fracForEmbedding2 = fracForEmbedding2
+        self.dimensionEmbedding1 = dimensionEmbedding1
+        self.dimensionEmbedding2 = dimensionEmbedding2
 
-        self.perplexity = perplexity
-        self.earlyExaggeration = earlyExaggeration
-        self.learningRateTSNE = learningRateTSNE
-        self.metric = metric
-        self.random_state = random_state
+        self.perplexity1 = perplexity1
+        self.perplexity2 = perplexity2
+        self.earlyExaggeration1 = earlyExaggeration1
+        self.earlyExaggeration2 = earlyExaggeration2
+        self.learningRateTSNE1 = learningRateTSNE1
+        self.learningRateTSNE2 = learningRateTSNE2
+        self.metric1 = metric1
+        self.metric2 = metric2
+        self.random_state1 = random_state1
+        self.random_state2 = random_state2
 
-        self.nNeighbors = nNeighbors
-        self.learningRateUMAP = learningRateUMAP
-        self.minDist = minDist
-        self.repulsionStrength = repulsionStrength
+        self.nNeighbors1 = nNeighbors1
+        self.nNeighbors2 = nNeighbors2
+        self.learningRateUMAP1 = learningRateUMAP1
+        self.learningRateUMAP2 = learningRateUMAP2
+        self.minDist1 = minDist1
+        self.minDist2 = minDist2
+        self.repulsionStrength1 = repulsionStrength1
+        self.repulsionStrength2 = repulsionStrength2
+
+        self.controlGroups = controlGroups
+        self.denominatorCluster1 = denominatorCluster1
+        self.denominatorCluster2 = denominatorCluster2
+        self.FDRCorrection = FDRCorrection
 
         self.numThumbnails = numThumbnails
         self.squareWindowDimension = squareWindowDimension
 
-        self.controlGroups = controlGroups
-        self.denominatorCluster = denominatorCluster
-        self.FDRCorrection = FDRCorrection
+        self.clustersToDrop = clustersToDrop
 
         self.bonferroniCorrection = bonferroniCorrection
 
@@ -2440,7 +2477,11 @@ class QC(object):
         return data
 
     @module
-    def clustering(data, self, args):
+    def clustering1(data, self, args):
+
+        clustering_dir = os.path.join(self.out_dir, 'clustering/clustering1')
+        if not os.path.exists(clustering_dir):
+            os.makedirs(clustering_dir)
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2449,16 +2490,16 @@ class QC(object):
             )
         abx_channels = [
             i for i in abx_channels
-            if i not in self.channelExclusionsClustering
+            if i not in self.channelExclusionsClustering1
             ]
 
-        if os.path.exists(os.path.join(self.out_dir, 'embedding.npy')):
+        if os.path.exists(os.path.join(clustering_dir, 'embedding.npy')):
 
             # recapitulate df index at the point of embedding
 
-            data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering1)]
 
-            if self.normalizeTissueCounts:
+            if self.normalizeTissueCounts1:
 
                 # calculate per tissue cell-count weighted random sample
                 groups = data.groupby('Sample')
@@ -2471,28 +2512,28 @@ class QC(object):
                     )
 
                 df = data.sample(
-                    frac=self.fracForEmbedding, replace=False,
+                    frac=self.fracForEmbedding1, replace=False,
                     weights=weights['weights'], random_state=5, axis=0
                     )
                 print('Tissue counts normalized')
 
             else:
 
-                df = data.sample(frac=self.fracForEmbedding, random_state=5)
+                df = data.sample(frac=self.fracForEmbedding1, random_state=5)
 
             df.reset_index(drop=True, inplace=True)
             print(df[abx_channels])
 
-            embedding = np.load(os.path.join(self.out_dir, 'embedding.npy'))
+            embedding = np.load(os.path.join(clustering_dir, 'embedding.npy'))
             df['emb1'] = embedding[:, 0]
             df['emb2'] = embedding[:, 1]
 
         else:
             startTime = datetime.now()
 
-            data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering1)]
 
-            if self.normalizeTissueCounts:
+            if self.normalizeTissueCounts1:
 
                 # calculate per tissue cell-count weighted random sample
                 groups = data.groupby('Sample')
@@ -2505,38 +2546,38 @@ class QC(object):
                     )
 
                 df = data.sample(
-                    frac=self.fracForEmbedding, replace=False,
+                    frac=self.fracForEmbedding1, replace=False,
                     weights=weights['weights'], random_state=5, axis=0
                     )
                 print('Tissue counts normalized')
 
             else:
 
-                df = data.sample(frac=self.fracForEmbedding, random_state=5)
+                df = data.sample(frac=self.fracForEmbedding1, random_state=5)
 
             df.reset_index(drop=True, inplace=True)
             print(df[abx_channels])
 
-            if self.embeddingAlgorithm == 'TSNE':
+            if self.embeddingAlgorithm1 == 'TSNE':
                 print('Computing TSNE embedding.')
                 embedding = TSNE(
-                    n_components=self.dimensionEmbedding,
-                    perplexity=self.perplexity,
-                    early_exaggeration=self.earlyExaggeration,
-                    learning_rate=self.learningRateTSNE,
-                    metric=self.metric,
-                    random_state=self.random_state,
+                    n_components=self.dimensionEmbedding1,
+                    perplexity=self.perplexity1,
+                    early_exaggeration=self.earlyExaggeration1,
+                    learning_rate=self.learningRateTSNE1,
+                    metric=self.metric1,
+                    random_state=self.random_state1,
                     init='pca', n_jobs=-1).fit_transform(df[abx_channels])
 
-            elif self.embeddingAlgorithm == 'UMAP':
+            elif self.embeddingAlgorithm1 == 'UMAP':
                 print('Computing UMAP embedding.')
                 embedding = UMAP(
-                    n_components=self.dimensionEmbedding,
-                    n_neighbors=self.nNeighbors,
-                    learning_rate=self.learningRateUMAP,
-                    output_metric=self.metric,
-                    min_dist=self.minDist,
-                    repulsion_strength=self.repulsionStrength,
+                    n_components=self.dimensionEmbedding1,
+                    n_neighbors=self.nNeighbors1,
+                    learning_rate=self.learningRateUMAP1,
+                    output_metric=self.metric1,
+                    min_dist=self.minDist1,
+                    repulsion_strength=self.repulsionStrength1,
                     random_state=3,
                     n_epochs=1000,
                     init='spectral',
@@ -2571,7 +2612,7 @@ class QC(object):
 
             print('Embedding completed in ' + str(datetime.now() - startTime))
 
-            np.save(os.path.join(self.out_dir, 'embedding'), embedding)
+            np.save(os.path.join(clustering_dir, 'embedding'), embedding)
             df['emb1'] = embedding[:, 0]
             df['emb2'] = embedding[:, 1]
 
@@ -2586,7 +2627,7 @@ class QC(object):
                 )
             abx_channels = [
                 i for i in abx_channels
-                if i not in self.channelExclusionsClustering
+                if i not in self.channelExclusionsClustering1
                 ]
 
             numerical_input = text.split('.')[0].strip()
@@ -2789,8 +2830,8 @@ class QC(object):
 
                         plt.savefig(
                             os.path.join(
-                                self.out_dir,
-                                f'{self.embeddingAlgorithm}_'
+                                clustering_dir,
+                                f'{self.embeddingAlgorithm1}_'
                                 f'{min_cluster_size}.png'),
                             bbox_extra_artists=(cluster_lgd, sample_lgd),
                             bbox_inches='tight', dpi=1000
@@ -2850,7 +2891,11 @@ class QC(object):
         return df
 
     @module
-    def getClustermap(data, self, args):
+    def getClustermap1(data, self, args):
+
+        clustering_dir = os.path.join(self.out_dir, 'clustering/clustering1')
+        if not os.path.exists(clustering_dir):
+            os.makedirs(clustering_dir)
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -2873,7 +2918,7 @@ class QC(object):
 
         plt.savefig(
             os.path.join(
-                self.out_dir, 'clustermap.pdf'), bbox_inches='tight')
+                clustering_dir, 'clustermap.pdf'), bbox_inches='tight')
 
         plt.show(block=True)
         print()
@@ -2934,7 +2979,7 @@ class QC(object):
 
         fig.canvas.mpl_connect("key_press_event", accept)
         ax.set_title(
-            f'{self.embeddingAlgorithm} embedding. ' +
+            f'{self.embeddingAlgorithm1} embedding. ' +
             'Press enter to accept selected points.')
         ax.set_aspect('equal')
         plt.show(block=True)
@@ -2966,7 +3011,7 @@ class QC(object):
         return data
 
     @module
-    def frequencyStats(data, self, args):
+    def frequencyStats1(data, self, args):
 
         stats_input = data[['Sample', 'Replicate', 'cluster']][
             data['cluster'] >= 0]
@@ -2983,7 +3028,7 @@ class QC(object):
             control = [i for i in comparison if i in self.controlGroups][0]
 
             frequency_dir = os.path.join(
-                self.out_dir, 'frequency_stats',
+                self.out_dir, 'clustering/clustering1/frequency_stats',
                 f"{test}_v_{control}"
                 )
             if not os.path.exists(frequency_dir):
@@ -3050,7 +3095,7 @@ class QC(object):
                 group.reset_index(drop=True, inplace=True)
 
                 # get denominator cell count for each sample
-                if self.denominatorCluster is None:
+                if self.denominatorCluster1 is None:
                     group['tissue_count'] = [
                         len(stats_input[stats_input['Sample'] == i]) for
                         i in group['Sample']]
@@ -3058,7 +3103,7 @@ class QC(object):
                     group['tissue_count'] = [
                         len(stats_input[(stats_input['Sample'] == i) &
                             (stats_input['cluster'] ==
-                             self.denominatorCluster)])
+                             self.denominatorCluster1)])
                         for i in group['Sample']
                         ]
 
@@ -3343,7 +3388,7 @@ class QC(object):
         return data
 
     @module
-    def curateThumbnails(data, self, args):
+    def curateThumbnails1(data, self, args):
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
@@ -3352,10 +3397,1092 @@ class QC(object):
             )
         abx_channels = [
             i for i in abx_channels
-            if i not in self.channelExclusionsClustering
+            if i not in self.channelExclusionsClustering1
             ]
 
-        thumbnails_dir = os.path.join(self.out_dir, 'thumbnails')
+        thumbnails_dir = os.path.join(
+            self.out_dir, 'clustering/clustering1/thumbnails'
+            )
+        if not os.path.exists(thumbnails_dir):
+            os.mkdir(thumbnails_dir)
+
+        # sort ome.tif files from largest to smallest in size
+        os.chdir(f'{self.in_dir}/tif/')
+        ome_tifs = os.listdir(os.getcwd())
+        ome_tifs.sort(key=lambda f: os.stat(f).st_size, reverse=True)
+        ome_tifs = [
+            i for i in ome_tifs if i.split('.')[0] in data['Sample'].unique()
+            ]
+
+        # grab image contrast limit settings
+        if os.path.exists(f'{self.out_dir}/contrast_limits.yml'):
+            contrast_limits = yaml.safe_load(
+                open(f'{self.out_dir}/contrast_limits.yml')
+                )
+
+        df = data[data['cluster'] != -1]
+
+        # store the numbers of those clusters that have already been run to
+        # pick up where left off
+        if os.path.exists(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl')):
+            f = open(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl'), 'rb')
+            thmbnls_to_run = pickle.load(f)
+            total_clusters = set(df['cluster'].unique())
+            completed_clusters = set(thmbnls_to_run)
+            clusters_to_run = natsorted(
+                total_clusters.difference(completed_clusters)
+                )
+            print(f'Clusters to run: {len(clusters_to_run)}')
+            print()
+        else:
+            clusters_to_run = natsorted(df['cluster'].unique())
+            print(f'Clusters to run: {len(clusters_to_run)}')
+            print()
+            thmbnls_to_run = []
+
+        for cluster in clusters_to_run:
+
+            print(f'Cluster: {cluster}')
+
+            markers_to_show = cluster_expression(
+                df=data, markers=abx_channels,
+                cluster=cluster, num_proteins=3,
+                across_or_within='within',
+                )
+
+            markers_to_show = [
+                '_'.join(i.split('_')[0:-1]) if '_' in i else
+                i for i in [dna1] + markers_to_show
+                ]
+
+            color_dict = {}
+            for i, j, k in zip(
+              markers_to_show,
+
+              [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0),
+               (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
+              ['gray', 'green', 'red', 'blue']
+              ):
+                color_dict[i] = j
+
+            long_table = pd.DataFrame()
+
+            for sample_name in ome_tifs:
+                print(f'Sample: {sample_name}')
+
+                # import cycle1 dna channel, convert to float and rgb
+
+                dna = imread(
+                    os.path.join(f'{self.in_dir}/tif/', sample_name),
+                    key=0
+                    )
+
+                dna = img_as_float(dna)
+                dna = gray2rgb(dna)
+
+                # loop over the channels to create a dict of images
+                for e, marker in enumerate(markers_to_show):
+                    if e != 0:
+                        channel_number = markers['channel_number'][
+                                    markers['marker_name'] == marker]
+
+                        # read antibody image
+                        img = imread(
+                            os.path.join(
+                                f'{self.in_dir}/tif/', sample_name),
+                            key=(channel_number-1)
+                            )
+
+                        img = img_as_float(img)
+
+                        img -= (contrast_limits[marker][0]/65535)
+                        img /= (
+                            (contrast_limits[marker][1]/65535)
+                            - (contrast_limits[marker][0]/65535)
+                            )
+                        img = np.clip(img, 0, 1)
+
+                        img = gray2rgb(img)
+
+                        img = (img * color_dict[marker])
+
+                        # loop over ab channels, add to cycle1 dna
+                        dna += img
+
+                        print(f'overlayed {marker} image')
+                        clearRAM(print_usage=False)
+                        del img
+                        clearRAM(print_usage=False)
+
+                # crop out thumbnail images
+                sample_cluster_subset = data[
+                    (data['Sample'] == sample_name.split('.')[0])
+                    & (data['cluster'] == cluster)
+                    ]
+
+                sample_cluster_subset.reset_index(
+                    drop=True, inplace=True
+                    )
+
+                if self.numThumbnails > len(sample_cluster_subset):
+                    dif = (
+                        self.numThumbnails
+                        - len(sample_cluster_subset)
+                        )
+
+                    extra_rows = pd.DataFrame(
+                        data=0,
+                        index=list(range(dif)),
+                        columns=sample_cluster_subset.columns
+                        )
+                    sample_cluster_subset = (
+                        sample_cluster_subset.append(extra_rows)
+                        )
+                    sample_cluster_subset.reset_index(
+                        drop=True, inplace=True
+                        )
+                else:
+                    sample_cluster_subset = (
+                        sample_cluster_subset.sample(
+                            n=self.numThumbnails, random_state=3)
+                        )
+                # add centroid mask to image overlay
+                centroids = sample_cluster_subset[
+                    ['X_centroid', 'Y_centroid']
+                    ]
+
+                clearRAM(print_usage=False)
+                del sample_cluster_subset
+                clearRAM(print_usage=False)
+
+                centroid_img = np.zeros(
+                    (dna.shape[0],
+                     dna.shape[1]))
+
+                centroid_dist = 1  # in pixels
+                for example, centroid in enumerate(
+                  centroids.iterrows()):
+
+                    ystart_centroid = int(
+                        centroid[1]['Y_centroid'] - centroid_dist
+                        )
+                    ystop_centroid = int(
+                        centroid[1]['Y_centroid'] + centroid_dist
+                        )
+
+                    xstart_centroid = int(
+                        centroid[1]['X_centroid'] - centroid_dist
+                        )
+                    xstop_centroid = int(
+                        centroid[1]['X_centroid'] + centroid_dist
+                        )
+
+                    centroid_img[
+                        ystart_centroid:ystop_centroid,
+                        xstart_centroid:xstop_centroid
+                        ] = 1
+
+                # convert to rgb and colorize
+                centroid_img = gray2rgb(centroid_img)
+                centroid_img = (centroid_img * (1.0, 1.0, 1.0))
+
+                # add to overlay
+                dna += centroid_img
+
+                print('overlayed centroids')
+                clearRAM(print_usage=False)
+                del centroid_img
+                clearRAM(print_usage=False)
+
+                # crop thumbnails
+                for example, centroid in enumerate(
+                  centroids.iterrows()):
+
+                    if (
+                        (centroid[1]['X_centroid'] == 0.0) &
+                        (centroid[1]['Y_centroid'] == 0.0)
+                    ):
+
+                        blank_img = np.ones(
+                            (self.squareWindowDimension,
+                             self.squareWindowDimension))
+
+                        long_table = long_table.append(
+                            {'sample': sample_name.split('.')[0],
+                             'example': example,
+                             'image': blank_img},
+                            ignore_index=True
+                            )
+
+                    else:
+
+                        # specify window x, y ranges
+                        ystart_window = int(
+                            centroid[1]['Y_centroid']
+                            - self.squareWindowDimension
+                            )
+                        ystop_window = int(
+                            centroid[1]['Y_centroid']
+                            + self.squareWindowDimension
+                            )
+
+                        xstart_window = int(
+                            centroid[1]['X_centroid']
+                            - self.squareWindowDimension
+                            )
+                        xstop_window = int(
+                            centroid[1]['X_centroid']
+                            + self.squareWindowDimension
+                            )
+
+                        # for centroids falling within
+                        # self.squareWindowDimension pixels of the edge of the
+                        # dna image, ensure that the thumbnail image is not
+                        # cropped using negative slicing values, as it will
+                        # return an empty array and lead to a runtime error
+                        # during plotting.
+                        window_list = [
+                            ystart_window, ystop_window,
+                            xstart_window, xstop_window
+                            ]
+                        (ystart_window,
+                         ystop_window,
+                         xstart_window,
+                         xstop_window) = [
+                            0 if i < 0 else i for i in window_list
+                            ]
+
+                        # crop overlay image to window size
+                        thumbnail = dna[
+                            ystart_window:ystop_window,
+                            xstart_window:xstop_window
+                            ]
+
+                        long_table = long_table.append(
+                            {'sample': sample_name.split('.')[0],
+                             'example': example,
+                             'image': thumbnail.copy()},
+                            ignore_index=True
+                            )
+                        # thumbnail.copy() so overlay image can be gc'd
+
+                # print('before dell dna')
+                # clearRAM(print_usage=False)
+                # del dna
+                # print('after dell dna')
+                # clearRAM(print_usage=False)
+
+            long_table['example'] = [
+                int(i) for i in long_table['example']
+                ]
+
+            # plot facet grid
+            fig, ax = plt.subplots()
+
+            g = sns.FacetGrid(
+                long_table, row='sample', col='example',
+                sharex=False, sharey=False,
+                gridspec_kws={'hspace': 0.1, 'wspace': 0.05})
+
+            g.map(
+                lambda x, **kwargs: (
+                    plt.imshow(x.values[0]), plt.grid(False)), 'image')
+
+            for ax in g.axes.flatten():
+                ax.get_xaxis().set_ticks([])
+                ax.set_xlabel('')
+                ax.get_yaxis().set_ticks([])
+                ax.set_ylabel('')
+
+            g.set_titles(
+                col_template="Ex. {col_name}",
+                row_template="Smpl. {row_name}",
+                fontweight='bold', size=8)
+
+            custom_lines = []
+            for k, v in color_dict.items():
+                custom_lines.append(
+                    Line2D([0], [0], color=v, lw=6))
+
+            ax.legend(
+                custom_lines,
+                list(color_dict.keys()), prop={'size': 12},
+                bbox_to_anchor=(
+                    1.05, len(long_table['sample'].unique()) + 0.3),
+                loc='upper left'
+                )
+
+            plt.savefig(
+                os.path.join(
+                    thumbnails_dir,
+                    'cluster' + str(cluster) + '_thumbnails.pdf')
+                    )
+            plt.close('all')
+
+            thmbnls_to_run.append(cluster)
+
+            os.chdir(thumbnails_dir)
+            f = open(os.path.join(thumbnails_dir, 'thmbnls_to_run.pkl'), 'wb')
+            pickle.dump(thmbnls_to_run, f)
+            f.close()
+
+            # clearRAM(print_usage=False)
+            # del g
+            # clearRAM(print_usage=False)
+            print()
+
+        return data
+
+    @module
+    def dropClusters(data, self, args):
+
+        print(f'Dropping clusters {self.clustersToDrop} from the analysis.')
+        data = data[~data['cluster'].isin(self.clustersToDrop)]
+
+        return data
+
+    @module
+    def clustering2(data, self, args):
+
+        clustering_dir = os.path.join(self.out_dir, 'clustering/clustering2')
+        if not os.path.exists(clustering_dir):
+            os.makedirs(clustering_dir)
+
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
+        abx_channels = [
+            i for i in abx_channels
+            if i not in self.channelExclusionsClustering2
+            ]
+
+        if os.path.exists(os.path.join(clustering_dir, 'embedding.npy')):
+
+            # recapitulate df index at the point of embedding
+
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering2)]
+
+            if self.normalizeTissueCounts2:
+
+                # calculate per tissue cell-count weighted random sample
+                groups = data.groupby('Sample')
+                sample_weights = pd.DataFrame({
+                    'weights': 1 / (groups.size() * len(groups))
+                })
+                weights = pd.merge(
+                    data[['Sample']], sample_weights,
+                    left_on='Sample', right_index=True
+                    )
+
+                df = data.sample(
+                    frac=self.fracForEmbedding2, replace=False,
+                    weights=weights['weights'], random_state=5, axis=0
+                    )
+                print('Tissue counts normalized')
+
+            else:
+
+                df = data.sample(frac=self.fracForEmbedding2, random_state=5)
+
+            df.reset_index(drop=True, inplace=True)
+            print(df[abx_channels])
+
+            embedding = np.load(os.path.join(clustering_dir, 'embedding.npy'))
+            df['emb1'] = embedding[:, 0]
+            df['emb2'] = embedding[:, 1]
+
+        else:
+            startTime = datetime.now()
+
+            data = data[~data['Sample'].isin(self.samplesToRemoveClustering2)]
+
+            if self.normalizeTissueCounts2:
+
+                # calculate per tissue cell-count weighted random sample
+                groups = data.groupby('Sample')
+                sample_weights = pd.DataFrame({
+                    'weights': 1 / (groups.size() * len(groups))
+                })
+                weights = pd.merge(
+                    data[['Sample']], sample_weights,
+                    left_on='Sample', right_index=True
+                    )
+
+                df = data.sample(
+                    frac=self.fracForEmbedding2, replace=False,
+                    weights=weights['weights'], random_state=5, axis=0
+                    )
+                print('Tissue counts normalized')
+
+            else:
+
+                df = data.sample(frac=self.fracForEmbedding2, random_state=5)
+
+            df.reset_index(drop=True, inplace=True)
+            print(df[abx_channels])
+
+            if self.embeddingAlgorithm2 == 'TSNE':
+                print('Computing TSNE embedding.')
+                embedding = TSNE(
+                    n_components=self.dimensionEmbedding2,
+                    perplexity=self.perplexity2,
+                    early_exaggeration=self.earlyExaggeration2,
+                    learning_rate=self.learningRateTSNE2,
+                    metric=self.metric2,
+                    random_state=self.random_state2,
+                    init='pca', n_jobs=-1).fit_transform(df[abx_channels])
+
+            elif self.embeddingAlgorithm2 == 'UMAP':
+                print('Computing UMAP embedding.')
+                embedding = UMAP(
+                    n_components=self.dimensionEmbedding2,
+                    n_neighbors=self.nNeighbors2,
+                    learning_rate=self.learningRateUMAP2,
+                    output_metric=self.metric2,
+                    min_dist=self.minDist2,
+                    repulsion_strength=self.repulsionStrength2,
+                    random_state=3,
+                    n_epochs=1000,
+                    init='spectral',
+                    metric='euclidean',
+                    metric_kwds=None,
+                    output_metric_kwds=None,
+                    n_jobs=-1,
+                    low_memory=False,
+                    spread=1.0,
+                    local_connectivity=1.0,
+                    set_op_mix_ratio=1.0,
+                    negative_sample_rate=5,
+                    transform_queue_size=4.0,
+                    a=None,
+                    b=None,
+                    angular_rp_forest=False,
+                    target_n_neighbors=-1,
+                    target_metric='categorical',
+                    target_metric_kwds=None,
+                    target_weight=0.5,
+                    transform_seed=42,
+                    transform_mode='embedding',
+                    force_approximation_algorithm=False,
+                    verbose=False,
+                    unique=False,
+                    densmap=False,
+                    dens_lambda=2.0,
+                    dens_frac=0.6,
+                    dens_var_shift=0.1,
+                    disconnection_distance=None,
+                    output_dens=False).fit_transform(df[abx_channels])
+
+            print('Embedding completed in ' + str(datetime.now() - startTime))
+
+            np.save(os.path.join(clustering_dir, 'embedding'), embedding)
+            df['emb1'] = embedding[:, 0]
+            df['emb2'] = embedding[:, 1]
+
+        sns.set_style('white')
+
+        def submit(text):
+
+            markers, dna1, dna_moniker, abx_channels = read_markers(
+                markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+                mask_object=self.mask_object,
+                markers_to_exclude=self.markers_to_exclude,
+                )
+            abx_channels = [
+                i for i in abx_channels
+                if i not in self.channelExclusionsClustering2
+                ]
+
+            numerical_input = text.split('.')[0].strip()
+            tup = tuple(map(int, numerical_input.split('-')))
+
+            if len(tup) == 1:
+
+                mylist = [tup[0]]
+
+                for i in mylist:
+
+                    min_cluster_size = i
+
+                    clustering = hdbscan.HDBSCAN(
+                        min_cluster_size=min_cluster_size, min_samples=None,
+                        metric='euclidean', alpha=1.0, p=None,
+                        algorithm='best', leaf_size=40,
+                        memory=Memory(
+                            location=None),
+                        approx_min_span_tree=True,
+                        gen_min_span_tree=False, core_dist_n_jobs=4,
+                        cluster_selection_method='eom',
+                        allow_single_cluster=False,
+                        prediction_data=False,
+                        match_reference_implementation=False).fit(
+                            df[['emb1', 'emb2']]
+                            )
+                    df['cluster'] = clustering.labels_
+
+                    print(
+                        f'min_cluster_size={i}', np.unique(clustering.labels_)
+                        )
+
+                    plt.rcParams['figure.figsize'] = (15, 7)
+                    fig, (ax1, ax2) = plt.subplots(1, 2)
+
+                    plt.subplots_adjust(
+                        wspace=0.7,
+                        left=0.04
+                        )
+
+                    # PLOT TSNE
+                    for color_by in ['cluster', 'Condition']:
+
+                        highlight = 'none'
+
+                        if color_by == 'cluster':
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(df[color_by].unique()),
+                                numCatagories=10,
+                                cmap='tab10',
+                                continuous=False
+                                )
+
+                            # make black the first color to specify
+                            # cluster outliers (i.e. cluster -1 cells)
+                            # colors_list.insert(0, (0.0, 0.0, 0.0))
+                            cmap = ListedColormap(
+                                np.insert(
+                                    arr=cmap.colors, obj=0,
+                                    values=[0, 0, 0], axis=0)
+                                    )
+
+                            # trim qualitative cmap to number of unique samples
+                            trim = (
+                                len(cmap.colors) - len(df[color_by].unique())
+                                )
+                            cmap = ListedColormap(
+                                cmap.colors[:-trim]
+                                )
+
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(df[color_by].unique()),
+                                    list(range(len(df[color_by].unique()))))
+                                    )
+
+                            c = [sample_dict[i] for i in df[color_by]]
+
+                            ax1.scatter(
+                                df['emb1'],
+                                df['emb2'],
+                                c=c,
+                                cmap=cmap,
+                                s=105000/len(df),
+                                ec=[
+                                    'k' if i == highlight else 'none' for
+                                    i in df[color_by]
+                                    ],
+                                linewidth=0.1
+                                )
+
+                            ax1.axis('equal')
+                            ax1.tick_params(labelsize=5)
+                            ax1.grid(False)
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                                natsorted(df[color_by].unique())
+                              ):
+
+                                hi_markers = cluster_expression(
+                                    df=df, markers=abx_channels,
+                                    cluster=i, num_proteins=3,
+                                    across_or_within='within',
+                                    )
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o', color='none',
+                                           label=f'Cluster: {i} {hi_markers}',
+                                           markerfacecolor=cmap.colors[e],
+                                           markeredgecolor='none', lw=0.001,
+                                           markersize=4)
+                                           )
+
+                            cluster_lgd = ax1.legend(
+                                handles=legend_elements,
+                                prop={'size': 7},
+                                bbox_to_anchor=[1.02, 1.0]
+                                )
+
+                        elif color_by == 'Condition':
+
+                            # label PCA plot points by condition and replicate
+                            df['label'] = (
+                                df[color_by] + '_' + df['Replicate'].map(str)
+                                )
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(df['label'].unique()),
+                                numCatagories=10,
+                                cmap='tab10',
+                                continuous=False
+                                )
+
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(df['label'].unique()),
+                                    list(range(len(df['label'].unique()))))
+                                    )
+
+                            c = [sample_dict[i] for i in df['label']]
+
+                            ax2.scatter(
+                                df['emb1'],
+                                df['emb2'],
+                                c=c,
+                                cmap=cmap,
+                                s=105000/len(df),
+                                ec=[
+                                    'k' if i == highlight else 'none' for
+                                    i in df['label']
+                                    ],
+                                linewidth=0.1
+                                )
+
+                            ax2.axis('equal')
+                            ax2.tick_params(labelsize=5)
+                            ax2.grid(False)
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                                natsorted(df['label'].unique())
+                              ):
+
+                                if i == highlight:
+                                    markeredgecolor = 'k'
+                                else:
+                                    markeredgecolor = 'none'
+
+                                uv = unmicst_version(self.sample_conditions)
+
+                                sample_to_map = df['Sample'][
+                                    df['label'] == i].unique()[0]
+                                abbr = self.sample_abbreviations[
+                                    f"{uv}-{sample_to_map }"
+                                    ]
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o', color='none',
+                                           label=f'Sample: {abbr} ({i})',
+                                           markerfacecolor=cmap.colors[e],
+                                           markeredgecolor=markeredgecolor,
+                                           lw=0.001,
+                                           markersize=4)
+                                           )
+
+                            sample_lgd = ax2.legend(
+                                handles=legend_elements,
+                                prop={'size': 7},
+                                bbox_to_anchor=[1.27, 1.0]
+                                )
+
+                    plt.tight_layout()
+
+                    if '.save' in text:
+
+                        plt.savefig(
+                            os.path.join(
+                                clustering_dir,
+                                f'{self.embeddingAlgorithm2}_'
+                                f'{min_cluster_size}.png'),
+                            bbox_extra_artists=(cluster_lgd, sample_lgd),
+                            bbox_inches='tight', dpi=1000
+                            )
+                        plt.close('all')
+
+                    plt.show(block=False)
+
+            else:
+
+                # df = df.sample(frac=0.01, random_state=22)
+
+                mylist = list(range(tup[0], tup[1] + 1, 1))
+                mylist.reverse()  # run higher sizes first for plot order
+
+                for i in mylist:
+
+                    min_cluster_size = i
+
+                    clustering = hdbscan.HDBSCAN(
+                        min_cluster_size=min_cluster_size, min_samples=None,
+                        metric='euclidean', alpha=1.0, p=None,
+                        algorithm='best', leaf_size=40,
+                        memory=Memory(
+                            location=None),
+                        approx_min_span_tree=True,
+                        gen_min_span_tree=False, core_dist_n_jobs=4,
+                        cluster_selection_method='eom',
+                        allow_single_cluster=False,
+                        prediction_data=False,
+                        match_reference_implementation=False).fit(
+                            df[['emb1', 'emb2']]
+                            )
+                    df['cluster'] = clustering.labels_
+
+                    print(
+                        f'min_cluster_size={i}', np.unique(clustering.labels_)
+                        )
+
+        plt.rcParams['figure.figsize'] = (6, 2)
+        axbox = plt.axes([0.6, 0.525, 0.35, 0.15])
+        text_box = TextBox(
+            axbox,
+            'min_cluster_size (single # or range #-# .save)',
+            initial='',
+            color='0.95',
+            hovercolor='1.0',
+            label_pad=0.05
+            )
+        text_box.label.set_size(12)
+        text_box.on_submit(submit)
+        plt.show(block=True)
+        print()
+
+        df.drop(columns='label', inplace=True)
+
+        return df
+
+    @module
+    def getClustermap2(data, self, args):
+
+        clustering_dir = os.path.join(self.out_dir, 'clustering/clustering2')
+        if not os.path.exists(clustering_dir):
+            os.makedirs(clustering_dir)
+
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
+
+        clustermap_input = data[data['cluster'] != -1]
+
+        cluster_heatmap_input = clustermap_input[
+            abx_channels + ['cluster']].groupby('cluster').mean()
+
+        sns.set(font_scale=0.8)
+        g = sns.clustermap(
+            cluster_heatmap_input, cmap='viridis', standard_scale=1,
+            square=False, yticklabels=1, linewidth=0.1, cbar=True
+            )
+
+        plt.gcf().set_size_inches(8.0, 8.0)
+
+        plt.savefig(
+            os.path.join(
+                clustering_dir, 'clustermap.pdf'), bbox_inches='tight')
+
+        plt.show(block=True)
+        print()
+
+        return data
+
+    @module
+    def frequencyStats2(data, self, args):
+
+        stats_input = data[['Sample', 'Replicate', 'cluster']][
+            data['cluster'] >= 0]
+
+        for i in range(
+          len(list(self.sample_statuses.values())[0].split(', '))):
+
+            comparison = set(
+                [j.split(', ')[i] for j in self.sample_statuses.values()
+                 if '-UNK' not in j.split(', ')[i]]
+                )
+
+            test = [i for i in comparison if i not in self.controlGroups][0]
+            control = [i for i in comparison if i in self.controlGroups][0]
+
+            frequency_dir = os.path.join(
+                self.out_dir, 'clustering/clustering2/frequency_stats',
+                f"{test}_v_{control}"
+                )
+            if not os.path.exists(frequency_dir):
+                os.makedirs(frequency_dir)
+
+            # create single-column dataFrame containing all sample names
+            # to pad counts tables with zeros if a celltype is not in a tissue
+            pad = pd.DataFrame(
+                natsorted(stats_input['Sample'].unique())).rename(
+                    columns={0: 'Sample'}
+                    )
+
+            uv = unmicst_version(self.sample_conditions)
+
+            cluster_list = []
+            ratio_list = []
+            dif_list = []
+            pval_list = []
+
+            # intialize a dataframe to collect catplot data
+            catplot_input = pd.DataFrame()
+
+            # loop over clusters
+            for w, group in stats_input.groupby('cluster'):
+
+                print(
+                    f'Calculating log2({test}/{control})'
+                    f' of mean cell density for cluster {str(w)}.'
+                    )
+
+                group = (
+                    group.groupby(['Sample', 'Replicate', 'cluster'])
+                    .size()
+                    .reset_index(drop=False)
+                    .rename(columns={0: 'count'})
+                    )
+
+                group = (
+                    group
+                    .merge(pad, how='right', on='Sample')
+                    .sort_values(by='count', ascending=False)
+                    )
+
+                # guard against NaNs induced by the absence
+                # of a given cluster in one or
+                # more of the tissue samples
+                group['count'] = [
+                    0 if np.isnan(i) else int(i) for i in group['count']]
+
+                group['status'] = [
+                    self.sample_statuses[f"{uv}-{j}"]
+                    .split(', ')[i] for j in group['Sample']
+                    ]
+
+                group['Replicate'] = [
+                    self.sample_replicates[f"{uv}-{i}"]
+                    for i in group['Sample']
+                    ]
+
+                group['cluster'] = w
+
+                group = group[~group['status'].str.contains('-UNK')]
+
+                group.reset_index(drop=True, inplace=True)
+
+                # get denominator cell count for each sample
+                if self.denominatorCluster2 is None:
+                    group['tissue_count'] = [
+                        len(stats_input[stats_input['Sample'] == i]) for
+                        i in group['Sample']]
+                else:
+                    group['tissue_count'] = [
+                        len(stats_input[(stats_input['Sample'] == i) &
+                            (stats_input['cluster'] ==
+                             self.denominatorCluster2)])
+                        for i in group['Sample']
+                        ]
+
+                # compute density of cells per sample
+                group['density'] = group['count']/group['tissue_count']
+
+                # append group data to catplot_input
+                catplot_input = catplot_input.append(group)
+
+                cnd1_values = group['density'][group['status'] == test]
+                cnd2_values = group['density'][group['status'] == control]
+
+                # Welch's t-test (equal_var=False)
+                stat, pval = ttest_ind(
+                    cnd1_values, cnd2_values,
+                    axis=0, equal_var=False, nan_policy='propagate')
+
+                stat = round(stat, 3)
+                pval = round(pval, 3)
+
+                cnd1_mean = np.mean(cnd1_values)
+                cnd2_mean = np.mean(cnd2_values)
+
+                ratio = np.log2((cnd1_mean + 0.000001)/(cnd2_mean + 0.000001))
+
+                dif = cnd1_mean-cnd2_mean
+
+                cluster_list.append(w)
+                ratio_list.append(ratio)
+                dif_list.append(dif)
+                pval_list.append(pval)
+
+            statistics = pd.DataFrame(
+                list(zip(cluster_list, ratio_list, dif_list, pval_list)),
+                columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
+                    by='cluster')
+
+            statistics.to_csv(
+                os.path.join(
+                    frequency_dir, 'stats_total.csv'), index=False)
+
+            stats = importr('stats')
+
+            p_adjust = stats.p_adjust(
+                FloatVector(statistics['pval'].tolist()),
+                method='BH')
+
+            statistics['qval'] = p_adjust
+
+            if self.FDRCorrection:
+                stat = 'qval'
+
+            else:
+                stat = 'pval'
+
+            significant = statistics[
+                statistics[stat] <= 0.05].sort_values(by=stat)
+
+            significant.to_csv(
+                os.path.join(
+                    frequency_dir, 'stats_sig.csv'), index=False)
+
+            sns.set_style('whitegrid')
+            fig, ax = plt.subplots()
+            plt.scatter(abs(significant['dif']), significant['ratio'])
+
+            for label, qval, x, y in zip(
+              significant['cluster'], significant[stat],
+              abs(significant['dif']), significant['ratio']):
+
+                plt.annotate(
+                    (label, f'{stat[0]}=' + str(qval)), size=3,
+                    xy=(x, y), xytext=(10, 10),
+                    textcoords='offset points', ha='right', va='bottom',
+                    bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
+                              alpha=0.0))
+
+            for tick in ax.xaxis.get_major_ticks():
+                tick.label.set_fontsize(5)
+
+            plt.title(
+                f'{test} vs. {control} ({stat[0]}<0.05)',
+                fontsize=12
+                )
+            plt.xlabel(
+                f'abs({test} - {control})', fontsize=10
+                )
+            plt.ylabel(
+                f'log2({test} / {control})',
+                fontsize=10
+                )
+            plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
+            plt.close()
+
+            catplot_input.reset_index(drop=True, inplace=True)
+
+            catplot_input[stat] = [
+                 'ns' if i not in significant['cluster'].unique() else
+                 significant[stat][significant['cluster'] == i].values[0]
+                 for i in catplot_input['cluster']]
+
+            # build cmap
+            cmap = categorical_cmap(
+                numUniqueSamples=len(catplot_input['Sample'].unique()),
+                numCatagories=10,
+                cmap='tab10',
+                continuous=False
+                )
+
+            sample_color_dict = dict(
+                zip(
+                    natsorted(catplot_input['Sample'].unique()),
+                    cmap.colors)
+                    )
+
+            catplot_input.sort_values(
+                by=['cluster', 'status', 'density'],
+                ascending=[True, False, True], inplace=True
+                )
+
+            catplot_input['cluster'] = (
+                catplot_input['cluster'].astype(str) + f'; {stat} = ' +
+                catplot_input[stat].astype(str)
+                )
+            catplot_input['cluster'] = [
+                i.split(f'; {stat} = ns')[0] for i in catplot_input['cluster']
+                ]
+
+            sns.set(font_scale=0.4)
+            g = sns.catplot(
+                x='status', y='density',
+                hue=catplot_input['Sample'], col='cluster', col_wrap=6,
+                data=catplot_input, kind='bar', palette=sample_color_dict,
+                height=2, aspect=0.8, sharex=True, sharey=False,
+                edgecolor='k', linewidth=0.1,
+                legend=False
+                )
+
+            g.set(ylim=(0.0, None))
+
+            sample_conds = [
+                self.sample_conditions[f'{uv}-{i}']
+                for i in natsorted(catplot_input['Sample'].unique())
+                ]
+
+            sample_abbrs = [
+                self.sample_abbreviations[f'{uv}-{i}']
+                for i in natsorted(catplot_input['Sample'].unique())
+                ]
+
+            cond_abbr = [
+                f'{i}-{j}' for i, j in zip(sample_conds, sample_abbrs)
+                ]
+
+            handles_dict = dict(
+                zip(natsorted(catplot_input['Sample'].unique()),
+                    cond_abbr)
+                    )
+
+            legend_handles = []
+            for k, v in handles_dict.items():
+                legend_handles.append(
+                    Line2D([0], [0], marker='o', color='none',
+                           label=v, markerfacecolor=sample_color_dict[k],
+                           markeredgecolor='k', markeredgewidth=0.2,
+                           markersize=5.0)
+                           )
+
+            plt.legend(
+                handles=legend_handles,
+                prop={'size': 5.0},
+                bbox_to_anchor=[1.03, 1.0]
+                )
+
+            plt.savefig(
+                os.path.join(frequency_dir, 'catplot.pdf'),
+                bbox_inches='tight'
+                )
+            plt.close('all')
+            print()
+
+        return data
+
+    @module
+    def curateThumbnails2(data, self, args):
+
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.in_dir, 'markers.csv'),
+            mask_object=self.mask_object,
+            markers_to_exclude=self.markers_to_exclude,
+            )
+        abx_channels = [
+            i for i in abx_channels
+            if i not in self.channelExclusionsClustering2
+            ]
+
+        thumbnails_dir = os.path.join(
+            self.out_dir, 'clustering/clustering2/thumbnails'
+            )
         if not os.path.exists(thumbnails_dir):
             os.mkdir(thumbnails_dir)
 

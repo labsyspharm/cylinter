@@ -44,37 +44,62 @@ class Config:
         config.distanceCutoff = float(data['distanceCutoff'])
         config.samplesToSilhouette = list(data['samplesToSilhouette'])
 
-        config.embeddingAlgorithm = str(data['embeddingAlgorithm'])
-        config.channelExclusionsClustering = list(
-            data['channelExclusionsClustering']
+        config.embeddingAlgorithm1 = str(data['embeddingAlgorithm1'])
+        config.embeddingAlgorithm2 = str(data['embeddingAlgorithm2'])
+        config.channelExclusionsClustering1 = list(
+            data['channelExclusionsClustering1']
             )
-        config.samplesToRemoveClustering = list(
-            data['samplesToRemoveClustering']
+        config.channelExclusionsClustering2 = list(
+            data['channelExclusionsClustering2']
             )
-        config.normalizeTissueCounts = bool(data['normalizeTissueCounts'])
-        config.fracForEmbedding = float(data['fracForEmbedding'])
-        config.dimensionEmbedding = int(data['dimensionEmbedding'])
+        config.samplesToRemoveClustering1 = list(
+            data['samplesToRemoveClustering1']
+            )
+        config.samplesToRemoveClustering2 = list(
+            data['samplesToRemoveClustering2']
+            )
+        config.normalizeTissueCounts1 = bool(data['normalizeTissueCounts1'])
+        config.normalizeTissueCounts2 = bool(data['normalizeTissueCounts2'])
+        config.fracForEmbedding1 = float(data['fracForEmbedding1'])
+        config.fracForEmbedding2 = float(data['fracForEmbedding2'])
+        config.dimensionEmbedding1 = int(data['dimensionEmbedding1'])
+        config.dimensionEmbedding2 = int(data['dimensionEmbedding2'])
 
-        config.perplexity = float(data['perplexity'])
-        config.earlyExaggeration = float(data['earlyExaggeration'])
-        config.learningRateTSNE = float(data['learningRateTSNE'])
-        config.metric = str(data['metric'])
-        config.random_state = int(data['random_state'])
+        config.perplexity1 = float(data['perplexity1'])
+        config.perplexity2 = float(data['perplexity2'])
+        config.earlyExaggeration1 = float(data['earlyExaggeration1'])
+        config.earlyExaggeration2 = float(data['earlyExaggeration2'])
+        config.learningRateTSNE1 = float(data['learningRateTSNE1'])
+        config.learningRateTSNE2 = float(data['learningRateTSNE2'])
+        config.metric1 = str(data['metric1'])
+        config.metric2 = str(data['metric2'])
+        config.random_state1 = int(data['random_state1'])
+        config.random_state2 = int(data['random_state2'])
 
-        config.nNeighbors = int(data['nNeighbors'])
-        config.learningRateUMAP = float(data['learningRateUMAP'])
-        config.minDist = float(data['minDist'])
-        config.repulsionStrength = float(data['repulsionStrength'])
+        config.nNeighbors1 = int(data['nNeighbors1'])
+        config.nNeighbors2 = int(data['nNeighbors2'])
+        config.learningRateUMAP1 = float(data['learningRateUMAP1'])
+        config.learningRateUMAP2 = float(data['learningRateUMAP2'])
+        config.minDist1 = float(data['minDist1'])
+        config.minDist2 = float(data['minDist2'])
+        config.repulsionStrength1 = float(data['repulsionStrength1'])
+        config.repulsionStrength2 = float(data['repulsionStrength2'])
+
+        config.controlGroups = list(data['controlGroups'])
+        if (data['denominatorCluster1']) is None:
+            config.denominatorCluster1 = (data['denominatorCluster1'])
+        else:
+            config.denominatorCluster1 = int(data['denominatorCluster1'])
+        if (data['denominatorCluster2']) is None:
+            config.denominatorCluster2 = (data['denominatorCluster2'])
+        else:
+            config.denominatorCluster2 = int(data['denominatorCluster2'])
+        config.FDRCorrection = bool(data['FDRCorrection'])
 
         config.numThumbnails = int(data['numThumbnails'])
         config.squareWindowDimension = int(data['squareWindowDimension'])
 
-        config.controlGroups = list(data['controlGroups'])
-        if (data['denominatorCluster']) is None:
-            config.denominatorCluster = (data['denominatorCluster'])
-        else:
-            config.denominatorCluster = int(data['denominatorCluster'])
-        config.FDRCorrection = bool(data['FDRCorrection'])
+        config.clustersToDrop = list(data['clustersToDrop'])
 
         config.bonferroniCorrection = bool(data['bonferroniCorrection'])
 

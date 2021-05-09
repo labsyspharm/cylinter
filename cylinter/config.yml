@@ -112,25 +112,33 @@ samplesToSilhouette: []
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# clustering module —
-embeddingAlgorithm: 'UMAP'
+# clustering module — (1: clustering1 parameter, 2: clustering2 parameter)
+embeddingAlgorithm1: 'UMAP'
+embeddingAlgorithm2: 'UMAP'
+# Embedding algorithm to use for clustering (options: TSNE or UMAP)
 
-channelExclusionsClustering: []
+channelExclusionsClustering1: []
+channelExclusionsClustering2: []
 # Immunomarkers to exclude from clustering and all subsequent modules (list of strings)
 
-samplesToRemoveClustering: []
+samplesToRemoveClustering1: []
+samplesToRemoveClustering2: []
 # Samples to exclude from clustering and all subsequent modules (list of strings)
 
-normalizeTissueCounts: True
+normalizeTissueCounts1: True
+normalizeTissueCounts2: True
 # (Boolean) Compute sample weights to normalize the number of cells per tissue to be clustered
 
-fracForEmbedding: 1.0
+fracForEmbedding1: 1.0
+fracForEmbedding2: 1.0
 # Fraction of cells to be embedded (range: 0.0-1.0)
 
-dimensionEmbedding: 2
+dimensionEmbedding1: 2
+dimensionEmbedding2: 2
 # Dimension of the embedding (integer, typically 2)
 
-metric: "euclidean"
+metric1: "euclidean"
+metric2: "euclidean"
 # (string) Choose from valid metrics used by scipy.spatial.distance.pdist:
 # ‘braycurtis’, ‘canberra’, ‘chebyshev’, ‘cityblock’, ‘correlation’, ‘cosine’,
 # ‘dice’, ‘euclidean’, ‘hamming’, ‘jaccard’, ‘jensenshannon’, ‘kulsinski’,
@@ -139,36 +147,43 @@ metric: "euclidean"
 
 # -----------------------------
 # tSNE-specific configurations: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
-perplexity: 50.0
+perplexity1: 50.0
+perplexity2: 50.0
 # Related to the number of nearest neighbors used in other
 # manifold learning algorithms. Larger datasets usually require
 # larger perplexity. Different values can result in significantly
 # different results.
 
-earlyExaggeration: 12.0
+earlyExaggeration1: 12.0
+earlyExaggeration2: 12.0
 # For larger values, the space between natural clusters
 # will be larger in the embedded space (float).
 
-learningRateTSNE: 200.0
+learningRateTSNE1: 200.0
+learningRateTSNE2: 200.0
 # tSNE learning rate (float, typically between 10.0 and 1000.0)
 
-random_state: 5
+random_state1: 5
+random_state2: 5
 # Determines the random number generator for reproducible results
 # across multiple function calls (integer).
 
 # -----------------------------
 # UMAP-specific configurations: https://umap-learn.readthedocs.io/en/latest/api.html
-nNeighbors: 6
+nNeighbors1: 6
+nNeighbors2: 6
 # The size of local neighborhood (in terms of number of
 # neighboring sample points) used for manifold approximation.
 # Larger values result in more global views of the manifold,
 # while smaller values result in more local data being preserved.
 # In general values should be in the range 2 to 100 (integer).
 
-learningRateUMAP: 0.4
+learningRateUMAP1: 0.4
+learningRateUMAP2: 0.4
 # The initial learning rate for the embedding optimization (float).
 
-minDist: 0.05
+minDist1: 0.05
+minDist2: 0.05
 # The effective minimum distance between embedded points.
 # Smaller values will result in a more clustered/clumped
 # embedding where nearby points on the manifold are drawn
@@ -177,7 +192,8 @@ minDist: 0.05
 # to the spread value, which determines the scale at which
 # embedded points will be spread out (float).
 
-repulsionStrength: 1.0
+repulsionStrength1: 1.0
+repulsionStrength2: 1.0
 # Weighting applied to negative samples in low dimensional
 # embedding optimization. Values higher than one will
 # result in greater weight being given to negative samples (float).
@@ -188,10 +204,12 @@ repulsionStrength: 1.0
 controlGroups: ["CANCER-FALSE"]
 # (list of strings) Control group labels (see third elements in sample_metadata values above)
 
-denominatorCluster: null
+denominatorCluster1: null
+denominatorCluster2: null
 # (null or integer cluster number) Cluster to be used as the denominator
 # when computing cell type frequency ratios. Default is null before clustering is performed.
 # Arbitrary clusters can be used as denominators after clustering has been performed.
+# (1: clustering1 parameter, 2: clustering2 parameter)
 
 FDRCorrection: False
 # (Boolean) If True, compute pvals and false discovery rate (FDR) qvals.
@@ -211,6 +229,13 @@ numThumbnails: 10
 
 squareWindowDimension: 35
 # Number of pixels from the reference cell centroid in the x and y directions
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# dropClusters —
+
+clustersToDrop: []
+# list of clusters (integers) to drop from dataframe input
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
