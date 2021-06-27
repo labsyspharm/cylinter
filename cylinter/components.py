@@ -185,15 +185,6 @@ class QC(object):
                  numThumbnails=None,
                  squareWindowDimension=None,
                  segOutlines=None,
-
-                 # clusterBoxplots —
-                 bonferroniCorrection=None,
-
-                 # spatialAnalysis —
-                 cropDict=None,
-                 spatialDict1=None,
-                 spatialDict2=None,
-                 radiusRange=None,
                  ):
 
         # assert(SOMETHING)  # placeholder
@@ -272,13 +263,6 @@ class QC(object):
         self.numThumbnails = numThumbnails
         self.squareWindowDimension = squareWindowDimension
         self.segOutlines = segOutlines
-
-        self.bonferroniCorresction = bonferroniCorrection
-
-        self.cropDict = cropDict
-        self.spatialDict1 = spatialDict1
-        self.spatialDict2 = spatialDict2
-        self.radiusRange = radiusRange
 
     @module
     def getSingleCellData(data, self, args):
