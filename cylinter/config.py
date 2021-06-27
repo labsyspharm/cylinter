@@ -98,13 +98,6 @@ class Config:
         config.squareWindowDimension = int(data['squareWindowDimension'])
         config.segOutlines = bool(data['segOutlines'])
 
-        config.bonferroniCorrection = bool(data['bonferroniCorrection'])
-
-        config.cropDict = dict(data['cropDict'])
-        config.spatialDict1 = dict(data['spatialDict1'])
-        config.spatialDict2 = dict(data['spatialDict2'])
-        config.radiusRange = list(data['radiusRange'])
-
         return config
 
     def _parse_sample_metadata(self, value):

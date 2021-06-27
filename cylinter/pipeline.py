@@ -127,13 +127,6 @@ def run_pipeline(config, start_module_name):
         numThumbnails=config.numThumbnails,
         squareWindowDimension=config.squareWindowDimension,
         segOutlines=config.segOutlines,
-
-        bonferroniCorrection=config.bonferroniCorrection,
-
-        cropDict=config.cropDict,
-        spatialDict1=config.spatialDict1,
-        spatialDict2=config.spatialDict2,
-        radiusRange=config.radiusRange,
         )
 
     # start_idx = module_order[start_index:]
