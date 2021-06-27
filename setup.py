@@ -23,7 +23,7 @@ requires = [
     'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21) fails at transferring
 ]
 
-VERSION = '0.0.23'
+VERSION = '0.0.24'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'

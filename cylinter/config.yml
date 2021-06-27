@@ -1,64 +1,64 @@
 # GENERAL PROGRAM CONFIGURATIONS:
 ###############################################################################
 
-in_dir: /Users/<user>/Desktop/emit22_demo
-# Path to CyLinter input directory containing OME-TIFF files,
+inDir: /Users/<user>/Desktop/emit22_demo
+# Path to CyLinter input directory with OME-TIFF files,
 # segmentation outlines (TIFF), and single-cell feature tables (CSV),
 
-out_dir: /Users/<user>/Desktop/emit22_demo/output
-# Path to CyLinter output directory
+outDir: /Users/<user>/Desktop/emit22_demo/output
+# Path to arbitrary CyLinter output directory
 
-random_sample_size: 1.0
+randomSampleSize: 1.0
 # Analyze a fraction of randomly-selected single-cell data (range: 0.0-1.0)
 
-mask_object: cellMask
-# Corresponds to the column headers of feature tables
-# Represents the cell feature MCMICRO used for image segmentation
+maskObject: cellMask
+# Corresponds to feature-table column headers
+# Represents the cell attribute used by MCMICRO for image segmentation
 # (e.g. cellMask, nucleiMask, cellRingMask ...)
 
-sample_metadata:
+sampleMetadata:
   unmicst-13: ["Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 1]
   unmicst-29: ["Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 2]
   unmicst-33: ["Colon adenocarcinoma", "CA", "CANCER-TRUE", 2]
   unmicst-39: ["Diverticulitis", "DVL", "CANCER-FALSE", 1]
-# Sample metadata. Keys correspond to sample names (strings).
-# Values are lists. First elements are full names of experimental conditions (strings).
-# Second elements are abbreviated names of experimental conditions (strings).
-# Third elements are comma-delimited strings of arbitrary binary declarations used by the "frequencyStats" module for performing pairwise statistical tests.
-# Forth elements are replicate numbers for biological/technical replicates (integers)
+# (Dict) Keys correspond to sample names (strings).
+# Values are lists where the first elements are names of experimental conditions (strings).
+# Second elements are abbreviated condition names (strings).
+# Third elements are comma-delimited strings of binary declarations used by the "frequencyStats" module for performing pairwise statistical tests.
+# Forth elements are sample replicate numbers (integers)
 
-samples_to_exclude: []
+samplesToExclude: []
 # List of sample names to exclude from the analysis (strings)
 
-markers_to_exclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
+markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
                      "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2"]
-# List of immunomarkers to exclude from the analysis (list of strings)
+# List of immunomarkers to exclude from the analysis (strings)
 
 ###############################################################################
 
 # QC MODULE CONFIGURATIONS:
 # -----------------------------------------------------------------------------
 # selectROIs —
-delint_mode: False
+delintMode: False
 # (Boolean) Whether to keep (False) or drop (True) cells in selected ROIs
-# True is equivalent to negative selection;
-# False = positive selection; True = negative selection
+# False = positive ROI selection
+# True = negative ROI selection;
 
-show_ab_channels: True
-# (Boolean) If True, open images with all immunomarker channels (memory maybe be limiting).
+showAbChannels: True
+# (Boolean) If True, show images with all immunomarker channels (may be memory limited).
 # If False, show cycle1 DNA only.
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # crossCycleCorrelation —
 cutoffAxis: 'x'
-# Axis on which to apply cutoffs for cross-cycle correlation of DNA counterstain intensity
-# "x" = bin cutoffs (sample- and cycle- specific)
-# "y" = count cutoff (globally applied to all samples)
+# Axis on which to apply cross-cycle correlation cutoffs based on log10(cycle1/cycleN) histograms
+# "x" = bin cutoffs (cutoffs specified per sample)
+# "y" = count cutoff (single cutoff is applied to all samples)
 
-log_ratio_rnge: null
+logRatioRnge: null
 # Under development.
-# Lower and upper cutoffs on log10(cycle ratio) values
+# Lower and upper cutoffs on cycle1/cycleN) values
 # for histogram plotting (tuple of floats or null).
 # Symmetrical values around zero allow for a diverging
 # colormap to show tissue areas with increasing (green)
@@ -73,20 +73,32 @@ log_ratio_rnge: null
 # pruneOutliers —
 hexbins: False
 # (Boolean) If True, use hexbins to plot single-cell signal intensities
-# If False, use scatter plots (longer rendering time for large datasets).
+# If False, use scatter plots (allows for higher resolution, but requires longer rendering times).
 
-hexbin_grid_size: 20
-# Resolution of hexbins (integer). Higher values increase bin resolution.
-# Not used if hexbins = False.
+hexbinGridSize: 20
+# Hexbin grid size (integer). Higher values increase bin resolution.
+# Applicable when hexbins = True.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# metaQC — (optional)
+metaQC: True
+# (Boolean) If True, perform data reclassification (clean vs. noisy) based on clustering results.
+
+reclassCutoff: 0.5
+# Range: 0.0-1.0
+# All cells in clusters containing >= reclassCutoff clean data will be classified as "clean"
+# All cells in clusters containing < reclassCutoff clean data will be classified as "noisy"
+# Applicable when metaQC = True
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # PCA module —
 channelExclusionsPCA: []
-# Immunomarkers to exclude from PCA analysis and all subsequent modules (list of strings)
+# Immunomarkers to exclude from PCA analysis and all subsequent modules (strings)
 
 samplesToRemovePCA: []
-# Samples to exclude from PCA analysis and all subsequent modules (list of strings)
+# Samples to exclude from PCA analysis and all subsequent modules (strings)
 
 dimensionPCA: 2
 # Number of PCs to compute (integer, typically 2)
@@ -98,48 +110,48 @@ normalize: True
 # (Boolean) If True, scale input vectors to unit norm (recommended)
 
 labelPoints: True
-# Annotate scatter points with sample name abbreviations (see sample sample_metadata config above)
+# Annotate scatter points with sample name abbreviations (see sample_metadata dict above)
 
 distanceCutoff: 0.05
-# Maximum distance between data points in PCA scores plot to be annotated with a common label
-# Useful for increasing visual clarify of PCA plots with many data points.
-# Not used if labelPoints = False
+# Maximum distance between data points in PCA scores plot to be annotated with a common label.
+# Useful for increasing visual clarity of PCA plots containing many data points.
+# Applicable when labelPoints = True
 
 samplesToSilhouette: []
 # List of sample names whose corresponding scores plot data points will not be annotated,
 # greyed out, and sent to the back of the plot.
-# Useful for increasing visual clarify of PCA plots with many data points.
+# Useful for increasing visual clarity of PCA plots containing many data points.
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# clustering module — (1: clustering1 parameter, 2: clustering2 parameter)
-embeddingAlgorithm1: 'UMAP'
-embeddingAlgorithm2: 'UMAP'
+# metaQC (and clustering) module —
+embeddingAlgorithmQC: 'UMAP'
+embeddingAlgorithm: 'UMAP'
 # Embedding algorithm to use for clustering (options: TSNE or UMAP)
 
-channelExclusionsClustering1: []
-channelExclusionsClustering2: []
-# Immunomarkers to exclude from clustering and all subsequent modules (list of strings)
+channelExclusionsClusteringQC: []
+channelExclusionsClustering: []
+# Immunomarkers to exclude from clustering and all subsequent modules (strings)
 
-samplesToRemoveClustering1: []
-samplesToRemoveClustering2: []
-# Samples to exclude from clustering and all subsequent modules (list of strings)
+samplesToRemoveClusteringQC: []
+samplesToRemoveClustering: []
+# Samples to exclude from clustering and all subsequent modules (strings)
 
-normalizeTissueCounts1: True
-normalizeTissueCounts2: True
-# (Boolean) Compute sample weights to normalize the number of cells per tissue to be clustered
+normalizeTissueCounts: True
+# (Boolean) Normalize the number of cells per tissue to be clustered by weighting sample sizes
 
-fracForEmbedding1: 1.0
-fracForEmbedding2: 1.0
-# Fraction of cells to be embedded (range: 0.0-1.0)
+fracForEmbeddingQC: 1.0
+fracForEmbedding: 1.0
+# Range: 0.0-1.0
+# Fraction of cells to be embedded
 
-dimensionEmbedding1: 2
-dimensionEmbedding2: 2
+dimensionEmbeddingQC: 2
+dimensionEmbedding: 2
 # Dimension of the embedding (integer, typically 2)
 
-metric1: "euclidean"
-metric2: "euclidean"
-# (string) Choose from valid metrics used by scipy.spatial.distance.pdist:
+metricQC: "euclidean"
+metric: "euclidean"
+# Choose from valid metrics used by scipy.spatial.distance.pdist:
 # ‘braycurtis’, ‘canberra’, ‘chebyshev’, ‘cityblock’, ‘correlation’, ‘cosine’,
 # ‘dice’, ‘euclidean’, ‘hamming’, ‘jaccard’, ‘jensenshannon’, ‘kulsinski’,
 # ‘mahalanobis’, ‘matching’, ‘minkowski’, ‘rogerstanimoto’, ‘russellrao’,
@@ -147,43 +159,43 @@ metric2: "euclidean"
 
 # -----------------------------
 # tSNE-specific configurations: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
-perplexity1: 50.0
-perplexity2: 50.0
+perplexityQC: 50.0
+perplexity: 50.0
 # Related to the number of nearest neighbors used in other
 # manifold learning algorithms. Larger datasets usually require
 # larger perplexity. Different values can result in significantly
 # different results.
 
-earlyExaggeration1: 12.0
-earlyExaggeration2: 12.0
+earlyExaggerationQC: 12.0
+earlyExaggeration: 12.0
 # For larger values, the space between natural clusters
 # will be larger in the embedded space (float).
 
-learningRateTSNE1: 200.0
-learningRateTSNE2: 200.0
+learningRateTSNEQC: 200.0
+learningRateTSNE: 200.0
 # tSNE learning rate (float, typically between 10.0 and 1000.0)
 
-random_state1: 5
-random_state2: 5
+randomStateQC: 5
+randomState: 5
 # Determines the random number generator for reproducible results
 # across multiple function calls (integer).
 
 # -----------------------------
 # UMAP-specific configurations: https://umap-learn.readthedocs.io/en/latest/api.html
-nNeighbors1: 6
-nNeighbors2: 6
+nNeighborsQC: 6
+nNeighbors: 6
 # The size of local neighborhood (in terms of number of
 # neighboring sample points) used for manifold approximation.
 # Larger values result in more global views of the manifold,
 # while smaller values result in more local data being preserved.
 # In general values should be in the range 2 to 100 (integer).
 
-learningRateUMAP1: 0.4
-learningRateUMAP2: 0.4
+learningRateUMAPQC: 0.4
+learningRateUMAP: 0.4
 # The initial learning rate for the embedding optimization (float).
 
-minDist1: 0.05
-minDist2: 0.05
+minDistQC: 0.05
+minDist: 0.05
 # The effective minimum distance between embedded points.
 # Smaller values will result in a more clustered/clumped
 # embedding where nearby points on the manifold are drawn
@@ -192,8 +204,8 @@ minDist2: 0.05
 # to the spread value, which determines the scale at which
 # embedded points will be spread out (float).
 
-repulsionStrength1: 1.0
-repulsionStrength2: 1.0
+repulsionStrengthQC: 1.0
+repulsionStrength: 1.0
 # Weighting applied to negative samples in low dimensional
 # embedding optimization. Values higher than one will
 # result in greater weight being given to negative samples (float).
@@ -202,14 +214,13 @@ repulsionStrength2: 1.0
 # -----------------------------------------------------------------------------
 # frequencyStats —
 controlGroups: ["CANCER-FALSE"]
-# (list of strings) Control group labels (see third elements in sample_metadata values above)
+# Control group labels ( strings, see third elements of sample_metadata dict values above)
 
-denominatorCluster1: null
-denominatorCluster2: null
-# (null or integer cluster number) Cluster to be used as the denominator
-# when computing cell type frequency ratios. Default is null before clustering is performed.
-# Arbitrary clusters can be used as denominators after clustering has been performed.
-# (1: clustering1 parameter, 2: clustering2 parameter)
+denominatorCluster: null
+# Cluster to be used as the denominator when computing cell type frequency ratios.
+# Either null or integer cluster number.
+# Should be "null" before clustering is performed.
+# Arbitrary cluster numbers can be passed as denominator populations once cluster labels have been generated.
 
 FDRCorrection: False
 # (Boolean) If True, compute pvals and false discovery rate (FDR) qvals.
@@ -218,24 +229,27 @@ FDRCorrection: False
 
 # -----------------------------------------------------------------------------
 # setContrast —
-view_sample: "29"
-# Name of sample on which to assign global image contrast settings
+viewSample: "29"
+# Sample used to assign image contrast settings to be applied to all samples.
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # curateThumbnails —
 numThumbnails: 10
-# Number of random examples of cells to be curated into image galleries per cluster
+# Number of examples per cluster to be curated.
 
 squareWindowDimension: 35
-# Number of pixels from the reference cell centroid in the x and y directions
+# Number of pixels from the reference cell centroid in the x and y directions.
+
+segOutlines: True
+# (Boolean) If True, overlay cell segmentation outlines on thumbnail images.
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # dropClusters —
 
 clustersToDrop: []
-# list of clusters (integers) to drop from dataframe input
+# list of clusters to drop from dataframe input (integers)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -243,20 +257,4 @@ clustersToDrop: []
 bonferroniCorrection: False
 # (Boolean) If True, compute pvals and Bonferroni qvals.
 # If False, compute uncorrected pvals only.
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# spatialAnalysis —
-cropDict: {'cd13': ('top', 10000), 'hfd3': ('bottom', 11000), 'hfd4': ('top', 8000), 'hfd8': ('bottom', 7500), 'hfd9': ('top', 9500), 'hfd11': ('bottom', 6600), 'hfd12': ('top', 9000), 'hfd13': ('top', 7000),}
-# Vertical crop coordinate (numpy row) and sub-image to use for
-# t-CyCIF images containing more than one tissue section
-
-spatialDict1: {'aco2': 0.07, 'glut1': 0.25}
-# Cutoff for pixel-level protein signal intensities
-
-spatialDict2: {'TCF1': 0, 'CD8T': 1}
-# Map of cell state call to cluster for cell states of interest
-
-radiusRange: [40, 600]
-# Range of radii (in pixels) for Poisson-disc sampling
 # -----------------------------------------------------------------------------
