@@ -244,17 +244,3 @@ squareWindowDimension: 35
 segOutlines: True
 # (Boolean) If True, overlay cell segmentation outlines on thumbnail images.
 # -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# dropClusters —
-
-clustersToDrop: []
-# list of clusters to drop from dataframe input (integers)
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# clusterBoxplots —
-bonferroniCorrection: False
-# (Boolean) If True, compute pvals and Bonferroni qvals.
-# If False, compute uncorrected pvals only.
-# -----------------------------------------------------------------------------
