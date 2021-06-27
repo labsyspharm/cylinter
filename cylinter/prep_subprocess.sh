@@ -72,18 +72,17 @@ else
     # combin sample tifs, csv files, and their segmentation outlines into respectively-labeled subdirectories.
     for SAMPLE_PATH in "$3"/* ; do
       SAMPLE_NAME=$(basename "$SAMPLE_PATH")
-      if [ $SAMPLE_NAME != "csv" ] && [ $SAMPLE_NAME != "tif" ] && [ $SAMPLE_NAME != "seg" ]; then
-        if [ -d "$SAMPLE_PATH"/quantification ]; then
+      if [ $SAMPLE_NAME != "csv" ] && [ $SAMPLE_NAME != "tif" ] && [ $SAMPLE_NAME != "seg" ] && [ $SAMPLE_NAME != "markers.csv" ]; then
+        if [ -d "$3"/quantification ]; then
+          mv "$3"/quantification/*.csv "$3"/csv/
+          mv "$3"/registration/*.tif "$3"/tif/
 
-          mv "$SAMPLE_PATH"/quantification/*.csv "$3"/csv/
-          mv "$SAMPLE_PATH"/registration/*.tif "$3"/tif/
-
-          for RESOLVED_PATH in "$SAMPLE_PATH"/qc/s3seg/* ; do
+          for RESOLVED_PATH in "$3"/qc/s3seg/* ; do
             mv "$RESOLVED_PATH"/nucleiOutlines.tif "$RESOLVED_PATH"/"$SAMPLE_NAME".tif
             mv "$RESOLVED_PATH"/"$SAMPLE_NAME".tif "$3"/seg/
           done
 
-          mv "$SAMPLE_PATH"/markers.csv "$3"/  # overwrites markers files with every sample in loop
+          # mv "$SAMPLE_PATH"/markers.csv "$3"/  # overwrites markers files with every sample in loop
 
         fi
         rm -r "$SAMPLE_PATH"

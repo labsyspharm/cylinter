@@ -75,4 +75,4 @@ def validate_paths(args):
 
 def create_output_directory(config):
     """Create the output directory structure given the configuration object."""
-    config.out_dir.mkdir(parents=True, exist_ok=True)
+    config.outDir.mkdir(parents=True, exist_ok=True)

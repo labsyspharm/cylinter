@@ -2,7 +2,7 @@
 
 ## An Interactive Image Segmentation Filter for Multiplex Microscopy.
 
-CyLinter is quality control software for identifying and removing cell segmentation instances in microscopy images corrupted by optical and/or image-processing artifacts. The tool is user-guided and comprises a set of modular and extensible QC modules instantiated in a configurable [Python](https://www.python.org) Class object. Module results are cached to allow for dynamic restarts and iterative QC strategies.
+CyLinter is quality control software for identifying and removing cell segmentation instances corrupted by optical and/or image-processing artifacts in multiplex microscopy images. The tool is user-guided and comprises a set of modular and extensible QC modules instantiated in a configurable [Python](https://www.python.org) Class object. Module results are cached to allow for dynamic restarts.
 
 CyLinter development is led by [Greg Baker](https://github.com/gjbaker) at the [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), Harvard Medical School.
 
