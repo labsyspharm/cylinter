@@ -1,27 +1,29 @@
 # Transferring and organizing input data
-CyLinter uses a support console script to programmatically format standard output files from the [MCMICRO](https://github.com/labsyspharm/mcmicro) image-processing pipeline as standard input for CyLinter. CyLinter supports analysis of whole tissue sections and tissue microarray (TMA) data pre-processed by MCMICRO. To organize **WHOLE TISSUE DATA** as CyLinter input, run the following command:
+CyLinter uses a support console script to programmatically format standard output files from the [MCMICRO](https://github.com/labsyspharm/mcmicro) image-processing pipeline as standard input for CyLinter. CyLinter supports analysis of whole tissue sections and tissue microarray (TMA) data pre-processed by MCMICRO.
+
+To organize **WHOLE TISSUE DATA** as CyLinter input, run the following command:
 
 ``` bash
-prep <mcmicro_output_dir> <cylinter_input_dir>  # < > indicates a variable.
+prep <mcmicro_output_path> <cylinter_input_path>  # < > indicates a variable.
 ```
 
 To organize **TMA DATA** as CyLinter input, run the following command:
 
 ``` bash
 # prepend a "-t" flag before the source and destination directory file paths.
-prep -t <mcmicro_output_dir> <cylinter_input_dir>
+prep -t <mcmicro_output_path> <cylinter_input_path>
 ```
 
 SSH keys can be used to transfer MCMICRO output from the o2 compute cluster at HMS (requires access permission).
 
 ``` bash
-prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_dir> <cylinter_input_dir>
+prep <userID>@transfer.rc.hms.harvard.edu:<mcmicro_output_path> <cylinter_input_path>
 ```
 
 CyLinter input directories are organized as follows:
 
 ``` bash
-<cylinter_input_dir>
+<cylinter_input_path>
 ├── config.yml
 ├── csv
 │   ├── unmicst-<tissue/core1>.csv
@@ -35,10 +37,9 @@ CyLinter input directories are organized as follows:
     └── <tissue/core2>.tif
 ```
 
-* `config.yml` is a template configuration file for specifying program configurations and module parameters.
-The template is pre-formatted for use with an exemplar dataset (`emit22_demo`, see "Exemplar data" tab).
+* In the above example CyLinter input directory, `config.yml` is a template configuration file for specifying program configurations and module parameters. The template is pre-formatted for use with an exemplar dataset (click "Exemplar data" tab at left for details).
 
-* `markers.csv` contains immunomarker metadata for the particular experiment. The file must be formatted as follows:
+* The `markers.csv` contains immunomarker metadata for the particular experiment. The file should be formatted as follows:
 
 ```
 channel_number,cycle_number,marker_name
@@ -54,4 +55,4 @@ channel_number,cycle_number,marker_name
 .
 .
 ```
-* Additional metadata columns are permissible, but not used by the current version of CyLinter.
+* Additional metadata columns are permissible, but are not currently used by CyLinter.

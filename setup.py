@@ -12,7 +12,7 @@ requires = [
     'matplotlib==3.3.3',
     'seaborn==0.11.1',
     'scikit-image==0.18.1',
-    'napari==0.3.6',  # points layer doesn't work with napari[all] (v0.4.3)
+    'napari==0.4.10',
     'PyQt5==5.15.2',  # must include if not installing napari[all]
     'zarr==2.6.1',
     'natsort==7.1.0',
@@ -23,7 +23,7 @@ requires = [
     'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21) fails at transferring
 ]
 
-VERSION = '0.0.26'
+VERSION = '0.0.28'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'

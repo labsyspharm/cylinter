@@ -29,7 +29,7 @@ else
     echo "Transferring TMA data."
 
     # Transfer mcmicro output files to CyLinter input directory.
-    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include dearray/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
+    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include dearray/*.tif --include qc/s3seg/*/cellRingOutlines.tif --include markers.csv --exclude work --exclude '*.*'
 
     mkdir -p "$3"/seg
 
@@ -43,7 +43,7 @@ else
         SAMPLE_NAME=$(basename "$RESOLVED_PATH")
         arrIN=(${SAMPLE_NAME//-/ })
         NAME=${arrIN[1]}
-        mv "$RESOLVED_PATH"/nucleiOutlines.tif "$RESOLVED_PATH"/"$NAME".tif
+        mv "$RESOLVED_PATH"/cellRingOutlines.tif "$RESOLVED_PATH"/"$NAME".tif
         mv "$RESOLVED_PATH"/"$NAME".tif "$3"/seg/
       done
 
@@ -62,29 +62,30 @@ else
     echo "Transferring whole tissue data."
 
     # Transfer mcmicro output files to CyLinter input directory.
-    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include registration/*.tif --include qc/s3seg/*/nucleiOutlines.tif --include markers.csv --exclude work --exclude '*.*'
+    rsync -avP -m "$2"/ "$3" --include quantification/*.csv --include registration/*.tif --include qc/s3seg/*/nucleiRingOutlines.tif --include markers.csv --exclude work --exclude '*.*'
 
     # Make directories for images, data tables, and segmentation outlines
     mkdir -p "$3"/csv
     mkdir -p "$3"/tif
     mkdir -p "$3"/seg
 
-    # combin sample tifs, csv files, and their segmentation outlines into respectively-labeled subdirectories.
+    # combine sample tifs, csv files, and their segmentation outlines into respectively-labeled subdirectories.
+    mv "$3"/quantification/*.csv "$3"/csv/
+    mv "$3"/registration/*.tif "$3"/tif/
+
+    for SAMPLE_PATH in "$3"/qc/s3seg/* ; do
+      SAMPLE_NAME=$(basename "$SAMPLE_PATH")
+
+      # crop off "unmicst-" prefix"
+      arrIN=(${SAMPLE_NAME//unmicst-/ })
+
+      mv "$SAMPLE_PATH"/nucleiRingOutlines.tif "$SAMPLE_PATH"/"${arrIN[0]}".tif
+      mv "$SAMPLE_PATH"/"${arrIN[0]}".tif "$3"/seg/
+    done
+
     for SAMPLE_PATH in "$3"/* ; do
       SAMPLE_NAME=$(basename "$SAMPLE_PATH")
       if [ $SAMPLE_NAME != "csv" ] && [ $SAMPLE_NAME != "tif" ] && [ $SAMPLE_NAME != "seg" ] && [ $SAMPLE_NAME != "markers.csv" ]; then
-        if [ -d "$3"/quantification ]; then
-          mv "$3"/quantification/*.csv "$3"/csv/
-          mv "$3"/registration/*.tif "$3"/tif/
-
-          for RESOLVED_PATH in "$3"/qc/s3seg/* ; do
-            mv "$RESOLVED_PATH"/nucleiOutlines.tif "$RESOLVED_PATH"/"$SAMPLE_NAME".tif
-            mv "$RESOLVED_PATH"/"$SAMPLE_NAME".tif "$3"/seg/
-          done
-
-          # mv "$SAMPLE_PATH"/markers.csv "$3"/  # overwrites markers files with every sample in loop
-
-        fi
         rm -r "$SAMPLE_PATH"
       fi
     done
