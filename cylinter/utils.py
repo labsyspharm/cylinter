@@ -15,6 +15,9 @@ import zarr
 from hurry.filesize import size
 import psutil
 import gc
+import dask.array as da
+import zarr
+import tifffile
 
 SUPPORTED_EXTENSIONS = ['.csv']
 
@@ -40,6 +43,14 @@ def log_multiline(log_function, msg):
     """Call log_function once for each line of msg."""
     for line in msg.split("\n"):
         log_function(line)
+
+
+def single_channel_pyramid(tiff_path, channel):
+    target_filepath = tiff_path
+    tiff = tifffile.TiffFile(target_filepath)
+    pyramid = [zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels]
+
+    return pyramid
 
 
 # scatter point selection tool
@@ -183,14 +194,14 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
         ccolors = [ccolors[i] for i in myorder]
 
         # use Okabe and Ito color-safe palette for first 6 colors
-        ccolors[0] = np.array([0.91, 0.29, 0.235]) #E84A3C
-        ccolors[1] = np.array([0.18, 0.16, 0.15]) #2E2926
-        ccolors[2] = np.array([0.0, 0.447, 0.698, 1.0])  # blue
-        ccolors[3] = np.array([0.902, 0.624, 0.0, 1.0])  # orange
-        ccolors[4] = np.array([0.0, 0.620, 0.451, 1.0])  # bluish green
-        ccolors[5] = np.array([0.8, 0.475, 0.655, 1.0])  # reddish purple
-        ccolors[6] = np.array([0.941, 0.894, 0.259, 1.0])  # yellow
-        ccolors[7] = np.array([0.835, 0.369, 0.0, 1.0])  # vermillion
+        # ccolors[0] = np.array([0.91, 0.29, 0.235]) #E84A3C
+        # ccolors[1] = np.array([0.18, 0.16, 0.15]) #2E2926
+        ccolors[0] = np.array([0.0, 0.447, 0.698, 1.0])  # blue
+        ccolors[1] = np.array([0.902, 0.624, 0.0, 1.0])  # orange
+        ccolors[2] = np.array([0.0, 0.620, 0.451, 1.0])  # bluish green
+        ccolors[3] = np.array([0.8, 0.475, 0.655, 1.0])  # reddish purple
+        ccolors[4] = np.array([0.941, 0.894, 0.259, 1.0])  # yellow
+        ccolors[5] = np.array([0.835, 0.369, 0.0, 1.0])  # vermillion
 
     cols = np.zeros((numCatagories * numSubcatagories, 3))
     for i, c in enumerate(ccolors):

@@ -26,7 +26,7 @@ class Config:
         config.delintMode = bool(data['delintMode'])
         config.showAbChannels = bool(data['showAbChannels'])
 
-        config.cutoffAxis = str(data['cutoffAxis'])
+        config.yAxisGating = bool(data['yAxisGating'])
         if (data['logRatioRnge']) is None:
             config.logRatioRnge = (data['logRatioRnge'])
         else:
@@ -36,7 +36,8 @@ class Config:
         config.hexbinGridSize = int(data['hexbinGridSize'])
 
         config.metaQC = bool(data['metaQC'])
-        config.reclassCutoff = float(data['reclassCutoff'])
+        config.cleanReclassCutoff = float(data['cleanReclassCutoff'])
+        config.noisyReclassCutoff = float(data['noisyReclassCutoff'])
 
         config.channelExclusionsPCA = list(data['channelExclusionsPCA'])
         config.samplesToRemovePCA = list(data['samplesToRemovePCA'])
