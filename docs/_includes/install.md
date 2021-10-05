@@ -10,7 +10,7 @@ Check if Python 3 is installed.
 python3 --version
 ```
 
- Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version number other than 3.8.5 is installed, it is recommended to install version 3.8.5 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/). Alternative versions maybe be compatible with CyLinter, but have not been tested.
+ Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version number less than 3.6.0 is installed, it is recommended to install a version > 3.6.0 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/).
 
 ## Create a Python virtual environment
 

@@ -30,10 +30,10 @@ CyLinter input directories are organized as follows:
 │   └── unmicst-<tissue/core2>.csv
 ├── markers.csv
 ├── seg
-│   ├── <tissue/core1>.tif (standard TIFF format)
+│   ├── <tissue/core1>.tif (OME-TIFF format)
 │   └── <tissue/core2>.tif
 └── tif
-    ├── <tissue/core1>.tif (OME-TIFF file format)
+    ├── <tissue/core1>.tif (OME-TIFF or standard TIFF file format)
     └── <tissue/core2>.tif
 ```
 
@@ -55,4 +55,4 @@ channel_number,cycle_number,marker_name
 .
 .
 ```
-* Additional metadata columns are permissible, but are not currently used by CyLinter.
+* Additional metadata columns are permissible, but not utilized by CyLinter.
