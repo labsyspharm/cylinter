@@ -15,7 +15,6 @@ class Config:
         config.inDir = pathlib.Path(data['inDir']).resolve()
         config.outDir = pathlib.Path(data['outDir']).resolve()
         config.randomSampleSize = float(data['randomSampleSize'])
-        config.maskObject = str(data['maskObject'])
         config._parse_sample_metadata(data['sampleMetadata'])
         config.samplesToExclude = (data['samplesToExclude'])
         config.markersToExclude = (data['markersToExclude'])
@@ -43,10 +42,9 @@ class Config:
         config.samplesToRemovePCA = list(data['samplesToRemovePCA'])
         config.dimensionPCA = int(data['dimensionPCA'])
         config.pointSize = float(data['pointSize'])
-        config.normalize = bool(data['normalize'])
         config.labelPoints = bool(data['labelPoints'])
         config.distanceCutoff = float(data['distanceCutoff'])
-        config.samplesToSilhouette = list(data['samplesToSilhouette'])
+        config.conditionsToSilhouette = list(data['conditionsToSilhouette'])
 
         config.embeddingAlgorithmQC = str(data['embeddingAlgorithmQC'])
         config.embeddingAlgorithm = str(data['embeddingAlgorithm'])
@@ -102,25 +100,28 @@ class Config:
         return config
 
     def _parse_sample_metadata(self, value):
+        self.sampleNames = {}
         self.sampleConditions = {}
-        self.sampleAbbreviations = {}
+        self.sampleConditionAbbrs = {}
         self.sampleStatuses = {}
         self.sampleReplicates = {}
 
         if value is None:
             return
 
-        for name, terms in value.items():
+        for file_name, terms in value.items():
 
-            condition = str(terms[0])
-            abbreviation = str(terms[1])
-            status = str(terms[2])
-            replicate = int(terms[3])
+            name = str(terms[0])
+            condition = str(terms[1])
+            abbreviation = str(terms[2])
+            status = str(terms[3])
+            replicate = int(terms[4])
 
-            self.sampleConditions[name] = condition
-            self.sampleAbbreviations[name] = abbreviation
-            self.sampleStatuses[name] = status
-            self.sampleReplicates[name] = replicate
+            self.sampleNames[file_name] = name
+            self.sampleConditions[file_name] = condition
+            self.sampleConditionAbbrs[file_name] = abbreviation
+            self.sampleStatuses[file_name] = status
+            self.sampleReplicates[file_name] = replicate
 
     @property
     def checkpoint_path(self):

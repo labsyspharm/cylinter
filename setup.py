@@ -4,8 +4,9 @@ with open("README.md", "r", encoding="utf-8") as fh:
     LONG_DESCRIPTION = fh.read()
 
 requires = [
+    'numba==0.53',
     'PyYAML==5.4',
-    'pyarrow==2.0.0',
+    'pyarrow==5.0.0',
     'pandas==1.2.0',
     'hdbscan==0.8.26',
     'joblib==0.17.0',  # newly-released joblib==1.0.0 results in issues with parallel processing with larger datasets
@@ -16,14 +17,13 @@ requires = [
     'PyQt5==5.15.2',  # must include if not installing napari[all]
     'zarr==2.6.1',
     'natsort==7.1.0',
-    'rpy2==3.4.2',
-    'bridson==0.1.0',
+    'statsmodels==0.13.0',
     'umap-learn==0.5.1',
     'hurry.filesize==0.9',
-    'synapseclient==2.0.0',  # v2.2.2 (current version as of 01/25/21) fails at transferring
+    'synapseclient==2.4.0',
 ]
 
-VERSION = '0.0.28'
+VERSION = '0.0.29'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
@@ -35,7 +35,7 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
-    setup_requires=['cython>=0.29.21', 'numpy>=1.19.5'],
+    setup_requires=['cython', 'numpy'],
     packages=find_packages(),
     install_requires=requires,
     data_files=[('', ['cylinter/config.yml']),
@@ -57,7 +57,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],
-    python_requires='==3.8.5',
+    python_requires='>=3.6.0',
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
     license=LICENSE,

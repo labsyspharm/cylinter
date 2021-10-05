@@ -46,12 +46,39 @@ def log_multiline(log_function, msg):
 
 
 def single_channel_pyramid(tiff_path, channel):
+
     target_filepath = tiff_path
-    tiff = tifffile.TiffFile(target_filepath)
-    pyramid = [zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels]
+    tiff = tifffile.TiffFile(target_filepath, is_ome=False)
+
+    pyramid = [
+        zarr.open(s[channel].aszarr())
+        for s in tiff.series[0].levels
+        ]
+
+    pyramid = [
+        da.from_zarr(z)
+        for z in pyramid
+        ]
 
     return pyramid
 
+
+def matplotlib_warnings(fig):
+    # suppress pyplot warning:
+    # MatplotlibDeprecationWarning: Toggling axes navigation
+    # from the keyboard is deprecated since 3.3 and will be
+    # removed two minor releases later.
+    fig.canvas.mpl_disconnect(
+        fig.canvas.manager.key_press_handler_id)
+
+
+def napari_warnings():
+
+    # suppress warning:
+    # vispy_camera.py:109: RuntimeWarning: divide by
+    # zero encountered in true_divide
+    # zoom = np.min(canvas_size / scale)
+    np.seterr(divide='ignore')
 
 # scatter point selection tool
 class SelectFromCollection(object):
@@ -139,7 +166,7 @@ def save_dataframe(df, outDir, moduleName):
         )
 
 
-def read_markers(markers_filepath, mask_object, markers_to_exclude):
+def read_markers(markers_filepath, markers_to_exclude):
 
     markers = pd.read_csv(
         markers_filepath,
@@ -158,18 +185,20 @@ def read_markers(markers_filepath, mask_object, markers_to_exclude):
 
     # abx channels
     abx_channels = [
-        f'{i}_{mask_object}' for i in markers['marker_name'] if
+        i for i in markers['marker_name'] if
         dna_moniker not in i
         ]
 
     return markers, dna1, dna_moniker, abx_channels
 
 
-def unmicst_version(sample_conditions):
-    unmicst_version = list(
-        sample_conditions.keys()
-        )[0].split('-', 1)[0]
-    return unmicst_version
+def marker_channel_number(markers, marker_name):
+
+    channel_number = markers['channel_number'][
+                markers['marker_name']
+                == marker_name]
+
+    return channel_number
 
 
 def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=False):
@@ -222,72 +251,54 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
     return cmap
 
 
-def cluster_expression(df, markers, cluster, num_proteins, across_or_within='across'):
+def cluster_expression(df, markers, cluster, num_proteins, standardize='within'):
 
-    if cluster > -1:
+    if cluster != -1:
 
-        df = df[df['cluster'] > -1]
+        df = df[df['cluster'] != -1]
 
         cluster_means = df[markers + ['cluster']].groupby('cluster').mean()
 
-        # rescale across clusters first
-        # (this will make the clustermap results agree with the top
-        # expressed markers shown for each cluster)
-        min_max_scaler = MinMaxScaler()
-        rescaled_vals = min_max_scaler.fit_transform(cluster_means.values)
-        cluster_means_rescaled = pd.DataFrame(
-            index=cluster_means.index,
-            columns=cluster_means.columns,
-            data=rescaled_vals
-            )
+        if standardize == 'across':
 
-        if across_or_within == 'across':
-            max_cluster_ids = [
-                cluster_means[i].idxmax() for
-                i in cluster_means
-                ]
-
-            max_cluster_vals = [
-                cluster_means[i].max() for
-                i in cluster_means
-                ]
-
-            id_val_tuples = list(tuple(zip(max_cluster_ids, max_cluster_vals)))
-
-            means_dict = dict(
-                zip(markers, id_val_tuples)
-                )
-
-            means_dict = {
-                k: v for k, v in
-                means_dict.items() if v[0] == cluster
-                }
-
-            # sort means_dict by second element of 2-tuple
-            # (i.e. mean expression value)
+            cluster_ids_max = [
+                cluster_means[i].idxmax() for i in cluster_means]
+            cluster_vals_max = [cluster_means[i].max() for i in cluster_means]
+            id_val_tuples = list(tuple(zip(cluster_ids_max, cluster_vals_max)))
+            max_dict = dict(zip(markers, id_val_tuples))
+            # isolate maximums for target cluster
+            target_dict = {
+                k: v for k, v in max_dict.items() if v[0] == cluster}
+            # sort target_dict by mean expression values
             total_markers = [
-                k for k, v in sorted(
-                    means_dict.items(),
-                    key=lambda item: item[1][1])
-                ]
-
+                k for k, v in
+                sorted(target_dict.items(), key=lambda item: item[1][1])]
+            # list is descending order (highest to lowest)
             total_markers.reverse()
-
+            # cutoff at num_proteins
             hi_markers = total_markers[:num_proteins]
+            # format hi_markers list
+            hi_markers = ', '. join(hi_markers)
+            hi_markers = f'{standardize}: {hi_markers}'
 
             return hi_markers
 
-        elif across_or_within == 'within':
+        elif standardize == 'within':
 
-            cluster_means_rescaled = cluster_means_rescaled.loc[
+            # sort cluster means
+            cluster_means_sorted = cluster_means.loc[
                 cluster].sort_values(ascending=False)
-
-            hi_markers = list(cluster_means_rescaled.index[:num_proteins])
+            # cutoff at num_proteins
+            hi_markers = list(cluster_means_sorted.index[:num_proteins])
+            # format hi_markers list
+            hi_markers = ', '. join(hi_markers)
+            hi_markers = (standardize, hi_markers)
 
             return hi_markers
 
     else:
-        hi_markers = []
+        hi_markers = 'unclustered cells'
+
         return hi_markers
 
 
