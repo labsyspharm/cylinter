@@ -49,13 +49,13 @@ from numcodecs import Blosc
 from datetime import datetime
 from joblib import Memory
 from scipy.stats import ttest_ind
-from statsmodels.stats.multitest import fdrcorrection
 
 from .utils import (
     dataset_files, log_banner, log_multiline,
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
-    marker_channel_number, categorical_cmap, cluster_expression, loadZarrs,
-    clearRAM, single_channel_pyramid, matplotlib_warnings, napari_warnings
+    marker_channel_number, categorical_cmap, cluster_expression, clearRAM,
+    single_channel_pyramid, matplotlib_warnings, napari_warnings,
+    fdrcorrection
     )
 
 logger = logging.getLogger(__name__)
@@ -2732,11 +2732,10 @@ class QC(object):
 
         # create metaQC directory if metaQC is to be performed and
         # the directory doesn't already exist
-        if self.metaQC:
-            reclass_dir = os.path.join(
-                self.outDir, f'clustering/metaQC')
-            if not os.path.exists(reclass_dir):
-                os.makedirs(reclass_dir)
+        reclass_dir = os.path.join(
+            self.outDir, f'clustering/metaQC')
+        if not os.path.exists(reclass_dir):
+            os.makedirs(reclass_dir)
 
         # specify the names of modules in that pipeline that perform
         # data redaction leading up to the metQC modules
@@ -4049,6 +4048,7 @@ class QC(object):
                         # superimpose centroids of lassoed noisy cells
                         # colored by stage removed over channel images
                         print('Opening Napari...')
+                        print()
 
                         napari_warnings()
                         if self.showAbChannels:
@@ -5513,6 +5513,7 @@ class QC(object):
                 # superimpose centroids of lassoed noisy cells
                 # colored by stage removed over channel images
                 print('Opening Napari...')
+                print()
 
                 napari_warnings()
                 if self.showAbChannels:
@@ -6376,6 +6377,7 @@ class QC(object):
                         frequency_dir, 'stats_total.csv'), index=False)
 
                 # compute FDR p-val corrections
+                # (uses statsmodels.stats.multitest implementation)
                 rejected, p_adjust = fdrcorrection(
                     statistics['pval'].tolist(), alpha=0.05,
                     method='indep', is_sorted=False)

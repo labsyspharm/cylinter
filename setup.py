@@ -17,13 +17,12 @@ requires = [
     'PyQt5==5.15.2',  # must include if not installing napari[all]
     'zarr==2.6.1',
     'natsort==7.1.0',
-    'statsmodels==0.13.0',
     'umap-learn==0.5.1',
     'hurry.filesize==0.9',
     'synapseclient==2.4.0',
 ]
 
-VERSION = '0.0.29'
+VERSION = '0.0.30'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
