@@ -1,11 +1,16 @@
 cff-version: 1.2.0
 message: "If you use CyLinter in your work, please cite it using the following metadata."
-authors:
-  - family-names: Baker
-    given-names: Gregory
-    orcid: https://orcid.org/0000-0002-5196-3961
 title: "CyLinter"
+authors:
+  - family-names: "Baker"
+    given-names: "Gregory"
+    orcid: "https://orcid.org/0000-0002-5196-3961"
+keywords:
+- "multiplex microscopy"
+- "quality control"
+- "research software"
 version: 0.0.30
 doi:
 date-released: 2021-01-21
+license: MIT
 url: "https://github.com/labsyspharm/cylinter"
