@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     LONG_DESCRIPTION = fh.read()
 
 requires = [
-    'numba==0.53',
+    'numba==0.53.1',
     'PyYAML==5.4',
     'pyarrow==5.0.0',
     'pandas==1.2.0',
@@ -12,6 +12,7 @@ requires = [
     'joblib==0.17.0',  # newly-released joblib==1.0.0 results in issues with parallel processing with larger datasets
     'matplotlib==3.3.3',
     'seaborn==0.11.1',
+    'scikit-learn==0.24.2',
     'scikit-image==0.18.1',
     'napari==0.4.10',
     'PyQt5==5.15.2',  # must include if not installing napari[all]
@@ -22,7 +23,7 @@ requires = [
     'synapseclient==2.4.0',
 ]
 
-VERSION = '0.0.30'
+VERSION = '0.0.31'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
@@ -34,7 +35,7 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
-    setup_requires=['cython', 'numpy'],
+    setup_requires=[],
     packages=find_packages(),
     install_requires=requires,
     data_files=[('', ['cylinter/config.yml']),
