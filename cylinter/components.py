@@ -2996,7 +2996,7 @@ class QC(object):
                                         location=None),
                                     approx_min_span_tree=True,
                                     gen_min_span_tree=False,
-                                    core_dist_n_jobs=4,
+                                    core_dist_n_jobs=-1,
                                     cluster_selection_method='eom',
                                     allow_single_cluster=False,
                                     prediction_data=False,
@@ -3446,7 +3446,7 @@ class QC(object):
                                         location=None),
                                     approx_min_span_tree=True,
                                     gen_min_span_tree=False,
-                                    core_dist_n_jobs=4,
+                                    core_dist_n_jobs=-1,
                                     cluster_selection_method='eom',
                                     allow_single_cluster=False,
                                     prediction_data=False,
@@ -3482,7 +3482,7 @@ class QC(object):
                                         location=None),
                                     approx_min_span_tree=True,
                                     gen_min_span_tree=False,
-                                    core_dist_n_jobs=4,
+                                    core_dist_n_jobs=-1,
                                     cluster_selection_method='eom',
                                     allow_single_cluster=False,
                                     prediction_data=False,
@@ -3626,7 +3626,7 @@ class QC(object):
                                         location=None),
                                     approx_min_span_tree=True,
                                     gen_min_span_tree=False,
-                                    core_dist_n_jobs=4,
+                                    core_dist_n_jobs=-1,
                                     cluster_selection_method='eom',
                                     allow_single_cluster=False,
                                     prediction_data=False,
@@ -4201,7 +4201,7 @@ class QC(object):
                                 location=None),
                             approx_min_span_tree=True,
                             gen_min_span_tree=False,
-                            core_dist_n_jobs=4,
+                            core_dist_n_jobs=-1,
                             cluster_selection_method='eom',
                             allow_single_cluster=False,
                             prediction_data=False,
@@ -4746,6 +4746,11 @@ class QC(object):
         random_state = 5
 
         if self.normalizeTissueCounts:
+            print('Performing weighted sampling of cells from tissues...')
+            print(
+                'Check that resulting cell counts are similar across samples.')
+            print('If not, try embedding a smaller fraction of data.')
+            print()
 
             # calculate per tissue cell-count weighted random sample
             groups = data.groupby('Sample')
@@ -4762,7 +4767,9 @@ class QC(object):
                 weights=weights['weights'], random_state=random_state,
                 axis=0)
 
-            print('Tissue counts normalized')
+            print('Cell counts:')
+            print(data.groupby(['Sample']).size())
+            print()
 
         else:
 
@@ -4897,7 +4904,7 @@ class QC(object):
                                     location=None),
                                 approx_min_span_tree=True,
                                 gen_min_span_tree=False,
-                                core_dist_n_jobs=4,
+                                core_dist_n_jobs=-1,
                                 cluster_selection_method='eom',
                                 allow_single_cluster=False,
                                 prediction_data=False,
@@ -5199,7 +5206,7 @@ class QC(object):
                                     location=None),
                                 approx_min_span_tree=True,
                                 gen_min_span_tree=False,
-                                core_dist_n_jobs=4,
+                                core_dist_n_jobs=-1,
                                 cluster_selection_method='eom',
                                 allow_single_cluster=False,
                                 prediction_data=False,
@@ -5235,7 +5242,7 @@ class QC(object):
                                     location=None),
                                 approx_min_span_tree=True,
                                 gen_min_span_tree=False,
-                                core_dist_n_jobs=4,
+                                core_dist_n_jobs=-1,
                                 cluster_selection_method='eom',
                                 allow_single_cluster=False,
                                 prediction_data=False,
@@ -5378,7 +5385,7 @@ class QC(object):
                                     location=None),
                                 approx_min_span_tree=True,
                                 gen_min_span_tree=False,
-                                core_dist_n_jobs=4,
+                                core_dist_n_jobs=-1,
                                 cluster_selection_method='eom',
                                 allow_single_cluster=False,
                                 prediction_data=False,
@@ -5619,7 +5626,7 @@ class QC(object):
                 location=None),
             approx_min_span_tree=True,
             gen_min_span_tree=False,
-            core_dist_n_jobs=4,
+            core_dist_n_jobs=-1,
             cluster_selection_method='eom',
             allow_single_cluster=False,
             prediction_data=False,
