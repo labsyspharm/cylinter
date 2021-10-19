@@ -23,7 +23,7 @@ requires = [
     'synapseclient==2.4.0',
 ]
 
-VERSION = '0.0.31'
+VERSION = '0.0.32'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'

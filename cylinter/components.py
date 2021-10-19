@@ -7,7 +7,6 @@ import glob
 import yaml
 import math
 import pickle
-import subprocess
 
 import gc
 import hdbscan
@@ -55,7 +54,7 @@ from .utils import (
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
     marker_channel_number, categorical_cmap, cluster_expression, clearRAM,
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
-    fdrcorrection
+    fdrcorrection, open_file
     )
 
 logger = logging.getLogger(__name__)
@@ -1493,11 +1492,9 @@ class QC(object):
 
             else:
 
-                subprocess.call(
-                    ['open', '-a', 'Preview',
-                     os.path.join(
-                        cycles_dir, 'cycle_correlation(logRatio).pdf')]
-                     )
+                filename = os.path.join(
+                    cycles_dir, 'cycle_correlation(logRatio).pdf')
+                open_file(filename)
 
                 def submit(text):
 
@@ -1649,11 +1646,9 @@ class QC(object):
                             cycles_dir, 'cycle_correlation(logRatio).pdf')
                             )
 
-                    subprocess.call(
-                        ['open', '-a', 'Preview',
-                         os.path.join(
-                            cycles_dir, 'cycle_correlation(logRatio).pdf')]
-                         )
+                    filename = os.path.join(
+                        cycles_dir, 'cycle_correlation(logRatio).pdf')
+                    open_file(filename)
 
                     plt.show(block=False)
                     plt.close()
@@ -1778,9 +1773,9 @@ class QC(object):
 
             if samples_to_threshold > 0:
 
-                subprocess.call(
-                    ['open', '-a', 'Preview', os.path.join(
-                        cycles_dir, 'cycle_correlation(logRatio).pdf')])
+                filename = os.path.join(
+                    cycles_dir, 'cycle_correlation(logRatio).pdf')
+                open_file(filename)
 
                 for name, group in ratios_melt.groupby(['sample']):
 
@@ -2281,11 +2276,8 @@ class QC(object):
             plt.close()
 
             # show raw signal intensity distributions
-            subprocess.call(
-                ['open', '-a', 'Preview', os.path.join(
-                    pruning_dir,
-                    f'{ab}_raw.png')]
-                    )
+            filename = os.path.join(pruning_dir, f'{ab}_raw.png')
+            open_file(filename)
 
             def submit(text):
 
@@ -2433,11 +2425,9 @@ class QC(object):
                 plt.close()
 
                 # show pruned and rescaled signal intensity distributions
-                subprocess.call(
-                    ['open', '-a', 'Preview', os.path.join(
-                        pruning_dir,
-                        f'{ab}_pruned_rescaled.png')]
-                        )
+                filename = os.path.join(
+                    pruning_dir, f'{ab}_pruned_rescaled.png')
+                open_file(filename)
 
                 # if sample_name was entered,
                 # plot low and high outliers in Napri
