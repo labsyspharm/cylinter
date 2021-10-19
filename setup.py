@@ -7,7 +7,7 @@ requires = [
     'numba==0.53.1',
     'PyYAML==5.4',
     'pyarrow==5.0.0',
-    'pandas==1.2.0',
+    'pandas==1.1.5',
     'hdbscan==0.8.26',
     'joblib==0.17.0',  # newly-released joblib==1.0.0 results in issues with parallel processing with larger datasets
     'matplotlib==3.3.3',
