@@ -1,5 +1,12 @@
-import glob
+import os
+import sys
+import subprocess
 import re
+import gc
+import glob
+import math
+import yaml
+import zarr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,16 +14,10 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from matplotlib import colors
 from sklearn.preprocessing import MinMaxScaler
-import os
-import math
-import subprocess
-import yaml
-import zarr
 from hurry.filesize import size
 import psutil
-import gc
-import dask.array as da
 import zarr
+import dask.array as da
 import tifffile
 
 SUPPORTED_EXTENSIONS = ['.csv']
@@ -411,3 +412,11 @@ def clearRAM(print_usage=False):
         process = psutil.Process(os.getpid())
 
         print(size(process.memory_info().rss))
+
+
+def open_file(filename):
+    if sys.platform == "win32":
+        os.startfile(filename)
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.run([opener, filename])
