@@ -10,7 +10,11 @@ Once registration is complete, download the exemplar data with the following com
 # Activate the CyLinter virtual environment.
 source ~/cylinter/bin/activate
 
+# download the demo dataset using the prep command:
 prep cylinter_demo ~/Desktop/cylinter_demo  # Enter Synapse ID and password when prompted.
+
+# the prep command is currently only available for Mac. PC users, please use the following command to download the demo dataset:  
+synapse get -r syn25685780 --downloadLocation C:\Users\<username>\Desktop\cylinter_demo --multiThreaded
 ```
 
 Be sure to populate the `in_dir` and `out_dir` parameters in `~/Desktop/cylinter_demo/config.yml` with user-specific variables; all other metadata in `config.yml` is pre-configured for use with the exemplar dataset.

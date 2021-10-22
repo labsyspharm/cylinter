@@ -1,5 +1,5 @@
 # Transferring and organizing input data
-CyLinter uses a support console script to programmatically format standard output files from the [MCMICRO](https://github.com/labsyspharm/mcmicro) image-processing pipeline as standard input for CyLinter. CyLinter supports analysis of whole tissue sections and tissue microarray (TMA) data pre-processed by MCMICRO.
+CyLinter uses a support console script to programmatically format standard output files from the [MCMICRO](https://github.com/labsyspharm/mcmicro) image-processing pipeline as standard input for CyLinter, but is compatible with datasets pre-processed using alternative platforms that yield multiplex images (OME-TIFF/TIFF), cell segmentation outlines (OME-TIFF), and cell x feature data tables (CSV). CyLinter supports analysis of whole tissue sections and tissue microarray (TMA) data pre-processed by MCMICRO.
 
 To organize **WHOLE TISSUE DATA** as CyLinter input, run the following command:
 
