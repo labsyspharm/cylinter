@@ -6,9 +6,15 @@ The program is executed by typing the `cylinter` command followed by the path to
 
 ``` bash
 # Activate virtual environment
+
+# for Mac:
 source ~/cylinter/bin/activate
 
-# Run pipeline beginning from the first module:
+# for PC
+cd C:\Users\<username>\cylinter\scripts
+activate
+
+# Run the pipeline beginning from the first module:
 cylinter <cylinter_input_path>/config.yml
 ```
 
