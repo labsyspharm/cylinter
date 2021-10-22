@@ -14,14 +14,19 @@ python3 --version
 
 ## Create a Python virtual environment
 
-To avoid conflicts between CyLinter and system-wide Python dependences, create a [Python virtual environment](https://docs.python.org/3/library/venv.html) dedicated to CyLinter analysis.
+To avoid conflicts between CyLinter and system-wide Python dependences, create a [Python virtual environment](https://docs.python.org/3/library/venv.html) dedicated to CyLinter analysis (conda environments are also acceptable).
 
 ``` bash
-# Create a virtual environment called "cylinter" in the home directory.
-python3 -m venv ~/cylinter
+# Create a virtual environment called "cylinter" in the home directory and activate the newly-created virtual environment.
 
-# Activate the newly-created virtual environment.
+# for Mac
+python3 -m venv ~/cylinter
 source ~/cylinter/bin/activate  
+
+# for PC:
+python3 -m venv C:\Users\<username>\cylinter
+cd C:\Users\<username>\cylinter\scripts
+activate
 ```
 
 ## Install CyLinter
