@@ -30,6 +30,11 @@ out_dir: /Users/<user>/Desktop/cylinter_demo/output
 Run CyLinter on the exemplar dataset:
 
 ``` bash
-# Pass the YAML configuration file for the demonstration to CyLinter for analysis
+# Pass the YAML configuration file for the demonstration to CyLinter for analysis.
+
+# for Mac:
 cylinter --module (optional) ~/Desktop/cylinter_demo/config.yml  
+
+# for PC:
+cylinter --module (optional) C:\Users\<username>\Desktop\cylinter_demo\config.yml
 ```
