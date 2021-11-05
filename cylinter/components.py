@@ -7,6 +7,7 @@ import glob
 import yaml
 import math
 import pickle
+from ast import literal_eval
 
 import gc
 import hdbscan
@@ -14,6 +15,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+import PySimpleGUIQt as sg
 
 from skimage.color import gray2rgb
 from skimage.filters import gaussian
@@ -54,7 +57,7 @@ from .utils import (
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
     marker_channel_number, categorical_cmap, cluster_expression, clearRAM,
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
-    fdrcorrection, open_file
+    fdrcorrection, open_file, dict_to_csv, csv_to_dict
     )
 
 logger = logging.getLogger(__name__)
@@ -121,19 +124,33 @@ class QC(object):
                  # selectROIs -
                  delintMode=None,
                  showAbChannels=None,
+                 samplesForROISelection=None,
 
                  # crossCycleCorrelation -
                  yAxisGating=None,
-                 logRatioRnge=None,
 
                  # pruneOutliers -
                  hexbins=None,
                  hexbinGridSize=None,
 
-                 # metQC -
+                 # metaQC -
                  metaQC=None,
-                 cleanReclassCutoff=None,
-                 noisyReclassCutoff=None,
+                 default_mcs=200,
+                 default_reclass_tuple='0.75, 0.75',
+                 embeddingAlgorithmQC=None,
+                 channelExclusionsClusteringQC=None,
+                 samplesToRemoveClusteringQC=None,
+                 fracForEmbeddingQC=None,
+                 dimensionEmbeddingQC=None,
+                 perplexityQC=None,
+                 earlyExaggerationQC=None,
+                 learningRateTSNEQC=None,
+                 metricQC=None,
+                 randomStateQC=None,
+                 nNeighborsQC=None,
+                 learningRateUMAPQC=None,
+                 minDistQC=None,
+                 repulsionStrengthQC=None,
 
                  # PCA module —
                  channelExclusionsPCA=None,
@@ -145,36 +162,20 @@ class QC(object):
                  conditionsToSilhouette=None,
 
                  # clustering module —
-                 embeddingAlgorithmQC=None,
                  embeddingAlgorithm=None,
-                 channelExclusionsClusteringQC=None,
                  channelExclusionsClustering=None,
-                 samplesToRemoveClusteringQC=None,
                  samplesToRemoveClustering=None,
                  normalizeTissueCounts=None,
-                 fracForEmbeddingQC=None,
                  fracForEmbedding=None,
-                 dimensionEmbeddingQC=None,
                  dimensionEmbedding=None,
-
-                 perplexityQC=None,
                  perplexity=None,
-                 earlyExaggerationQC=None,
                  earlyExaggeration=None,
-                 learningRateTSNEQC=None,
                  learningRateTSNE=None,
-                 metricQC=None,
                  metric=None,
-                 randomStateQC=None,
                  randomState=None,
-
-                 nNeighborsQC=None,
                  nNeighbors=None,
-                 learningRateUMAPQC=None,
                  learningRateUMAP=None,
-                 minDistQC=None,
                  minDist=None,
-                 repulsionStrengthQC=None,
                  repulsionStrength=None,
 
                  # frequencyStats —
@@ -189,10 +190,6 @@ class QC(object):
 
                  # textbox switch —
                  tbEntry=None,
-
-                 # reclassified data chunks
-                 reclassClean=None,
-                 reclassNoisy=None,
                  ):
 
         # assert(SOMETHING)  # placeholder
@@ -213,16 +210,30 @@ class QC(object):
 
         self.delintMode = delintMode
         self.showAbChannels = showAbChannels
+        self.samplesForROISelection = samplesForROISelection
 
         self.yAxisGating = yAxisGating
-        self.logRatioRnge = logRatioRnge
 
         self.hexbins = hexbins
         self.hexbinGridSize = hexbinGridSize
 
         self.metaQC = metaQC
-        self.cleanReclassCutoff = cleanReclassCutoff
-        self.noisyReclassCutoff = noisyReclassCutoff
+        self.default_mcsQC = default_mcs
+        self.default_reclass_tuple = default_reclass_tuple
+        self.embeddingAlgorithmQC = embeddingAlgorithmQC
+        self.channelExclusionsClusteringQC = channelExclusionsClusteringQC
+        self.samplesToRemoveClusteringQC = samplesToRemoveClusteringQC
+        self.fracForEmbeddingQC = fracForEmbeddingQC
+        self.dimensionEmbeddingQC = dimensionEmbeddingQC
+        self.perplexityQC = perplexityQC
+        self.earlyExaggerationQC = earlyExaggerationQC
+        self.learningRateTSNEQC = learningRateTSNEQC
+        self.metricQC = metricQC
+        self.randomStateQC = randomStateQC
+        self.nNeighborsQC = nNeighborsQC
+        self.learningRateUMAPQC = learningRateUMAPQC
+        self.minDistQC = minDistQC
+        self.repulsionStrengthQC = repulsionStrengthQC
 
         self.channelExclusionsPCA = channelExclusionsPCA
         self.samplesToRemovePCA = samplesToRemovePCA
@@ -232,36 +243,20 @@ class QC(object):
         self.distanceCutoff = distanceCutoff
         self.conditionsToSilhouette = conditionsToSilhouette
 
-        self.embeddingAlgorithmQC = embeddingAlgorithmQC
         self.embeddingAlgorithm = embeddingAlgorithm
-        self.channelExclusionsClusteringQC = channelExclusionsClusteringQC
         self.channelExclusionsClustering = channelExclusionsClustering
-        self.samplesToRemoveClusteringQC = samplesToRemoveClusteringQC
         self.samplesToRemoveClustering = samplesToRemoveClustering
         self.normalizeTissueCounts = normalizeTissueCounts
-        self.fracForEmbeddingQC = fracForEmbeddingQC
         self.fracForEmbedding = fracForEmbedding
-        self.dimensionEmbeddingQC = dimensionEmbeddingQC
         self.dimensionEmbedding = dimensionEmbedding
-
-        self.perplexityQC = perplexityQC
         self.perplexity = perplexity
-        self.earlyExaggerationQC = earlyExaggerationQC
         self.earlyExaggeration = earlyExaggeration
-        self.learningRateTSNEQC = learningRateTSNEQC
         self.learningRateTSNE = learningRateTSNE
-        self.metricQC = metricQC
         self.metric = metric
-        self.randomStateQC = randomStateQC
         self.randomState = randomState
-
-        self.nNeighborsQC = nNeighborsQC
         self.nNeighbors = nNeighbors
-        self.learningRateUMAPQC = learningRateUMAPQC
         self.learningRateUMAP = learningRateUMAP
-        self.minDistQC = minDistQC
         self.minDist = minDist
-        self.repulsionStrengthQC = repulsionStrengthQC
         self.repulsionStrength = repulsionStrength
 
         self.controlGroups = controlGroups
@@ -273,9 +268,6 @@ class QC(object):
         self.segOutlines = segOutlines
 
         self.tbEntry = tbEntry
-
-        self.reclassClean = reclassClean
-        self.reclassNoisy = reclassNoisy
 
     @module
     def aggregateData(data, self, args):
@@ -392,7 +384,7 @@ class QC(object):
                     csv['Sample'] = sample_name
 
                     # add condition column
-                    csv['Condition'] = self.sampleConditions[file_name]
+                    csv['Condition'] = self.sampleConditionAbbrs[file_name]
 
                     # add replicate column
                     csv['Replicate'] = self.sampleReplicates[file_name]
@@ -464,161 +456,162 @@ class QC(object):
         if not os.path.exists(roi_dir):
             os.makedirs(roi_dir)
 
-        # load polygon dictionary if it exists,
-        # identify samples in need of ROI selection
+        # load polygon dictionary if it exists
         if os.path.exists(os.path.join(roi_dir, 'polygon_dict.pkl')):
             f = open(os.path.join(roi_dir, 'polygon_dict.pkl'), 'rb')
             polygon_dict = pickle.load(f)
-            completed_samples = set(polygon_dict.keys())
-            total_samples = set(data['Sample'].unique())
-            samples_to_draw = total_samples.difference(completed_samples)
-            print(f'Samples requiring ROI selection: {len(samples_to_draw)}')
-
-        # if polygon dictionary does not exist, create it
         else:
-            samples_to_draw = data['Sample'].unique()
-            print(f'Samples requiring ROI selection: {len(samples_to_draw)}')
+            # if polygon dictionary does not exist, create it
             polygon_dict = {}
 
-        # if the polygon dict doesn't have vertices for all samples
-        # or their are samples which don't have a corresponding text file
-        # with cell IDs of selected cells,
-        # loop over remaining samples
-        if (
-          (len(samples_to_draw) > 0) or
-          (len([name for name in os.listdir(roi_dir) if
-           name.endswith('.txt')]) < len(data['Sample'].unique()))):
+        napari_warnings()
 
-            napari_warnings()
+        # loop over samples
+        for sample_name in self.samplesForROISelection:
 
-            for sample_name in natsorted(samples_to_draw):
-
+            try:
+                # make a list of exisiting polygon vertices
+                polygon_dict[sample_name]
+                polygons = [polygon_dict[sample_name][i][1] for
+                            i in range(0, len(polygon_dict[sample_name]))]
+            except KeyError:
+                # create empty list to store polygon vertices
                 polygons = []
 
-                if self.showAbChannels:
-                    for e, ch in enumerate(reversed(abx_channels)):
-                        channel_number = marker_channel_number(markers, ch)
+            if self.showAbChannels:
+                for e, ch in enumerate(reversed(abx_channels)):
+                    channel_number = marker_channel_number(markers, ch)
 
-                        # read antibody image
-                        for file_path in glob.glob(
-                          f'{self.inDir}/tif/{sample_name}*.tif'):
-                            img = single_channel_pyramid(
-                                file_path, channel=channel_number.item() - 1)
+                    # read antibody image
+                    for file_path in glob.glob(
+                      f'{self.inDir}/tif/{sample_name}*.tif'):
+                        img = single_channel_pyramid(
+                            file_path, channel=channel_number.item() - 1)
 
-                        if e == 0:
-                            viewer = napari.view_image(
-                                img, rgb=False, blending='additive',
-                                colormap='green', visible=False,
-                                name=ch
-                                )
+                    if e == 0:
+                        viewer = napari.view_image(
+                            img, rgb=False, blending='additive',
+                            colormap='green', visible=False,
+                            name=ch
+                            )
 
-                        else:
-                            viewer.add_image(
-                                img, rgb=False, blending='additive',
-                                colormap='green', visible=False,
-                                name=ch
-                                )
+                    else:
+                        viewer.add_image(
+                            img, rgb=False, blending='additive',
+                            colormap='green', visible=False,
+                            name=ch
+                            )
 
-                # read segmentation outlines
-                file_path = f'{self.inDir}/seg/{sample_name}.ome.tif'
-                seg = single_channel_pyramid(
-                    glob.glob(file_path)[0], channel=0)
+            # read segmentation outlines
+            file_path = f'{self.inDir}/seg/{sample_name}.ome.tif'
+            seg = single_channel_pyramid(
+                glob.glob(file_path)[0], channel=0)
 
-                viewer.add_image(
-                    seg, rgb=False, blending='additive',
-                    opacity=0.5, colormap='red', visible=False,
-                    name='segmentation')
+            viewer.add_image(
+                seg, rgb=False, blending='additive',
+                opacity=0.5, colormap='red', visible=False,
+                name='segmentation')
 
-                # read DNA1 channel
-                for file_path in glob.glob(
-                  f'{self.inDir}/tif/{sample_name}*.tif'):
-                    dna = single_channel_pyramid(file_path, channel=0)
+            # read DNA1 channel
+            for file_path in glob.glob(
+              f'{self.inDir}/tif/{sample_name}*.tif'):
+                dna = single_channel_pyramid(file_path, channel=0)
 
-                viewer.add_image(
-                    dna, rgb=False, blending='additive',
-                    colormap='gray', visible=True,
-                    name=f'{dna1}: {sample_name}'
-                    )
+            viewer.add_image(
+                dna, rgb=False, blending='additive',
+                colormap='gray', visible=True,
+                name=f'{dna1}: {sample_name}')
 
+            if polygons:
                 selection_layer = viewer.add_shapes(
+                    data=polygons,
                     shape_type='polygon',
                     ndim=2,
                     face_color=[1.0, 1.0, 1.0, 0.2],
                     edge_color=[0.0, 0.66, 1.0, 1.0],
                     edge_width=10.0,
-                    name='ROI(s)'
-                    )
+                    name='ROI(s)')
+            else:
+                selection_layer = viewer.add_shapes(
+                    data=None,
+                    shape_type='polygon',
+                    ndim=2,
+                    face_color=[1.0, 1.0, 1.0, 0.2],
+                    edge_color=[0.0, 0.66, 1.0, 1.0],
+                    edge_width=10.0,
+                    name='ROI(s)')
 
-                # @viewer.mouse_drag_callbacks.append
-                # def get_cell_indices(viewer, event):
-                #
-                #     # on mouse press
-                #     yield
-                #
-                #     # on mouse move
-                #     while event.type == 'mouse_move':
-                #         yield
-                #
-                #     # on mouse release
-                #     selection_layer = viewer.layers['ROI_1']
-                #     yield
+            # clear polygon vertices from polygons list for re-entry below
+            updated_polygons = []
 
-                napari.run()
+            # @viewer.mouse_drag_callbacks.append
+            # def get_cell_indices(viewer, event):
+            #
+            #     # on mouse press
+            #     yield
+            #
+            #     # on mouse move
+            #     while event.type == 'mouse_move':
+            #         yield
+            #
+            #     # on mouse release
+            #     selection_layer = viewer.layers['ROI_1']
+            #     yield
 
-                # store lists vertices per sample as a dictionary
-                for roi in selection_layer.data:
-                    polygons.append((selection_layer.shape_type[0], roi))
+            napari.run()
 
-                polygon_dict[sample_name] = polygons
+            # store lists vertices per sample as a dictionary
+            for roi in selection_layer.data:
+                updated_polygons.append((selection_layer.shape_type[0], roi))
 
-                os.chdir(roi_dir)
-                f = open(os.path.join(roi_dir, 'polygon_dict.pkl'), 'wb')
-                pickle.dump(polygon_dict, f)
-                f.close()
-            print()
+            polygon_dict[sample_name] = updated_polygons
 
-            # make a set of samples requiring cell ID selection
-            os.chdir(roi_dir)
-            samples_for_cell_selection = set(
-                data['Sample'].unique()).difference(
-                    set([i.split('.txt')[0] for i in os.listdir()
-                         if i.endswith('.txt')]))
+            f = open(os.path.join(roi_dir, 'polygon_dict.pkl'), 'wb')
+            pickle.dump(polygon_dict, f)
+            f.close()
 
-            # create txt files per sample with cell IDs to drop
-            for sample_name in natsorted(samples_for_cell_selection):
+        print()
 
-                print(f'Applying ROIs to sample {sample_name}')
+        # create txt files per sample with cell IDs to drop
+        idxs_to_drop = {}
+        for sample_name in natsorted(data['Sample'].unique()):
 
-                sample_data = data[['X_centroid', 'Y_centroid', 'CellID']][
-                    data['Sample'] == sample_name].astype(int)
+            # test if sample key in polygon_dict
+            try:
+                polygon_dict[sample_name]
 
-                sample_data['tuple'] = list(
-                    zip(sample_data['Y_centroid'],
-                        sample_data['X_centroid'])
-                    )
-
-                for file_path in glob.glob(
-                  f'{self.inDir}/tif/{sample_name}*.tif'):
-                    dna = imread(file_path, key=0)
-
-                columns, rows = np.meshgrid(
-                    np.arange(dna.shape[1]),
-                    np.arange(dna.shape[0])
-                    )
-                columns, rows = columns.flatten(), rows.flatten()
-                pixel_coords = np.vstack((rows, columns)).T
-                cell_coords = set(
-                    [tuple(i) for i in np.array(
-                        sample_data[['Y_centroid', 'X_centroid']])]
-                    )
-
-                clearRAM(print_usage=False)
-                del columns, rows
-                clearRAM(print_usage=False)
-
-                cell_ids_to_drop = set()
-                mask_coords = set()
+                # if polygon list is not empty
                 if polygon_dict[sample_name]:
+                    print(f'Generating ROI masks for sample {sample_name}')
+
+                    sample_data = data[['X_centroid', 'Y_centroid', 'CellID']][
+                        data['Sample'] == sample_name].astype(int)
+
+                    sample_data['tuple'] = list(
+                        zip(sample_data['Y_centroid'],
+                            sample_data['X_centroid'])
+                        )
+
+                    for file_path in glob.glob(
+                      f'{self.inDir}/tif/{sample_name}*.tif'):
+                        dna = imread(file_path, key=0)
+
+                    columns, rows = np.meshgrid(
+                        np.arange(dna.shape[1]),
+                        np.arange(dna.shape[0])
+                        )
+                    columns, rows = columns.flatten(), rows.flatten()
+                    pixel_coords = np.vstack((rows, columns)).T
+                    cell_coords = set(
+                        [tuple(i) for i in np.array(
+                            sample_data[['Y_centroid', 'X_centroid']])])
+
+                    clearRAM(print_usage=False)
+                    del columns, rows
+                    clearRAM(print_usage=False)
+
+                    cell_ids_to_drop = set()
+                    mask_coords = set()
                     for shape_type, verts in polygon_dict[sample_name]:
 
                         selection_verts = np.round(verts).astype(int)
@@ -654,63 +647,47 @@ class QC(object):
                     del grid, mask, dna, pixel_coords
                     clearRAM(print_usage=False)
 
-                inter = mask_coords.intersection(cell_coords)
+                    inter = mask_coords.intersection(cell_coords)
 
-                if self.delintMode is True:
-                    cell_ids_to_drop.update(
-                        [i[1]['CellID'] for i in sample_data.iterrows() if
-                         i[1]['tuple'] in inter]
-                         )
-                else:
-                    if polygon_dict[sample_name]:
+                    if self.delintMode is True:
+                        cell_ids_to_drop.update(
+                            [i[1]['CellID'] for i in sample_data.iterrows() if
+                             i[1]['tuple'] in inter])
+                    else:
                         cell_ids_to_drop.update(
                             [i[1]['CellID'] for i in sample_data.iterrows()
-                             if i[1]['tuple'] not in inter]
-                             )
-                    # if not polygons selected for a sample,
-                    # no cell IDs will be dropped
+                             if i[1]['tuple'] not in inter])
+                        # if not polygons selected for a sample,
+                        # no cell IDs will be dropped
 
-                clearRAM(print_usage=False)
-                del sample_data, inter, cell_coords
-                clearRAM(print_usage=False)
+                    idxs_to_drop[sample_name] = list(cell_ids_to_drop)
 
-                # pickle and save selected cell IDs for the sample
-                os.chdir(roi_dir)
-                f = open(f'{sample_name}.txt', 'wb')
-                pickle.dump(cell_ids_to_drop, f)
-                f.close()
-            print()
+                    clearRAM(print_usage=False)
+                    del sample_data, inter, cell_coords
+                    clearRAM(print_usage=False)
+                else:
+                    print(f'No ROIs selected for sample {sample_name}')
+                    idxs_to_drop[sample_name] = []
+            except KeyError:
+                print(f'No ROIs selected for sample {sample_name}')
+                idxs_to_drop[sample_name] = []
 
-            # drop cells from samples
-            for file in natsorted(os.listdir(roi_dir)):
-                if file.endswith('.txt'):
-                    file_name = file.split('.txt')[0]
-                    print(f'Dropping cells from sample {file_name}')
-                    f = open(os.path.join(roi_dir, file), 'rb')
-                    cell_ids = pickle.load(f)
-                    cell_ids = set(cell_ids)
-                    global_idxs_to_drop = data[
-                        (data['Sample'] == file_name)
-                        & (data['CellID'].isin(cell_ids))
-                        ].index
-                    data.drop(global_idxs_to_drop, inplace=True)
+        # save updated idxs_to_drop dictionary as a csv
+        dict_to_csv(
+            dict=idxs_to_drop,
+            path=os.path.join(roi_dir, 'idxs_to_drop.csv'))
+        print()
 
-        else:
-            print()
-
-            # drop cells from samples
-            for file in natsorted(os.listdir(roi_dir)):
-                if file.endswith('.txt'):
-                    file_name = file.split('.txt')[0]
-                    print(f'Dropping cells from {file_name}')
-                    f = open(os.path.join(roi_dir, file), 'rb')
-                    cell_ids = pickle.load(f)
-                    cell_ids = set(cell_ids)
-                    global_idxs_to_drop = data[
-                        (data['Sample'] == file_name)
-                        & (data['CellID'].isin(cell_ids))
-                        ].index
-                    data.drop(global_idxs_to_drop, inplace=True)
+        # drop cells from samples
+        for sample_name, cell_ids in idxs_to_drop.items():
+            if cell_ids:
+                print(f'Dropping cells from sample {sample_name}')
+                global_idxs_to_drop = data[
+                    (data['Sample'] == sample_name)
+                    & (data['CellID'].isin(set(cell_ids)))].index
+                data.drop(global_idxs_to_drop, inplace=True)
+            else:
+                pass
         print()
 
         # save images of tissue with selected data points
@@ -734,8 +711,7 @@ class QC(object):
             sp = ax.scatter(
                 coords['X_centroid'], coords['Y_centroid'],
                 s=0.35, lw=0.0,
-                c=coords['Area'], cmap='viridis'
-                )
+                c=coords['Area'], cmap='viridis')
             plt.title(
                 f'Sample {sample_name}. ' +
                 'Selected cells colored by segmentation area')
@@ -773,11 +749,15 @@ class QC(object):
 
         # pick up where samples-loop left off
         if os.path.exists(
-          os.path.join(intensity_dir, 'idxs_to_drop.pkl')):
+          os.path.join(intensity_dir, 'idxs_to_drop.csv')):
 
-            # read dictionary of sample indices to drop
-            f = open(os.path.join(intensity_dir, 'idxs_to_drop.pkl'), 'rb')
-            idxs_to_drop = pickle.load(f)
+            # read stored dict
+            idxs_to_drop = csv_to_dict(
+                os.path.join(intensity_dir, 'idxs_to_drop.csv'))
+
+            # dictionary values from strings to lists
+            idxs_to_drop = {
+                k: literal_eval(v) for k, v in idxs_to_drop.items()}
 
             # get names of samples already run
             previously_run_samples = idxs_to_drop.keys()
@@ -785,8 +765,7 @@ class QC(object):
             # get names of samples remaining
             samples_remaining = (
                 len(data['Sample'].unique())
-                - len(previously_run_samples)
-                )
+                - len(previously_run_samples))
 
             print(f'Samples to threshold: {samples_remaining}')
 
@@ -1046,11 +1025,10 @@ class QC(object):
             # add sample indices to drop to idxs_to_drop dictionary
             idxs_to_drop[name] = [i for i in data_to_drop['handle']]
 
-            # save updated idxs_to_drop dictionary as a pickle
-            os.chdir(intensity_dir)
-            f = open('idxs_to_drop.pkl', 'wb')
-            pickle.dump(idxs_to_drop, f)
-            f.close()
+            # save updated idxs_to_drop dictionary as a csv
+            dict_to_csv(
+                dict=idxs_to_drop,
+                path=os.path.join(intensity_dir, 'idxs_to_drop.csv'))
 
         # create unique IDs for cells across all samples
         data['handle'] = data['CellID'].map(str) + '_' + data['Sample']
@@ -1092,11 +1070,15 @@ class QC(object):
 
         # pick up where samples-loop left off
         if os.path.exists(
-          os.path.join(area_dir, 'idxs_to_drop.pkl')):
+          os.path.join(area_dir, 'idxs_to_drop.csv')):
 
-            # read dictionary of sample indices to drop
-            f = open(os.path.join(area_dir, 'idxs_to_drop.pkl'), 'rb')
-            idxs_to_drop = pickle.load(f)
+            # read stored dict
+            idxs_to_drop = csv_to_dict(
+                os.path.join(area_dir, 'idxs_to_drop.csv'))
+
+            # dictionary values from strings to lists
+            idxs_to_drop = {
+                k: literal_eval(v) for k, v in idxs_to_drop.items()}
 
             # get names of samples already run
             previously_run_samples = idxs_to_drop.keys()
@@ -1355,11 +1337,10 @@ class QC(object):
             # add sample indices to drop to idxs_to_drop dictionary
             idxs_to_drop[name] = [i for i in data_to_drop['handle']]
 
-            # save updated idxs_to_drop dictionary as a pickle
-            os.chdir(area_dir)
-            f = open('idxs_to_drop.pkl', 'wb')
-            pickle.dump(idxs_to_drop, f)
-            f.close()
+            # save updated idxs_to_drop dictionary as a csv
+            dict_to_csv(
+                dict=idxs_to_drop,
+                path=os.path.join(area_dir, 'idxs_to_drop.csv'))
 
         # create unique IDs for cells across all samples
         data['handle'] = data['CellID'].map(str) + '_' + data['Sample']
@@ -1472,7 +1453,7 @@ class QC(object):
 
             g = g.map(
                 plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-                ec='none', range=self.logRatioRnge, bins=200, density=True
+                ec='none', range=None, bins=200, density=True
                 )
 
             plt.savefig(
@@ -1484,11 +1465,12 @@ class QC(object):
 
             # grab selected y-axis count cutoff if one was entered
             if os.path.exists(
-              os.path.join(cycles_dir, 'count_cutoff.pkl')):
+              os.path.join(cycles_dir, 'count_cutoff.txt')):
 
-                pickle_in = open(os.path.join(
-                    cycles_dir, 'count_cutoff.pkl'), 'rb')
-                count_cutoff = pickle.load(pickle_in)
+                with open(
+                  os.path.join(cycles_dir, 'count_cutoff.txt'), 'r') as f:
+                    count_cutoff = f.readlines()
+                    count_cutoff = float(count_cutoff[0])
 
             else:
 
@@ -1499,11 +1481,11 @@ class QC(object):
                 def submit(text):
 
                     # save selected y-axis count cutoff as pickle
+                    with open(
+                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'w') as f:
+                        f.write(text)
+
                     count_cutoff = float(text)
-                    os.chdir(cycles_dir)
-                    f = open('count_cutoff.pkl', 'wb')
-                    pickle.dump(count_cutoff, f)
-                    f.close()
 
                     ###########################################################
                     # visualize log(cycle n/n+1) ratios in Napari
@@ -1634,7 +1616,7 @@ class QC(object):
                     g = g.map(
                         plt.hist, 'log10(ratio)', color='r',
                         histtype='stepfilled', ec='none',
-                        range=self.logRatioRnge,
+                        range=None,
                         bins=200, density=True
                         )
 
@@ -1669,19 +1651,17 @@ class QC(object):
 
                 # grab selected y-axis count cutoff if one was entered
                 if os.path.exists(
-                  os.path.join(cycles_dir, 'count_cutoff.pkl')):
-
-                    pickle_in = open(os.path.join(
-                        cycles_dir, 'count_cutoff.pkl'), 'rb')
-                    count_cutoff = pickle.load(pickle_in)
-
+                  os.path.join(cycles_dir, 'count_cutoff.txt')):
+                    with open(
+                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'r') as f:
+                        count_cutoff = f.readlines()
+                        count_cutoff = float(count_cutoff[0])
                 else:
                     # save count cutoff as pickle as 0.0
-                    count_cutoff = 0.0
-                    f = open(os.path.join(
-                        cycles_dir, 'count_cutoff.pkl'), 'wb')
-                    pickle.dump(count_cutoff, f)
-                    f.close()
+                    count_cutoff = '0.0'
+                    with open(
+                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'w') as f:
+                        f.write(count_cutoff)
 
             # initialize set of cell indices to drop
             indices_to_drop = set()
@@ -1749,13 +1729,19 @@ class QC(object):
 
             # pick up where samples loop left off
             if os.path.exists(
-              os.path.join(cycles_dir, 'sample_drop_idxs.pkl')):
-                f = open(
-                    os.path.join(cycles_dir, 'sample_drop_idxs.pkl'), 'rb')
-                sample_drop_idxs = pickle.load(f)
+              os.path.join(cycles_dir, 'idxs_to_drop.csv')):
+
+                # read stored dict
+                idxs_to_drop = csv_to_dict(
+                    os.path.join(cycles_dir, 'idxs_to_drop.csv'))
+
+                # dictionary values from strings to lists
+                idxs_to_drop = {
+                    k: literal_eval(v) for k, v in idxs_to_drop.items()}
+
                 samples_to_threshold = (
                     len(data['Sample'].unique())
-                    - len(sample_drop_idxs.keys())
+                    - len(idxs_to_drop.keys())
                     )
                 print(f'Samples to threshold: {samples_to_threshold}')
 
@@ -1764,12 +1750,12 @@ class QC(object):
                 samples_to_threshold = len(data['Sample'].unique())
                 print(f'Samples to threshold: {samples_to_threshold }')
 
-                sample_drop_idxs = {}
+                idxs_to_drop = {}
 
             # drop samples previously run
             ratios_melt = ratios_melt[
                 ~ratios_melt['sample'].isin(
-                    [i for i in sample_drop_idxs.keys()])]
+                    [i for i in idxs_to_drop.keys()])]
 
             if samples_to_threshold > 0:
 
@@ -1995,26 +1981,25 @@ class QC(object):
                         upperCutoff = cycle_data['log10(ratio)'].max()
 
                     # otherwise, get indices outside lower and upper cutoffs
-                    # and append to sample_drop_idxs dictionary
+                    # and append to idxs_to_drop dictionary
                     idxs = list(
                         cycle_data['index'][
                             (cycle_data['log10(ratio)'] < lowerCutoff)
                             |
                             (cycle_data['log10(ratio)'] > upperCutoff)]
                             )
-                    sample_drop_idxs[name] = idxs
+                    idxs_to_drop[name] = idxs
 
-                    # update drop indices pickle
-                    os.chdir(cycles_dir)
-                    f = open('sample_drop_idxs.pkl', 'wb')
-                    pickle.dump(sample_drop_idxs, f)
-                    f.close()
+                    # save updated idxs_to_drop dictionary as a csv
+                    dict_to_csv(
+                        dict=idxs_to_drop,
+                        path=os.path.join(cycles_dir, 'idxs_to_drop.csv'))
             print()
 
             # filter data with indices to frop from all samples
             print('X-axis gating: Dropping unstable cells from all samples...')
             indices_to_drop = set()
-            for k, v in sample_drop_idxs.items():
+            for k, v in idxs_to_drop.items():
                 for idx in v:
                     indices_to_drop.update(set([idx]))
 
@@ -2118,7 +2103,6 @@ class QC(object):
             os.remove(os.path.join(cycles_dir, 'cycle_data.parquet'))
 
         print()
-        print()
         return df
 
     @module
@@ -2154,10 +2138,18 @@ class QC(object):
         # if percentile cutoffs have already been assigned for some antibodies
         # open pruning dict, get list of remaining markers to prune
         # sorted by markers.csv, and read partially-pruned data
-        if os.path.exists(os.path.join(pruning_dir, 'pruning_dict.pkl')):
+        if os.path.exists(os.path.join(pruning_dir, 'pruning_dict.csv')):
 
-            f = open(os.path.join(pruning_dir, 'pruning_dict.pkl'), 'rb')
-            pruning_dict = pickle.load(f)
+            # read stored dict
+            pruning_dict = csv_to_dict(
+                os.path.join(pruning_dir, 'pruning_dict.csv'))
+
+            # dictionary tuple values are converted to strings when saved,
+            # convert back to tuples
+            pruning_dict = {
+                k: tuple(map(
+                    float, v.lstrip('(').rstrip(')').split(', ')))
+                for (k, v) in pruning_dict.items()}
 
             total_markers = set(abx_channels)
             completed_markers = set(pruning_dict.keys())
@@ -2648,10 +2640,10 @@ class QC(object):
                     )
             plt.close()
 
-            # save updated pruning_dict
-            f = open(os.path.join(pruning_dir, 'pruning_dict.pkl'), 'wb')
-            pickle.dump(pruning_dict, f)
-            f.close()
+            # save updated pruning_dict as a csv
+            dict_to_csv(
+                dict=pruning_dict,
+                path=os.path.join(pruning_dir, 'pruning_dict.csv'))
 
             # save updated (pruned) data_copy1
             data_copy1.to_parquet(
@@ -2727,12 +2719,12 @@ class QC(object):
         if not os.path.exists(reclass_dir):
             os.makedirs(reclass_dir)
 
-        # specify the names of modules in that pipeline that perform
-        # data redaction leading up to the metQC modules
+        # specify the names of modules in the pipeline that perform
+        # data redaction prior to the metQC module
         modules = ['aggregateData', 'selectROIs', 'intensityFilter',
                    'areaFilter', 'cycleCorrelation', 'pruneOutliers']
 
-        # build a dictionary of redacted data returned by each module (clean)
+        # build a dictionary of data returned by each module (clean)
         module_dict = {}
         for module_idx, module in enumerate(modules):
             data = pd.read_parquet(
@@ -2741,8 +2733,7 @@ class QC(object):
             module_dict[module_idx] = [module, data]
 
         #######################################################################
-        # build QCData: QCData is a combination of clean
-        # and noisy data
+        # build QCData: QCData is a combination of clean and noisy data
 
         if self.metaQC:
             # loop over modules to get data redacted by each module (noisy)
@@ -2813,10 +2804,12 @@ class QC(object):
                 QCData = pickle.load(f)
 
                 # read current chunk index
-                f = open(os.path.join(reclass_dir, 'chunk_index.pkl'), 'rb')
-                chunk_index = pickle.load(f)
+                with open(
+                  os.path.join(reclass_dir, 'chunk_index.txt'), 'r') as f:
+                    chunk_index = f.readlines()
+                    chunk_index = int(chunk_index[0])
 
-                # read current chunk if one exists
+                # read current chunk data if it exists
                 if os.path.exists(os.path.join(reclass_dir, 'chunk.pkl')):
                     f = open(os.path.join(
                         reclass_dir, 'chunk.pkl'), 'rb')
@@ -2856,10 +2849,11 @@ class QC(object):
                     QCData.update(rescaled_data)
 
                 # initialize chunk index counter at 0
-                chunk_index = 0
-                f = open(os.path.join(reclass_dir, 'chunk_index.pkl'), 'wb')
-                pickle.dump(chunk_index, f)
-                f.close()
+                chunk_index = '0'
+                with open(
+                  os.path.join(reclass_dir, 'chunk_index.txt'), 'w') as f:
+                    f.write(chunk_index)
+                chunk_index = int(chunk_index)
 
                 # save QCData.pkl
                 f = open(os.path.join(reclass_dir, 'QCData.pkl'), 'wb')
@@ -2884,11 +2878,10 @@ class QC(object):
 
             # replace the specific chunk in the chunks list
             # associated with the current chunk_index with
-            # the chunk.pkl which has clustering labels.
+            # the chunk.pkl which has clustering labels if it exits.
             # This allows the program to avoid re-clustering the first chunk
             try:
                 chunks[chunk_index] = chunk
-
             except UnboundLocalError:
                 pass
 
@@ -2901,6 +2894,7 @@ class QC(object):
                 f = open(os.path.join(
                     reclass_dir, 'reclass_storage_dict.pkl'), 'rb')
                 reclass_storage_dict = pickle.load(f)
+
             # else, initialize reclassified data storage dict for
             # reclassified clean and noisy data
             else:
@@ -2911,839 +2905,491 @@ class QC(object):
                     reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
                 pickle.dump(reclass_storage_dict, f)
                 f.close()
-            print()
-
-            # assign default HDBSCAN minimum cluster size
-            default_range_tuple = 250
-
-            # assign default reclassification cutoffs
-            default_reclass_tuple = (0.75, 0.75)
-
-            # assign default sample for viz
-            default_sample = self.viewSample
-
-            # define the degree of transparency for cells in the embedding
-            alpha = 1.0
 
             ###################################################################
-            # define nested plotting functions
 
-            def do_plots():
+            def reclassify_chunk(chunk, reclass_entry):
 
-                # initialize counter to allow for different
-                # behavior on the first round of plotting
-                iteration = 1
+                clean = pd.DataFrame()
+                noisy = pd.DataFrame()
+                for name, cluster in chunk.groupby(
+                  'cluster'):
+                    if name != -1:
+                        # if a cluster contains
+                        # >= n% noisy data,
+                        # reclassify all clustering
+                        # cells as noisy
+                        if (
+                          (len(cluster[cluster[
+                            'QC_status'] == 'clean'])
+                           / len(cluster)) >=
+                          reclass_entry[0]):
+                            clean = clean.append(
+                                cluster)
+                        # elif a cluster contains
+                        # >= n% clean data,
+                        # reclassify all clustering
+                        # cells as clean
+                        elif (
+                          (len(cluster[cluster[
+                            'QC_status'] == 'noisy'])
+                           / len(cluster)) >=
+                          reclass_entry[1]):
+                            noisy = noisy.append(
+                                cluster)
+                        # else keep respective
+                        # cell statuses
+                        else:
+                            noisy = noisy.append(
+                                cluster[cluster[
+                                    'QC_status'] ==
+                                    'noisy'])
+                            clean = clean.append(
+                                cluster[cluster[
+                                    'QC_status'] ==
+                                    'clean'])
 
-                sns.set_style('whitegrid')
+                # consider -1 cells from clean data
+                # to be "clean"
+                clean_outliers = chunk[
+                    (chunk['cluster'] == -1) &
+                    (chunk['QC_status'] == 'clean')
+                    ].copy()
+                clean = clean.append(clean_outliers)
 
-                fig = plt.figure(figsize=(17, 6))
-                matplotlib_warnings(fig)
+                # consider -1 cells from noisy data
+                # to be "noisy"
+                noisy_outliers = chunk[
+                    (chunk['cluster'] == -1) &
+                    (chunk['QC_status'] == 'noisy')
+                    ].copy()
+                noisy = noisy.append(noisy_outliers)
 
-                gs = plt.GridSpec(2, 4, figure=fig, height_ratios=[1, 10])
+                chunk['Reclass'] = 'init'
+                chunk.loc[
+                    chunk.index.isin(clean.index),
+                    'Reclass'] = 'clean'
+                chunk.loc[
+                    chunk.index.isin(noisy.index),
+                    'Reclass'] = 'noisy'
 
-                # define text box axes
-                ax_mcs_tb = fig.add_subplot(gs[0, 0])
-                ax_reclass_tb = fig.add_subplot(gs[0, 1])
-                ax_sample_tb = fig.add_subplot(gs[0, 3])
+                return chunk, clean, noisy
 
-                # define embedding axes
-                ax_sc_cluster = fig.add_subplot(gs[1, 0])
-                ax_sc_status = fig.add_subplot(gs[1, 1])
-                ax_sc_reclass = fig.add_subplot(gs[1, 2])
-                ax_sc_sample = fig.add_subplot(gs[1, 3])
+            def show_lasso(chunk, selected_idx):
 
-                # assign default inputs
-                range_tuple = default_range_tuple
-                reclass_tuple = default_reclass_tuple
-                sample = default_sample
+                # show highest expression channels
+                chunk_copy = chunk.copy()
+
+                # assign lassoed data a dummy
+                # cluster variable and get highest
+                # expressed markers
+                chunk_copy.loc[
+                    chunk_copy.index.isin(selected_idx),
+                    'cluster'] = 1000
+                hi_markers = cluster_expression(
+                    df=chunk_copy, markers=abx_channels,
+                    cluster=1000, num_proteins=3,
+                    standardize='within')
+
+                print()
+                print(f'Top three markers {hi_markers}')
+
+                # superimpose centroids of lassoed noisy
+                # cells colored by stage removed over
+                # channel images
+                print()
+                print('Opening Napari...')
+
+                napari_warnings()
+                if self.showAbChannels:
+                    for e, ch in enumerate(
+                      reversed(abx_channels)):
+                        channel_number = (
+                            marker_channel_number(
+                                markers, ch))
+
+                        # read antibody image
+                        for file_path in glob.glob(
+                          f'{self.inDir}/tif/' +
+                          f'{selected_sample}*.tif'):
+                            img = single_channel_pyramid(
+                                file_path,
+                                channel=channel_number.item()-1)
+
+                        # initialize Napari viewer
+                        # with first channel
+                        if e == 0:
+                            viewer = napari.view_image(
+                                img, rgb=False,
+                                blending='additive',
+                                colormap='green',
+                                visible=False,
+                                name=ch)
+                        else:
+                            viewer.add_image(
+                                img, rgb=False,
+                                blending='additive',
+                                colormap='green',
+                                visible=False,
+                                name=ch)
+
+                # color noisy data points by
+                # module used to redact them
+                cmap = categorical_cmap(
+                    numUniqueSamples=len(modules[1:]),
+                    numCatagories=10,
+                    cmap='tab10',
+                    continuous=False)
+
+                # reverse module order so they appear in
+                # correct order in Napari
+                QC_color_dict = dict(
+                    zip(modules[1:], cmap.colors))
+
+                for module, color in reversed(
+                  QC_color_dict.items()):
+
+                    centroids = chunk[
+                        ['Y_centroid', 'X_centroid']][
+                            (chunk.index.isin(
+                             selected_idx))
+                            & (chunk['Sample'] ==
+                               selected_sample)
+                            & (chunk['QC_status'] ==
+                               'noisy')
+                            & (chunk['Filter'] ==
+                               module)]
+
+                    viewer.add_points(
+                        centroids, name=module,
+                        visible=False, face_color=color,
+                        edge_width=0.0, size=4.0)
+
+                # read segmentation outlines, add to Napari
+                for file_path in glob.glob(
+                  f'{self.inDir}/seg/' +
+                  f'{selected_sample}*.ome.tif'):
+                    seg = single_channel_pyramid(
+                        file_path, channel=0)
+                viewer.add_image(
+                    seg, rgb=False,
+                    blending='additive',
+                    colormap='gray',
+                    visible=False,
+                    name='segmentation')
+
+                # read last DNA, add to Napari
+                last_dna_cycle = natsorted(
+                    [i for i in chunk.columns
+                     if dna_moniker in i])[-1]
+                channel_number = marker_channel_number(
+                    markers, last_dna_cycle)
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/' +
+                  f'{selected_sample}*.tif'):
+                    dna_last = single_channel_pyramid(
+                        file_path,
+                        channel=channel_number.item() - 1)
+                    viewer.add_image(
+                        dna_last, rgb=False,
+                        blending='additive',
+                        opacity=0.5, colormap='gray',
+                        visible=False,
+                        name=f'{last_dna_cycle}: ' +
+                        f'{selected_sample}')
+
+                # read first DNA, add to Napari
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/' +
+                  f'{selected_sample}*.tif'):
+                    dna_first = single_channel_pyramid(
+                        file_path, channel=0)
+                viewer.add_image(
+                    dna_first, rgb=False,
+                    blending='additive',
+                    opacity=0.5, colormap='gray',
+                    visible=True, name=f'{dna1}: ' +
+                    f'{selected_sample}')
+
+                napari.run()
+
+            def draw_plot(chunk, mcs, reclass_tuple):
+
+                # placeholder for lasso selection
                 selector = None
 
-                def cluster_and_plot():
-                    nonlocal iteration
-                    nonlocal selector
-                    nonlocal range_tuple
-                    nonlocal reclass_tuple
-
-                    if not isinstance(range_tuple, tuple):
-                        range_tuple = (range_tuple, )
-
-                    # loop for single-value MCS inputs
-                    if iteration == 1:
-                        if len(range_tuple) == 1:
-
-                            mylist = [range_tuple[0]]
-
-                            for i in mylist:
-
-                                min_cluster_size = i
-
-                                clustering = hdbscan.HDBSCAN(
-                                    min_cluster_size=min_cluster_size,
-                                    min_samples=None,
-                                    metric='euclidean', alpha=1.0, p=None,
-                                    algorithm='best', leaf_size=40,
-                                    memory=Memory(
-                                        location=None),
-                                    approx_min_span_tree=True,
-                                    gen_min_span_tree=False,
-                                    core_dist_n_jobs=-1,
-                                    cluster_selection_method='eom',
-                                    allow_single_cluster=False,
-                                    prediction_data=False,
-                                    match_reference_implementation=False).fit(
-                                        chunk[['emb1', 'emb2']]
-                                        )
-                                chunk['cluster'] = clustering.labels_
-
-                                print(
-                                    f'min_cluster_size = {i}',
-                                    np.unique(clustering.labels_)
-                                    )
-                                print()
-
-                                # PLOT embedding
-                                for color_by in ['cluster', 'QC_status',
-                                                 'Reclass', 'Sample']:
-
-                                    highlight = 'none'
-
-                                    if color_by == 'cluster':
-
-                                        # build cmap
-                                        cmap = categorical_cmap(
-                                            numUniqueSamples=len(
-                                                chunk[color_by].unique()),
-                                            numCatagories=10,
-                                            cmap='tab10',
-                                            continuous=False
-                                            )
-
-                                        # make black the first color to specify
-                                        # unclustered cells (cluster -1)
-                                        cmap = ListedColormap(
-                                            np.insert(
-                                                arr=cmap.colors, obj=0,
-                                                values=[0, 0, 0], axis=0)
-                                                )
-
-                                        # trim cmap to # unique samples
-                                        trim = (
-                                            len(cmap.colors) - len(
-                                                chunk[color_by].unique())
-                                            )
-                                        cmap = ListedColormap(
-                                            cmap.colors[:-trim]
-                                            )
-
-                                        sample_dict = dict(
-                                            zip(
-                                                natsorted(
-                                                    chunk[color_by].unique()),
-                                                list(range(len(chunk[color_by]
-                                                     .unique()))))
-                                                )
-
-                                        c = [sample_dict[i] for i
-                                             in chunk[color_by]]
-
-                                        ax_sc_cluster.cla()
-
-                                        cluster_paths = ax_sc_cluster.scatter(
-                                            chunk['emb1'],
-                                            chunk['emb2'],
-                                            c=c,
-                                            alpha=alpha,
-                                            s=point_size,
-                                            cmap=cmap,
-                                            ec=[
-                                                'k' if i == highlight
-                                                else 'none' for i in
-                                                chunk[color_by]
-                                                ],
-                                            linewidth=0.1
-                                            )
-
-                                        ax_sc_cluster.set_title('HDBSCAN')
-                                        ax_sc_cluster.axis('equal')
-                                        ax_sc_cluster.tick_params(labelsize=5)
-                                        ax_sc_cluster.grid(False)
-
-                                        legend_elements = []
-                                        for e, i in enumerate(
-                                            natsorted(chunk[color_by].unique())
-                                          ):
-
-                                            hi_markers = cluster_expression(
-                                                df=chunk, markers=abx_channels,
-                                                cluster=i, num_proteins=3,
-                                                standardize='within',
-                                                )
-
-                                            legend_elements.append(
-                                                Line2D([0], [0], marker='o',
-                                                       color='none',
-                                                       label=(
-                                                        f'Cluster {i}: '
-                                                        f'{hi_markers}'),
-                                                       markerfacecolor=(
-                                                        cmap.colors[e]),
-                                                       markeredgecolor='none',
-                                                       lw=0.001, markersize=6))
-
-                                        # cluster_lgd = ax_sc_cluster.legend(
-                                        #     handles=legend_elements,
-                                        #     prop={'size': 8},
-                                        #     bbox_to_anchor=[1.0, 1.0]
-                                        #     )
-
-                                    elif color_by == 'QC_status':
-
-                                        # build cmap
-                                        cmap = ListedColormap(
-                                            np.array([[0.91, 0.29, 0.235],
-                                                      [0.18, 0.16, 0.15]])
-                                             )
-
-                                        sample_dict = dict(
-                                            zip(
-                                                natsorted(
-                                                    chunk[
-                                                        'QC_status'].unique()),
-                                                list(range(len(
-                                                    chunk['QC_status']
-                                                     .unique()))))
-                                                )
-
-                                        c = [sample_dict[i] for
-                                             i in chunk['QC_status']]
-
-                                        ax_sc_status.cla()
-
-                                        ax_sc_status.scatter(
-                                            chunk['emb1'],
-                                            chunk['emb2'],
-                                            c=c,
-                                            cmap=cmap,
-                                            alpha=alpha,
-                                            s=point_size,
-                                            ec=[
-                                                'k' if i == highlight
-                                                else 'none' for i in
-                                                chunk['QC_status']
-                                                ],
-                                            linewidth=0.1
-                                            )
-
-                                        ax_sc_status.set_title('QC Status')
-                                        ax_sc_status.axis('equal')
-                                        ax_sc_status.tick_params(labelsize=5)
-                                        ax_sc_status.grid(False)
-
-                                        legend_elements = []
-                                        for e, i in enumerate(
-                                            natsorted(
-                                                chunk['QC_status'].unique())
-                                          ):
-
-                                            if i == highlight:
-                                                markeredgecolor = 'k'
-                                            else:
-                                                markeredgecolor = 'none'
-
-                                            sample_to_map = (
-                                                chunk['Sample'][
-                                                    chunk['QC_status'] == i]
-                                                .unique()[0]
-                                                )
-
-                                            legend_elements.append(
-                                                Line2D([0], [0], marker='o',
-                                                       color='none',
-                                                       label=i,
-                                                       markerfacecolor=(
-                                                        cmap.colors[e]
-                                                        ),
-                                                       markeredgecolor=(
-                                                        markeredgecolor),
-                                                       lw=0.001,
-                                                       markersize=6)
-                                                       )
-
-                                        qc_lgd = ax_sc_status.legend(
-                                            handles=legend_elements,
-                                            prop={'size': 8}, loc='best'
-                                            # bbox_to_anchor=[1.0, 1.0]
-                                            )
-
-                                    elif color_by == 'Reclass':
-                                        print(
-                                            'Applying reclassification ' +
-                                            f'cutoffs: {reclass_tuple}')
-
-                                        clean = pd.DataFrame()
-                                        noisy = pd.DataFrame()
-                                        for name, cluster in chunk.groupby(
-                                          'cluster'):
-                                            if name != -1:
-                                                # if a cluster contains
-                                                # >= n% noisy data,
-                                                # reclassify all clustering
-                                                # cells as noisy
-                                                if (
-                                                  (len(cluster[cluster[
-                                                    'QC_status'] == 'clean'])
-                                                   / len(cluster)) >=
-                                                  reclass_tuple[0]):
-                                                    clean = clean.append(
-                                                        cluster)
-                                                # elif a cluster contains
-                                                # >= n% clean data,
-                                                # reclassify all clustering
-                                                # cells as clean
-                                                elif (
-                                                  (len(cluster[cluster[
-                                                    'QC_status'] == 'noisy'])
-                                                   / len(cluster)) >=
-                                                  reclass_tuple[1]):
-                                                    noisy = noisy.append(
-                                                        cluster)
-                                                # else keep respective
-                                                # cell statuses
-                                                else:
-                                                    noisy = noisy.append(
-                                                        cluster[cluster[
-                                                            'QC_status'] ==
-                                                            'noisy'])
-                                                    clean = clean.append(
-                                                        cluster[cluster[
-                                                            'QC_status'] ==
-                                                            'clean'])
-
-                                        # consider -1 cells from clean data
-                                        # to be "clean"
-                                        clean_outliers = chunk[
-                                            (chunk['cluster'] == -1) &
-                                            (chunk['QC_status'] == 'clean')
-                                            ].copy()
-                                        clean = clean.append(clean_outliers)
-
-                                        # consider -1 cells from noisy data
-                                        # to be "noisy"
-                                        noisy_outliers = chunk[
-                                            (chunk['cluster'] == -1) &
-                                            (chunk['QC_status'] == 'noisy')
-                                            ].copy()
-                                        noisy = noisy.append(noisy_outliers)
-
-                                        chunk['Reclass'] = 'init'
-                                        chunk.loc[
-                                            chunk.index.isin(clean.index),
-                                            'Reclass'] = 'clean'
-                                        chunk.loc[
-                                            chunk.index.isin(noisy.index),
-                                            'Reclass'] = 'noisy'
-
-                                        # build cmap
-                                        cmap = ListedColormap(
-                                            np.array([[0.91, 0.29, 0.235],
-                                                      [0.18, 0.16, 0.15]]))
-
-                                        sample_dict = dict(
-                                            zip(
-                                                natsorted(
-                                                    chunk['Reclass'].unique()),
-                                                list(range(len(chunk['Reclass']
-                                                     .unique()))))
-                                                )
-
-                                        c = [sample_dict[i] for
-                                             i in chunk['Reclass']]
-
-                                        ax_sc_reclass.cla()
-
-                                        ax_sc_reclass.scatter(
-                                            chunk['emb1'],
-                                            chunk['emb2'],
-                                            c=c,
-                                            cmap=cmap,
-                                            alpha=alpha,
-                                            s=point_size,
-                                            ec=[
-                                                'k' if i == highlight
-                                                else 'none' for i in
-                                                chunk['Reclass']
-                                                ],
-                                            linewidth=0.1
-                                            )
-
-                                        ax_sc_reclass.set_title(
-                                            'Reclassification')
-                                        ax_sc_reclass.axis('equal')
-                                        ax_sc_reclass.tick_params(labelsize=5)
-                                        ax_sc_reclass.grid(False)
-
-                                        legend_elements = []
-                                        for e, i in enumerate(
-                                            natsorted(
-                                                chunk['Reclass'].unique())
-                                          ):
-
-                                            if i == highlight:
-                                                markeredgecolor = 'k'
-                                            else:
-                                                markeredgecolor = 'none'
-
-                                            sample_to_map = (
-                                                chunk['Sample'][
-                                                    chunk['Reclass'] == i]
-                                                .unique()[0]
-                                                )
-
-                                            legend_elements.append(
-                                                Line2D([0], [0], marker='o',
-                                                       color='none',
-                                                       label=i,
-                                                       markerfacecolor=(
-                                                        cmap.colors[e]
-                                                        ),
-                                                       markeredgecolor=(
-                                                        markeredgecolor),
-                                                       lw=0.001,
-                                                       markersize=6)
-                                                       )
-
-                                        reclass_lgd = ax_sc_reclass.legend(
-                                            handles=legend_elements,
-                                            prop={'size': 8}, loc='best'
-                                            # bbox_to_anchor=[1.0, 1.0]
-                                            )
-
-                                    elif color_by == 'Sample':
-
-                                        # build cmap
-                                        cmap = categorical_cmap(
-                                            numUniqueSamples=len(
-                                                chunk['Sample'].unique()),
-                                            numCatagories=10,
-                                            cmap='tab10',
-                                            continuous=False
-                                            )
-
-                                        sample_dict = dict(
-                                            zip(
-                                                natsorted(
-                                                    chunk['Sample'].unique()),
-                                                list(range(len(chunk['Sample']
-                                                     .unique()))))
-                                                )
-
-                                        c = [sample_dict[i] for
-                                             i in chunk['Sample']]
-
-                                        ax_sc_sample.cla()
-
-                                        ax_sc_sample.scatter(
-                                            chunk['emb1'],
-                                            chunk['emb2'],
-                                            c=c,
-                                            cmap=cmap,
-                                            alpha=alpha,
-                                            s=point_size,
-                                            ec=[
-                                                'k' if i == highlight
-                                                else 'none' for i in
-                                                chunk['Sample']
-                                                ],
-                                            linewidth=0.1
-                                            )
-                                        ax_sc_sample.set_title('Sample')
-
-                                        ax_sc_sample.axis('equal')
-                                        ax_sc_sample.tick_params(labelsize=5)
-                                        ax_sc_sample.grid(False)
-
-                                        legend_elements = []
-                                        for e, i in enumerate(
-                                            natsorted(chunk['Sample'].unique())
-                                          ):
-
-                                            if i == highlight:
-                                                markeredgecolor = 'k'
-                                            else:
-                                                markeredgecolor = 'none'
-
-                                            sample_to_map = (
-                                                chunk['Sample'][
-                                                    chunk['Sample'] == i]
-                                                .unique()[0]
-                                                )
-
-                                            legend_elements.append(
-                                                Line2D([0], [0], marker='o',
-                                                       color='none',
-                                                       label=i,
-                                                       markerfacecolor=(
-                                                        cmap.colors[e]
-                                                        ),
-                                                       markeredgecolor=(
-                                                        markeredgecolor),
-                                                       lw=0.001,
-                                                       markersize=6)
-                                                       )
-
-                                        sample_lgd = ax_sc_sample.legend(
-                                            handles=legend_elements,
-                                            prop={'size': 8}, loc='best'
-                                            # bbox_to_anchor=[1.0, 1.0]
-                                            )
-
-                                fig.tight_layout()
-
-                                # Must call draw() before creating selector,
-                                # or alpha setting doesn't work.
-                                fig.canvas.draw()
-                                print('Done!')
-
-                                if selector:
-                                    selector.disconnect()
-                                selector = SelectFromCollection(
-                                    ax_sc_cluster, cluster_paths
-                                    )
-
-                                # allow for different behavior
-                                # on first iteration of plotting
-                                iteration += 1
-
-                                return min_cluster_size, clean, noisy
-
-                        else:
-                            # loop for a range of input values
-                            mylist = list(
-                                range(range_tuple[0], range_tuple[1] + 1, 1)
-                                )
-                            mylist.reverse()  # run higher cluster sizes first
-
-                            for i in mylist:
-
-                                min_cluster_size = i
-
-                                clustering = hdbscan.HDBSCAN(
-                                    min_cluster_size=min_cluster_size,
-                                    min_samples=None,
-                                    metric='euclidean', alpha=1.0, p=None,
-                                    algorithm='best', leaf_size=40,
-                                    memory=Memory(
-                                        location=None),
-                                    approx_min_span_tree=True,
-                                    gen_min_span_tree=False,
-                                    core_dist_n_jobs=-1,
-                                    cluster_selection_method='eom',
-                                    allow_single_cluster=False,
-                                    prediction_data=False,
-                                    match_reference_implementation=False).fit(
-                                        chunk[['emb1', 'emb2']]
-                                        )
-                                chunk['cluster'] = clustering.labels_
-
-                                print(
-                                    f'min_cluster_size = {i}',
-                                    np.unique(clustering.labels_)
-                                    )
+                # interpret mcs input entry
+                mcs_entry = mcs.split('-')
+
+                # if single integer entered
+                if len(mcs_entry) == 1:
+
+                    # check if mcs_entry can be converted to an integer
+                    try:
+                        int(mcs_entry[0])
+                    except ValueError:
+                        print()
+                        print('Invalid entry for minimun cluster size ' +
+                              '(MCS) or reclassification cutoffs. ' +
+                              'Please enter single integer or range ' +
+                              'of integers (#-#) for MCS, and two floats ' +
+                              'separated by ", " as reclassification ' +
+                              'cutoffs.0')
+                        return None, None
+
+                    try:
+                        reclass_entry = [
+                            float(i) for i in
+                            reclass_tuple.split(', ')]
+                        if not len(reclass_entry) == 2:
                             print()
+                            print('Invalid entry for minimun cluster size ' +
+                                  '(MCS) or reclassification cutoffs. ' +
+                                  'Please enter single integer or range of ' +
+                                  'integers (#-#) for MCS, and two floats ' +
+                                  'separated by ", " as reclassification ' +
+                                  'cutoffs.1')
+                            return None, None
+                    except ValueError:
+                        print()
+                        print('Invalid entry for minimun cluster size (MCS) ' +
+                              'or reclassification cutoffs. Please enter ' +
+                              'single integer or range of integers (#-#) ' +
+                              'for MCS, and two floats separated by ", " ' +
+                              'as reclassification cutoffs.2')
+                        return None, None
 
-                            # acts to terminate loop
-                            return min_cluster_size
+                    sns.set_style('whitegrid')
 
-                    if iteration != 1:
-                        if len(range_tuple) == 1:
+                    fig = plt.figure(figsize=(20, 8.5))
+                    matplotlib_warnings(fig)
 
-                            mylist = [range_tuple[0]]
+                    gs = plt.GridSpec(2, 4, figure=fig)
 
-                            for i in mylist:
+                    # define axes
+                    ax_cluster = fig.add_subplot(gs[0, 0])
+                    ax_status = fig.add_subplot(gs[0, 1])
+                    ax_reclass = fig.add_subplot(gs[0, 2])
+                    ax_sample = fig.add_subplot(gs[0, 3])
 
-                                min_cluster_size = i
+                    ax_cluster_lbs = fig.add_subplot(gs[1, 0])
+                    ax_status_lbs = fig.add_subplot(gs[1, 1])
+                    ax_reclass_lbs = fig.add_subplot(gs[1, 2])
+                    ax_sample_lbs = fig.add_subplot(gs[1, 3])
 
-                                clustering = hdbscan.HDBSCAN(
-                                    min_cluster_size=min_cluster_size,
-                                    min_samples=None,
-                                    metric='euclidean', alpha=1.0, p=None,
-                                    algorithm='best', leaf_size=40,
-                                    memory=Memory(
-                                        location=None),
-                                    approx_min_span_tree=True,
-                                    gen_min_span_tree=False,
-                                    core_dist_n_jobs=-1,
-                                    cluster_selection_method='eom',
-                                    allow_single_cluster=False,
-                                    prediction_data=False,
-                                    match_reference_implementation=False).fit(
-                                        chunk[['emb1', 'emb2']]
-                                        )
-                                chunk['cluster'] = clustering.labels_
+                    plt.subplots_adjust(
+                        left=0.01, right=0.99, bottom=0.0,
+                        top=0.96, wspace=0.0, hspace=0.0)
 
-                                print(
-                                    f'min_cluster_size = {i}',
-                                    np.unique(clustering.labels_)
-                                    )
-                                print()
+                    i = int(mcs_entry[0])
 
-                                # PLOT embedding
-                                for color_by in ['cluster']:
+                    min_cluster_size = i
 
-                                    highlight = 'none'
+                    clustering = hdbscan.HDBSCAN(
+                        min_cluster_size=min_cluster_size,
+                        min_samples=None,
+                        metric='euclidean', alpha=1.0, p=None,
+                        algorithm='best', leaf_size=40,
+                        memory=Memory(
+                            location=None),
+                        approx_min_span_tree=True,
+                        gen_min_span_tree=False,
+                        core_dist_n_jobs=-1,
+                        cluster_selection_method='eom',
+                        allow_single_cluster=False,
+                        prediction_data=False,
+                        match_reference_implementation=False).fit(
+                            chunk[['emb1', 'emb2']])
 
-                                    if color_by == 'cluster':
+                    chunk['cluster'] = clustering.labels_
 
-                                        # build cmap
-                                        cmap = categorical_cmap(
-                                            numUniqueSamples=len(
-                                                chunk[color_by].unique()),
-                                            numCatagories=10,
-                                            cmap='tab10',
-                                            continuous=False
-                                            )
+                    # scatter point selection tool assumes a sorted index,
+                    # but the index of QCdata is shuffled to acheive a mix
+                    # of clean and noisy data per chunk
+                    chunk.sort_index(inplace=True)
 
-                                        # make black the first color to specify
-                                        # unclustered cells (cluster -1)
-                                        cmap = ListedColormap(
-                                            np.insert(
-                                                arr=cmap.colors, obj=0,
-                                                values=[0, 0, 0], axis=0)
-                                                )
-
-                                        # trim cmap to # unique samples
-                                        trim = (
-                                            len(cmap.colors) - len(
-                                                chunk[color_by].unique())
-                                            )
-                                        cmap = ListedColormap(
-                                            cmap.colors[:-trim]
-                                            )
-
-                                        sample_dict = dict(
-                                            zip(
-                                                natsorted(
-                                                    chunk[color_by].unique()),
-                                                list(range(len(chunk[color_by]
-                                                     .unique()))))
-                                                )
-
-                                        c = [sample_dict[i] for i
-                                             in chunk[color_by]]
-
-                                        ax_sc_cluster.cla()
-
-                                        cluster_paths = ax_sc_cluster.scatter(
-                                            chunk['emb1'],
-                                            chunk['emb2'],
-                                            c=c,
-                                            alpha=alpha,
-                                            s=point_size,
-                                            cmap=cmap,
-                                            ec=[
-                                                'k' if i == highlight
-                                                else 'none' for i in
-                                                chunk[color_by]
-                                                ],
-                                            linewidth=0.1
-                                            )
-
-                                        ax_sc_cluster.set_title('HDBSCAN')
-                                        ax_sc_cluster.axis('equal')
-                                        ax_sc_cluster.tick_params(labelsize=5)
-                                        ax_sc_cluster.grid(False)
-
-                                        legend_elements = []
-                                        for e, i in enumerate(
-                                            natsorted(chunk[color_by].unique())
-                                          ):
-
-                                            hi_markers = cluster_expression(
-                                                df=chunk, markers=abx_channels,
-                                                cluster=i, num_proteins=3,
-                                                standardize='within',
-                                                )
-
-                                            legend_elements.append(
-                                                Line2D([0], [0], marker='o',
-                                                       color='none',
-                                                       label=(
-                                                        f'Cluster {i}: '
-                                                        f'{hi_markers}'),
-                                                       markerfacecolor=(
-                                                        cmap.colors[e]),
-                                                       markeredgecolor='none',
-                                                       lw=0.001, markersize=6))
-
-                                        # cluster_lgd = ax_sc_cluster.legend(
-                                        #     handles=legend_elements,
-                                        #     prop={'size': 8},
-                                        #     bbox_to_anchor=[1.0, 1.0]
-                                        #     )
-
-                                fig.tight_layout()
-
-                                # Must call draw() before creating selector,
-                                # or alpha setting doesn't work.
-                                fig.canvas.draw()
-
-                                if selector:
-                                    selector.disconnect()
-                                selector = SelectFromCollection(
-                                    ax_sc_cluster, cluster_paths
-                                    )
-
-                                # acts to terminate loop
-                                return min_cluster_size
-
-                        else:
-                            # loop for a range of input values
-                            mylist = list(
-                                range(range_tuple[0], range_tuple[1] + 1, 1)
-                                )
-                            mylist.reverse()  # run higher cluster sizes first
-
-                            for i in mylist:
-
-                                min_cluster_size = i
-
-                                clustering = hdbscan.HDBSCAN(
-                                    min_cluster_size=min_cluster_size,
-                                    min_samples=None,
-                                    metric='euclidean', alpha=1.0, p=None,
-                                    algorithm='best', leaf_size=40,
-                                    memory=Memory(
-                                        location=None),
-                                    approx_min_span_tree=True,
-                                    gen_min_span_tree=False,
-                                    core_dist_n_jobs=-1,
-                                    cluster_selection_method='eom',
-                                    allow_single_cluster=False,
-                                    prediction_data=False,
-                                    match_reference_implementation=False).fit(
-                                        chunk[['emb1', 'emb2']]
-                                        )
-                                chunk['cluster'] = clustering.labels_
-
-                                print(
-                                    f'min_cluster_size = {i}',
-                                    np.unique(clustering.labels_)
-                                    )
-                            print()
-
-                            # acts to terminate loop
-                            return min_cluster_size
-
-                def mcs_tb_submit(text):
-                    nonlocal range_tuple
-
-                    numerical_input = text.split('.save')[0].strip()
-                    new_range_tuple = tuple(map(
-                        int, numerical_input.split('-')))
-
-                    # ensure code doesn't refire on
-                    # navigating away from text box
-                    if new_range_tuple != range_tuple:
-                        range_tuple = new_range_tuple
-                        min_cluster_size = cluster_and_plot()
-
-                    if '.save' in text:
-                        if len(new_range_tuple) == 1:
-
-                            print(
-                                f'Saving current minimum cluster size: ' +
-                                f'{new_range_tuple[0]}')
-                            f = open(os.path.join(
-                                reclass_dir, 'MCS.pkl'), 'wb')
-                            pickle.dump(new_range_tuple[0], f)
-                            f.close()
-
-                            print('Saving current chunk...')
-                            f = open(os.path.join(
-                                reclass_dir, 'chunk.pkl'), 'wb')
-                            pickle.dump(chunk, f)
-                            f.close()
-
-                            print('Saving current figure...')
-                            fig.savefig(
-                                os.path.join(
-                                    chunk_dir,
-                                    f'{self.embeddingAlgorithmQC}_'
-                                    f'{new_range_tuple[0]}.png'),
-                                bbox_inches='tight', dpi=1000
-                                )
-
-                            print('Proceeding with pipeline.')
-                            plt.close('all')
-
-                        else:
-                            print('A single value must be entered to save an' +
-                                  'optimal minimum cluster size.')
-
-                mcs_text_box = TextBox(
-                    ax_mcs_tb, "Minimum Cluster Size",
-                    range_tuple, label_pad=0.1)
-                mcs_text_box.on_submit(mcs_tb_submit)
-
-                label = mcs_text_box.ax.get_children()[1]
-                label.set_position([0.5, 1.3])
-                label.set_horizontalalignment('center')
-
-                def reclass_and_plot():
-                    nonlocal iteration
-                    nonlocal selector
-
-                    print('Applying reclassification ' +
-                          f'cutoffs: {reclass_tuple}')
-
-                    clean = pd.DataFrame()
-                    noisy = pd.DataFrame()
-                    for name, cluster in chunk.groupby('cluster'):
-                        if name != -1:
-
-                            # if a cluster contains >= n% noisy data,
-                            # reclassify all clustering cells as noisy
-                            if (
-                              (len(cluster[cluster['QC_status'] == 'clean'])
-                               / len(cluster)) >= reclass_tuple[0]):
-                                clean = clean.append(cluster)
-                            # elif a cluster contains >= n% clean data,
-                            # reclassify all clustering cells as clean
-                            elif (
-                              (len(cluster[cluster['QC_status'] == 'noisy'])
-                               / len(cluster)) >= reclass_tuple[1]):
-                                noisy = noisy.append(cluster)
-                            # else keep respective cell statuses
-                            else:
-                                noisy = noisy.append(
-                                    cluster[cluster['QC_status'] == 'noisy'])
-                                clean = clean.append(
-                                    cluster[cluster['QC_status'] == 'clean'])
-
-                    # consider -1 cells from clean data to be "clean"
-                    clean_outliers = chunk[
-                        (chunk['cluster'] == -1)
-                        & (chunk['QC_status'] == 'clean')].copy()
-                    clean = clean.append(clean_outliers)
-
-                    # consider -1 cells from noisy data to be "noisy"
-                    noisy_outliers = chunk[
-                        (chunk['cluster'] == -1)
-                        & (chunk['QC_status'] == 'noisy')].copy()
-                    noisy = noisy.append(noisy_outliers)
-
-                    chunk['Reclass'] = 'init'
-                    chunk.loc[
-                        chunk.index.isin(clean.index), 'Reclass'] = 'clean'
-                    chunk.loc[
-                        chunk.index.isin(noisy.index), 'Reclass'] = 'noisy'
+                    print()
+                    print(
+                        f'min_cluster_size = {i}',
+                        np.unique(clustering.labels_)
+                        )
 
                     # PLOT embedding
-                    for color_by in ['Reclass']:
+                    for color_by in ['cluster', 'QC_status',
+                                     'Reclass', 'Sample']:
 
                         highlight = 'none'
 
-                        if color_by == 'Reclass':
+                        if color_by == 'cluster':
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(
+                                    chunk[color_by].unique()),
+                                numCatagories=10,
+                                cmap='tab10',
+                                continuous=False
+                                )
+
+                            # make black the first color to specify
+                            # unclustered cells (cluster -1)
+                            cmap = ListedColormap(
+                                np.insert(
+                                    arr=cmap.colors, obj=0,
+                                    values=[0, 0, 0], axis=0))
+
+                            # trim cmap to # unique samples
+                            trim = (
+                                len(cmap.colors) - len(
+                                    chunk[color_by].unique()))
+                            cmap = ListedColormap(
+                                cmap.colors[:-trim])
+
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(
+                                        chunk[color_by].unique()),
+                                    list(range(len(chunk[color_by]
+                                         .unique())))))
+
+                            c = [sample_dict[i] for i
+                                 in chunk[color_by]]
+
+                            ax_cluster.cla()
+
+                            cluster_paths = ax_cluster.scatter(
+                                chunk['emb1'],
+                                chunk['emb2'],
+                                c=c,
+                                alpha=1.0,
+                                s=point_size,
+                                cmap=cmap,
+                                ec=[
+                                    'k' if i == highlight
+                                    else 'none' for i in
+                                    chunk[color_by]
+                                    ],
+                                linewidth=0.1)
+
+                            ax_cluster.set_title('HDBSCAN')
+                            ax_cluster.axis('equal')
+                            ax_cluster.axes.xaxis.set_visible(False)
+                            ax_cluster.axes.yaxis.set_visible(False)
+                            ax_cluster.grid(False)
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                                natsorted(chunk[color_by].unique())
+                              ):
+
+                                hi_markers = cluster_expression(
+                                    df=chunk, markers=abx_channels,
+                                    cluster=i, num_proteins=3,
+                                    standardize='within')
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none',
+                                           label=(
+                                            f'Cluster {i}: '
+                                            f'{hi_markers}'),
+                                           markerfacecolor=(
+                                            cmap.colors[e]),
+                                           markeredgecolor='none',
+                                           lw=0.001, markersize=6))
+
+                            cluster_lgd = ax_cluster_lbs.legend(
+                                handles=legend_elements,
+                                prop={'size': 8}, loc='upper center')
+
+                            ax_cluster_lbs.axis('off')
+
+                        elif color_by == 'QC_status':
+
+                            # build cmap
+                            cmap = ListedColormap(
+                                np.array([[0.91, 0.29, 0.235],
+                                          [0.18, 0.16, 0.15]])
+                                 )
+
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(
+                                        chunk[
+                                            'QC_status'].unique()),
+                                    list(range(len(
+                                        chunk['QC_status']
+                                         .unique()))))
+                                    )
+
+                            c = [sample_dict[i] for
+                                 i in chunk['QC_status']]
+
+                            ax_status.cla()
+
+                            ax_status.scatter(
+                                chunk['emb1'],
+                                chunk['emb2'],
+                                c=c,
+                                cmap=cmap,
+                                alpha=1.0,
+                                s=point_size,
+                                ec=[
+                                    'k' if i == highlight
+                                    else 'none' for i in
+                                    chunk['QC_status']
+                                    ],
+                                linewidth=0.1)
+
+                            ax_status.set_title('QC Status')
+                            ax_status.axis('equal')
+                            ax_status.axes.xaxis.set_visible(False)
+                            ax_status.axes.yaxis.set_visible(False)
+                            ax_status.grid(False)
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                                natsorted(
+                                    chunk['QC_status'].unique())
+                              ):
+
+                                if i == highlight:
+                                    markeredgecolor = 'k'
+                                else:
+                                    markeredgecolor = 'none'
+
+                                sample_to_map = (
+                                    chunk['Sample'][
+                                        chunk['QC_status'] == i]
+                                    .unique()[0])
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none',
+                                           label=i,
+                                           markerfacecolor=(
+                                            cmap.colors[e]
+                                            ),
+                                           markeredgecolor=(
+                                            markeredgecolor),
+                                           lw=0.001,
+                                           markersize=6))
+
+                            qc_lgd = ax_status_lbs.legend(
+                                handles=legend_elements,
+                                prop={'size': 8}, loc='upper center')
+
+                            ax_status_lbs.axis('off')
+
+                        elif color_by == 'Reclass':
+
+                            print()
+                            print(
+                                'Applying reclassification ' +
+                                f'cutoffs: {reclass_entry}')
+
+                            chunk, clean, noisy = reclassify_chunk(
+                                chunk=chunk, reclass_entry=reclass_entry)
 
                             # build cmap
                             cmap = ListedColormap(
@@ -3761,31 +3407,32 @@ class QC(object):
                             c = [sample_dict[i] for
                                  i in chunk['Reclass']]
 
-                            ax_sc_reclass.cla()
+                            ax_reclass.cla()
 
-                            ax_sc_reclass.scatter(
+                            ax_reclass.scatter(
                                 chunk['emb1'],
                                 chunk['emb2'],
                                 c=c,
                                 cmap=cmap,
-                                alpha=alpha,
+                                alpha=1.0,
                                 s=point_size,
                                 ec=[
                                     'k' if i == highlight
                                     else 'none' for i in
                                     chunk['Reclass']
                                     ],
-                                linewidth=0.1
-                                )
+                                linewidth=0.1)
 
-                            ax_sc_reclass.set_title('Reclassification')
-                            ax_sc_reclass.axis('equal')
-                            ax_sc_reclass.tick_params(labelsize=5)
-                            ax_sc_reclass.grid(False)
+                            ax_reclass.set_title('Reclassification')
+                            ax_reclass.axis('equal')
+                            ax_reclass.axes.xaxis.set_visible(False)
+                            ax_reclass.axes.yaxis.set_visible(False)
+                            ax_reclass.grid(False)
 
                             legend_elements = []
                             for e, i in enumerate(
-                                natsorted(chunk['Reclass'].unique())
+                                natsorted(
+                                    chunk['Reclass'].unique())
                               ):
 
                                 if i == highlight:
@@ -3796,114 +3443,180 @@ class QC(object):
                                 sample_to_map = (
                                     chunk['Sample'][
                                         chunk['Reclass'] == i]
-                                    .unique()[0]
-                                    )
+                                    .unique()[0])
 
                                 legend_elements.append(
                                     Line2D([0], [0], marker='o',
                                            color='none',
                                            label=i,
                                            markerfacecolor=(
-                                            cmap.colors[e]
-                                            ),
+                                            cmap.colors[e]),
                                            markeredgecolor=(
                                             markeredgecolor),
                                            lw=0.001,
-                                           markersize=6)
-                                           )
+                                           markersize=6))
 
-                            reclass_lgd = ax_sc_reclass.legend(
+                            reclass_lgd = ax_reclass_lbs.legend(
                                 handles=legend_elements,
-                                prop={'size': 8}, loc='best'
-                                # bbox_to_anchor=[1.0, 1.0]
+                                prop={'size': 8}, loc='upper center')
+
+                            ax_reclass_lbs.axis('off')
+
+                        elif color_by == 'Sample':
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(
+                                    chunk['Sample'].unique()),
+                                numCatagories=10,
+                                cmap='tab10',
+                                continuous=False
                                 )
 
-                    fig.tight_layout()
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(
+                                        chunk['Sample'].unique()),
+                                    list(range(len(chunk['Sample']
+                                         .unique()))))
+                                    )
 
-                    # must call draw() to get update figure to show without
-                    # first navigating mouse away from reclass text box.
+                            c = [sample_dict[i] for
+                                 i in chunk['Sample']]
+
+                            ax_sample.cla()
+
+                            ax_sample.scatter(
+                                chunk['emb1'],
+                                chunk['emb2'],
+                                c=c,
+                                cmap=cmap,
+                                alpha=1.0,
+                                s=point_size,
+                                ec=[
+                                    'k' if i == highlight
+                                    else 'none' for i in
+                                    chunk['Sample']
+                                    ],
+                                linewidth=0.1)
+
+                            ax_sample.set_title('Sample')
+                            ax_sample.axis('equal')
+                            ax_sample.axes.xaxis.set_visible(False)
+                            ax_sample.axes.yaxis.set_visible(False)
+                            ax_sample.grid(False)
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                                natsorted(chunk['Sample'].unique())
+                              ):
+
+                                if i == highlight:
+                                    markeredgecolor = 'k'
+                                else:
+                                    markeredgecolor = 'none'
+
+                                sample_to_map = (
+                                    chunk['Sample'][
+                                        chunk['Sample'] == i]
+                                    .unique()[0])
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none',
+                                           label=i,
+                                           markerfacecolor=(
+                                            cmap.colors[e]),
+                                           markeredgecolor=(
+                                            markeredgecolor),
+                                           lw=0.001,
+                                           markersize=6))
+
+                            sample_lgd = ax_sample_lbs.legend(
+                                handles=legend_elements,
+                                prop={'size': 8}, loc='upper center')
+
+                            ax_sample_lbs.axis('off')
+
+                    # must call draw() before creating selector,
+                    # or alpha setting doesn't work.
                     fig.canvas.draw()
-                    print('Done!')
-                    print()
 
-                    # acts to terminate loop
-                    return clean, noisy
+                    if selector:
+                        selector.disconnect()
+                    selector = SelectFromCollection(
+                        ax_cluster, cluster_paths)
 
-                def reclass_tb_submit(text):
-                    nonlocal reclass_tuple
+                    plt.show(block=True)
 
-                    new_reclass_tuple = tuple(map(
-                        float, text.split(', ')))
+                    return selector.ind, fig
 
-                    # ensure code doesn't refire on
-                    # navigating away from text box
-                    if new_reclass_tuple != reclass_tuple:
-                        reclass_tuple = new_reclass_tuple
-                        clean, noisy = reclass_and_plot()
+                # if integer range entered
+                elif len(mcs_entry) == 2:
 
-                        # update self with current reclassified QCData slice
-                        self.reclassClean = clean
-                        self.reclassNoisy = noisy
-
-                reclass_text_box = TextBox(
-                    ax_reclass_tb, "ReclassCutoffs (%clean, %noisy)",
-                    f'{reclass_tuple[0]}, {reclass_tuple[1]}', label_pad=0.1)
-                reclass_text_box.on_submit(reclass_tb_submit)
-
-                label = reclass_text_box.ax.get_children()[1]
-                label.set_position([0.5, 1.3])
-                label.set_horizontalalignment('center')
-
-                def sample_tb_submit(text):
-                    nonlocal sample
-
-                    new_sample = str(text)
-
-                    # ensure code doesn't refire on
-                    # navigating away from text box
-                    if new_sample != sample:
-                        sample = new_sample
-                        print(f'Setting sample-to-view to: {sample}')
+                    # check if mcs_entry can be converted to an integer
+                    try:
+                        int(mcs_entry[0])
+                        int(mcs_entry[1])
+                    except ValueError:
                         print()
+                        print('Invalid entry for minimun cluster size ' +
+                              '(MCS) or reclassification cutoffs. ' +
+                              'Please enter single integer or range ' +
+                              'of integers (#-#) for MCS, and two floats ' +
+                              'separated by ", " as reclassification ' +
+                              'cutoffs.4')
+                        return None, None
 
-                sample_text_box = TextBox(
-                    ax_sample_tb, "Sample Name",
-                    f'{sample}', label_pad=0.1)
-                sample_text_box.on_submit(sample_tb_submit)
+                    rnge = list(range(
+                        int(mcs_entry[0]), int(mcs_entry[1]) + 1, 1))
 
-                label = sample_text_box.ax.get_children()[1]
-                label.set_position([0.5, 1.3])
-                label.set_horizontalalignment('center')
+                    print()
+                    for i in rnge:
 
-                # kick things off with cluster_and_plot function
-                min_cluster_size, clean, noisy = cluster_and_plot()
+                        min_cluster_size = i
 
-                # update self with current reclassified QCData slice
-                self.reclassClean = clean
-                self.reclassNoisy = noisy
+                        clustering = hdbscan.HDBSCAN(
+                            min_cluster_size=min_cluster_size,
+                            min_samples=None,
+                            metric='euclidean', alpha=1.0, p=None,
+                            algorithm='best', leaf_size=40,
+                            memory=Memory(
+                                location=None),
+                            approx_min_span_tree=True,
+                            gen_min_span_tree=False,
+                            core_dist_n_jobs=-1,
+                            cluster_selection_method='eom',
+                            allow_single_cluster=False,
+                            prediction_data=False,
+                            match_reference_implementation=False).fit(
+                                chunk[['emb1', 'emb2']])
 
-                plt.show(block=True)
+                        chunk['cluster'] = clustering.labels_
 
-                # update new default MCS and reclassCutoffs
-                # to the last ones entered so window reopens with
-                # latest values (not original defaults)
-                if len(range_tuple) == 1:
-                    new_default_range_tuple = range_tuple[0]
-                    new_default_reclass_tuple = reclass_tuple
-                    new_default_sample = sample
+                        print(
+                            f'min_cluster_size = {i}',
+                            np.unique(clustering.labels_))
+                    return None, None
 
-                return (selector.ind, new_default_range_tuple,
-                        new_default_reclass_tuple, new_default_sample)
+                else:
+                    print()
+                    print('Invalid entry for minimun cluster size (MCS) or ' +
+                          'reclassification cutoffs. ' +
+                          'Please enter single integer or range ' +
+                          'of integers (#-#) for MCS, and two floats ' +
+                          'separated by ", " as reclassification cutoffs.3')
+                    return None, None
             ###################################################################
-            # loop over QCData chunks
 
+            # loop over QCData chunks
             for chunk in chunks[chunk_index:]:
 
                 print(
                     f'Clustering: {chunk_index + 1} of ' +
                     f'{len(chunks)} data chunks')
 
-                # make directory for current chunk if it hasn't already been
+                # make directory for current chunk if it hasn't already
                 chunk_dir = os.path.join(reclass_dir, str(chunk_index + 1))
                 if not os.path.exists(chunk_dir):
                     os.makedirs(chunk_dir)
@@ -3919,7 +3632,6 @@ class QC(object):
                         frac=self.fracForEmbeddingQC, random_state=5)
 
                     print(chunk[abx_channels_dna])
-                    print()
 
                     embedding = np.load(
                         os.path.join(chunk_dir, 'embedding.npy'))
@@ -3936,7 +3648,6 @@ class QC(object):
                         frac=self.fracForEmbeddingQC, random_state=5)
 
                     print(chunk[abx_channels_dna])
-                    print()
 
                     if self.embeddingAlgorithmQC == 'TSNE':
                         print('Computing TSNE embedding...')
@@ -3994,14 +3705,12 @@ class QC(object):
 
                     print(
                         'Embedding completed in ' +
-                        str(datetime.now() - startTime)
-                        )
-                    print()
+                        str(datetime.now() - startTime))
 
                     np.save(
                         os.path.join(chunk_dir, 'embedding'),
-                        embedding
-                        )
+                        embedding)
+
                     chunk['emb1'] = embedding[:, 0]
                     chunk['emb2'] = embedding[:, 1]
 
@@ -4009,166 +3718,208 @@ class QC(object):
                 point_size = 50000/len(chunk)
 
                 # interact with plots to identify optimal min cluster size
-                while not os.path.isfile(os.path.join(reclass_dir, 'MCS.pkl')):
+                while not os.path.isfile(os.path.join(reclass_dir, 'MCS.txt')):
 
-                    (selected_idx,
-                     default_range_tuple,
-                     default_reclass_tuple,
-                     default_sample) = do_plots()
+                    # define PySimpleGUIQt interface
+                    layout = [
+                        [
+                            sg.Text('Minimun Cluster Size', size=(14, 1),
+                                    auto_size_text=False),
+                            sg.In(default_text=self.default_mcsQC,
+                                  size=(10, 1), enable_events=False,
+                                  key='-MCS-')
+                        ],
 
-                    # if lassoed cells...
-                    if len(selected_idx) >= 1:
+                        [
+                            sg.Text('Reclass. Cutoffs (clean, noisy)',
+                                    size=(14, 1), auto_size_text=False),
+                            sg.Input(default_text=self.default_reclass_tuple,
+                                     size=(10, 1), enable_events=False,
+                                     key='-RECLASS-')
+                        ],
 
-                        # show highest expression channels
-                        chunk_copy = chunk.copy()
+                        [
+                            sg.Text('Sample Name', size=(14, 1),
+                                    auto_size_text=False),
+                            sg.Input(size=(10, 1), enable_events=False,
+                                     key='-SAMPLE-')
+                        ],
 
-                        # assign lassoed data a dummy cluster variable
-                        # and get highest expressed markers
-                        chunk_copy.loc[
-                            chunk_copy.index.isin(selected_idx),
-                            'cluster'] = 1000
-                        hi_markers = cluster_expression(
-                            df=chunk_copy, markers=abx_channels,
-                            cluster=1000, num_proteins=3,
-                            standardize='within')
+                        [
+                            sg.Button('Plot', size=(10, 1)),
+                            sg.VSeperator(),
+                            sg.Button('Show Lasso', size=(10, 1)),
+                            sg.VSeperator(),
+                            sg.Button('Save', size=(10, 1)),
+                        ]
+                    ]
 
-                        print(f'Top three markers {hi_markers}')
-                        print()
+                    # create PySimpleGUIQt window
+                    window = sg.Window('MetaQC', layout)
 
-                        # superimpose centroids of lassoed noisy cells
-                        # colored by stage removed over channel images
-                        print('Opening Napari...')
-                        print()
+                    # define PySimpleGUIQt while loop
+                    while True:
+                        event, values = window.read()
 
-                        napari_warnings()
-                        if self.showAbChannels:
-                            for e, ch in enumerate(reversed(abx_channels)):
-                                channel_number = marker_channel_number(
-                                    markers, ch)
+                        if event in (None, 'Cancel'):
+                            break
 
-                                # read antibody image
-                                for file_path in glob.glob(
-                                  f'{self.inDir}/tif/{default_sample}*.tif'):
-                                    img = single_channel_pyramid(
-                                        file_path,
-                                        channel=channel_number.item() - 1
-                                        )
+                        elif event == 'Plot':
 
-                                # initialize Napari viewer with first channel
-                                if e == 0:
-                                    viewer = napari.view_image(
-                                        img, rgb=False,
-                                        blending='additive',
-                                        colormap='green',
-                                        visible=False,
-                                        name=ch)
+                            # update default mcs
+                            self.default_mcsQC = values['-MCS-']
+                            # update default reclass_tuple
+                            self.default_reclass_tuple = values['-RECLASS-']
+
+                            mcs = values['-MCS-']
+                            reclass_tuple = values['-RECLASS-']
+
+                            selected_idx, fig = draw_plot(
+                                chunk=chunk, mcs=mcs,
+                                reclass_tuple=reclass_tuple)
+
+                        elif event == 'Show Lasso':
+
+                            # test if plot has been run
+                            try:
+                                selected_idx
+                            except UnboundLocalError:
+                                print()
+                                print('No cells have been lassoed. ' +
+                                      'Enter a single integer-valued ' +
+                                      'minimum cluster size, and two ' +
+                                      'floats separated by ", " as ' +
+                                      'reclassification cutoffs then ' +
+                                      'press Plot.')
+                                break
+
+                            # check for valid sample name entry
+                            selected_sample = values['-SAMPLE-']
+                            if selected_sample in self.sampleNames.values():
+
+                                # if plot was run and cells lassoed
+                                if selected_idx is not None:
+                                    if len(selected_idx) >= 1:
+
+                                        show_lasso(
+                                            chunk=chunk,
+                                            selected_idx=selected_idx)
+                                    else:
+                                        print()
+                                        print('No cells have been lassoed. ' +
+                                              'Enter a single ' +
+                                              'integer-valued minimum ' +
+                                              'cluster size, and two ' +
+                                              'floats separated by ", " as ' +
+                                              'reclassification cutoffs ' +
+                                              'then press Plot.')
                                 else:
-                                    viewer.add_image(
-                                        img, rgb=False,
-                                        blending='additive',
-                                        colormap='green',
-                                        visible=False,
-                                        name=ch)
+                                    print()
+                                    print('No cells have been lassoed. ' +
+                                          'Enter a single integer-valued ' +
+                                          'minimum cluster size, and two ' +
+                                          'floats separated by ", " as ' +
+                                          'reclassification cutoffs then ' +
+                                          'press Plot.')
+                            else:
+                                print()
+                                print('Must enter a valid sample name.')
 
-                        # color noisy data points by module used to redact them
-                        cmap = categorical_cmap(
-                            numUniqueSamples=len(modules[1:]),
-                            numCatagories=10,
-                            cmap='tab10',
-                            continuous=False
-                            )
+                        elif event == 'Save':
 
-                        # reverse module order so they appear in
-                        # correct order in Napari
-                        QC_color_dict = dict(zip(modules[1:], cmap.colors))
+                            # test whether figure has been generated
+                            try:
+                                fig
+                            except UnboundLocalError:
+                                print()
+                                print(
+                                    'Plot must be rendered before saving. ' +
+                                    'Enter a single integer-valued ' +
+                                    'minimum cluster size and press Plot.')
 
-                        for module, color in reversed(QC_color_dict.items()):
+                                break
 
-                            centroids = chunk[['Y_centroid', 'X_centroid']][
-                                    (chunk.index.isin(selected_idx))
-                                    & (chunk['Sample'] == default_sample)
-                                    & (chunk['QC_status'] == 'noisy')
-                                    & (chunk['Filter'] == module)]
+                            # read, interpret, and test mcs entry
+                            mcs = values['-MCS-']
+                            mcs_entry = mcs.split('-')
+                            try:
+                                int(mcs_entry[0])
+                            except ValueError:
+                                print()
+                                print('Minimum cluster size must be ' +
+                                      'a single integer value.')
+                                break
 
-                            viewer.add_points(
-                                centroids, name=module, visible=False,
-                                face_color=color, edge_width=0.0, size=4.0)
+                            # read, interpret, and test reclass tuple entry
+                            reclass_tuple = values['-RECLASS-']
+                            try:
+                                reclass_entry = [
+                                    float(i) for i in
+                                    reclass_tuple.split(', ')]
+                            except ValueError:
+                                print()
+                                print(
+                                    'Must enter two floats separated ' +
+                                    'by ", " as reclassification cutoffs.')
+                                break
 
-                        # read segmentation outlines, add to Napari
-                        for file_path in glob.glob(
-                          f'{self.inDir}/seg/{default_sample}*.ome.tif'):
-                            seg = single_channel_pyramid(
-                                file_path, channel=0)
-                        viewer.add_image(
-                            seg, rgb=False,
-                            blending='additive',
-                            colormap='gray',
-                            visible=False,
-                            name='segmentation')
+                            if len(mcs_entry) == 1:
+                                print()
+                                print(
+                                    'Saving current minimum ' +
+                                    f'cluster size: {mcs_entry[0]}')
+                                with open(
+                                  os.path.join(
+                                   reclass_dir, 'MCS.txt'), 'w') as f:
+                                    f.write(str(mcs_entry[0]))
 
-                        # read last DNA, add to Napari
-                        last_dna_cycle = natsorted(
-                            [i for i in chunk.columns if dna_moniker in i])[-1]
-                        channel_number = marker_channel_number(
-                            markers, last_dna_cycle)
-                        for file_path in glob.glob(
-                          f'{self.inDir}/tif/{default_sample}*.tif'):
-                            dna_last = single_channel_pyramid(
-                                file_path,
-                                channel=channel_number.item() - 1)
-                            viewer.add_image(
-                                dna_last, rgb=False, blending='additive',
-                                opacity=0.5, colormap='gray', visible=False,
-                                name=f'{last_dna_cycle}: ' +
-                                f'{default_sample}')
+                                print(
+                                    'Saving current reclassification '
+                                    + f'cutoffs: {reclass_entry}')
+                                with open(
+                                  os.path.join(
+                                   reclass_dir, 'RECLASS_TUPLE.txt'),
+                                  'w') as f:
+                                    f.write(str(reclass_entry))
 
-                        # read first DNA, add to Napari
-                        for file_path in glob.glob(
-                          f'{self.inDir}/tif/{default_sample}*.tif'):
-                            dna_first = single_channel_pyramid(
-                                file_path, channel=0)
-                        viewer.add_image(
-                            dna_first, rgb=False, blending='additive',
-                            opacity=0.5, colormap='gray', visible=True,
-                            name=f'{dna1}: ' +
-                            f'{default_sample}')
+                                print('Saving current figure...')
+                                fig.savefig(
+                                    os.path.join(
+                                        reclass_dir,
+                                        f'{self.embeddingAlgorithm}_'
+                                        f'{mcs_entry[0]}.png'),
+                                    bbox_inches='tight', dpi=1000)
 
-                        napari.run()
+                                print('Close widget window to continue...')
+
+                            # test if tuple of integers entered
+                            else:
+                                print()
+                                print('Minimum cluster size must be ' +
+                                      'a single integer value.')
+                                break
+                    window.close()
 
                 ###############################################################
                 # once optimal MCS has been saved
+                if os.path.exists(os.path.join(reclass_dir, 'MCS.txt')):
 
-                if os.path.exists(os.path.join(reclass_dir, 'MCS.pkl')):
-                    f = open(os.path.join(
-                        reclass_dir, 'MCS.pkl'), 'rb')
-                    min_cluster_size = pickle.load(f)
+                    with open(
+                      os.path.join(reclass_dir, 'MCS.txt'), 'r') as f:
+                        final_mcs_entry = f.readlines()
+                        final_mcs_entry = int(final_mcs_entry[0])
 
-                    ###########################################################
-                    # apply last entered reclassification cutoffs
-
-                    print(
-                        f'Applying current reclassification ' +
-                        f'cutoffs: {default_reclass_tuple}')
-                    print()
-
-                    # update clean and noisy storage dataframes and save
-                    reclass_storage_dict['clean'] = (
-                        reclass_storage_dict['clean'].append(
-                            self.reclassClean))
-                    reclass_storage_dict['noisy'] = (
-                        reclass_storage_dict['noisy'].append(
-                            self.reclassNoisy))
-
-                    f = open(os.path.join(
-                        reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
-                    pickle.dump(reclass_storage_dict, f)
-                    f.close()
-
-                    print('Reclassified clean tally: ' +
-                          f"{len(reclass_storage_dict['clean'])}")
-                    print('Reclassified noisy tally: ' +
-                          f"{len(reclass_storage_dict['noisy'])}")
-                    print()
+                    with open(
+                      os.path.join(
+                       reclass_dir, 'RECLASS_TUPLE.txt'), 'r') as f:
+                        final_reclass_entry = f.readlines()
+                        final_reclass_entry = (
+                            final_reclass_entry[0]
+                            .lstrip('[')
+                            .rstrip(']')
+                            .split(', '))
+                        final_reclass_entry = [
+                            float(i) for i in final_reclass_entry]
 
                     ###########################################################
                     # cluster chunk using selected MCS
@@ -4179,11 +3930,11 @@ class QC(object):
 
                         print(
                             'Applying current minimum cluster size: ' +
-                            f'{min_cluster_size}')
+                            f'{final_mcs_entry}')
                         print()
 
                         clustering = hdbscan.HDBSCAN(
-                            min_cluster_size=min_cluster_size,
+                            min_cluster_size=final_mcs_entry,
                             min_samples=None,
                             metric='euclidean', alpha=1.0, p=None,
                             algorithm='best', leaf_size=40,
@@ -4199,6 +3950,37 @@ class QC(object):
                                 chunk[['emb1', 'emb2']]
                                 )
                         chunk['cluster'] = clustering.labels_
+
+                    ###########################################################
+                    # add clean and noisy data (based on final reclass_tuple)
+                    # to reclass_storage_dict
+
+                    print()
+                    print(
+                        'Applying final reclassification ' +
+                        f'cutoffs: {final_reclass_entry}')
+
+                    chunk, clean, noisy = reclassify_chunk(
+                        chunk=chunk, reclass_entry=final_reclass_entry)
+
+                    # update clean and noisy storage dataframes and save
+                    reclass_storage_dict['clean'] = (
+                        reclass_storage_dict['clean'].append(
+                            clean))
+                    reclass_storage_dict['noisy'] = (
+                        reclass_storage_dict['noisy'].append(
+                            noisy))
+
+                    f = open(os.path.join(
+                        reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
+                    pickle.dump(reclass_storage_dict, f)
+                    f.close()
+
+                    print('Reclassified clean tally: ' +
+                          f"{len(reclass_storage_dict['clean'])}")
+                    print('Reclassified noisy tally: ' +
+                          f"{len(reclass_storage_dict['noisy'])}")
+                    print()
 
                     ###########################################################
                     # get clustermap
@@ -4237,10 +4019,10 @@ class QC(object):
                     ###########################################################
                     # increment chunk_index
                     chunk_index = chunk_index + 1
-                    f = open(os.path.join(
-                        reclass_dir, 'chunk_index.pkl'), 'wb')
-                    pickle.dump(chunk_index, f)
-                    f.close()
+                    chunk_index = str(chunk_index)
+                    with open(
+                      os.path.join(reclass_dir, 'chunk_index.txt'), 'w') as f:
+                        f.write(chunk_index)
 
                     # remove saved chunk.pkl
                     if os.path.exists(os.path.join(reclass_dir, 'chunk.pkl')):
@@ -4384,6 +4166,7 @@ class QC(object):
         fig1, ax1 = plt.subplots()
         ax1.set_prop_cycle('color', [theme(1.0 * i / len(sizes))
                                      for i in range(len(sizes))])
+
         patches, texts, autotexts = ax1.pie(
             sizes, explode=explode, labels=labels, autopct='%1.2f%%',
             shadow=False, startangle=90
@@ -4722,15 +4505,6 @@ class QC(object):
         # recapitulate df index at the point of embedding
         data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
 
-        # assign default HDBSCAN minimum cluster size
-        default_range_tuple = 250
-
-        # assign default sample for viz
-        default_sample = self.viewSample
-
-        # define the degree of transparency for cells in the embedding
-        alpha = 1.0
-
         # pick a random seed for reproducibility of
         # data sampling via self.fracForEmbedding
         random_state = 5
@@ -4739,7 +4513,8 @@ class QC(object):
             print('Performing weighted sampling of cells from tissues...')
             print(
                 'Check that resulting cell counts are similar across samples.')
-            print('If not, try embedding a smaller fraction of data.')
+            print('If not, try embedding a smaller fraction of data ' +
+                  'with the fracForEmbedding configuration setting.')
             print()
 
             # calculate per tissue cell-count weighted random sample
@@ -4832,7 +4607,6 @@ class QC(object):
                     output_dens=False).fit_transform(data[abx_channels])
 
             print('Embedding completed in ' + str(datetime.now() - startTime))
-            print()
 
             np.save(os.path.join(clustering_dir, 'embedding'), embedding)
             data['emb1'] = embedding[:, 0]
@@ -4840,775 +4614,665 @@ class QC(object):
 
         #######################################################################
 
-        def do_plots():
+        def show_lasso(data, selected_idx):
+            # show highest expression channels
+            data_copy = data.copy()
 
-            # initialize counter to allow for different
-            # behavior on the first round of plotting
-            iteration = 1
+            # assign lassoed data a dummy cluster variable
+            # and get highest expressed markers
+            data_copy.loc[
+                data_copy.index.isin(selected_idx),
+                'cluster'] = 1000
+            hi_markers = cluster_expression(
+                df=data_copy, markers=abx_channels,
+                cluster=1000, num_proteins=3,
+                standardize='within')
 
-            sns.set_style('whitegrid')
+            print()
+            print(f'Top three markers {hi_markers}')
 
-            fig = plt.figure(figsize=(17, 6))
-            matplotlib_warnings(fig)
+            # superimpose centroids of lassoed noisy cells
+            # colored by stage removed over channel images
+            print()
+            print('Opening Napari...')
 
-            gs = plt.GridSpec(2, 3, figure=fig, height_ratios=[1, 10])
+            napari_warnings()
+            if self.showAbChannels:
 
-            # define text box axes
-            ax_mcs_tb = fig.add_subplot(gs[0, 0])
-            ax_sample_tb = fig.add_subplot(gs[0, 1])
+                for e, ch in enumerate(reversed(abx_channels)):
+                    channel_number = marker_channel_number(
+                        markers, ch)
 
-            # define embedding axes
-            ax_sc_cluster = fig.add_subplot(gs[1, 0])
-            ax_sc_sample = fig.add_subplot(gs[1, 1])
-            ax_sc_cond = fig.add_subplot(gs[1, 2])
+                    # read antibody image
+                    for file_path in glob.glob(
+                      f'{self.inDir}/tif/' +
+                      f'{selected_sample}*.tif'):
+                        img = single_channel_pyramid(
+                            file_path,
+                            channel=channel_number.item() - 1
+                            )
 
-            # assign default inputs
-            range_tuple = default_range_tuple
-            sample = default_sample
+                    # initialize Napari viewer with
+                    # first channel
+                    if e == 0:
+                        viewer = napari.view_image(
+                            img, rgb=False,
+                            blending='additive',
+                            colormap='green',
+                            visible=False,
+                            name=ch)
+                    else:
+                        viewer.add_image(
+                            img, rgb=False,
+                            blending='additive',
+                            colormap='green',
+                            visible=False,
+                            name=ch)
+
+            # color noisy data points by module used to
+            # redact them
+            # len(data['cluster'].unique())
+            cmap = categorical_cmap(
+                numUniqueSamples=len(
+                    data['Condition'].unique()),
+                numCatagories=10,
+                cmap='tab10',
+                continuous=False
+                )
+
+            centroids = data[['Y_centroid', 'X_centroid']][
+                    (data.index.isin(selected_idx))
+                    & (data['Sample'] == selected_sample)]
+
+            viewer.add_points(
+                centroids, name='lassoed cells', visible=False,
+                face_color='lime', edge_width=0.0, size=4.0)
+
+            # read segmentation outlines, add to Napari
+            for file_path in glob.glob(
+              f'{self.inDir}/seg/{selected_sample}*.ome.tif'):
+                seg = single_channel_pyramid(
+                    file_path, channel=0)
+            viewer.add_image(
+                seg, rgb=False,
+                blending='additive',
+                colormap='gray',
+                visible=False,
+                name='segmentation')
+
+            # read last DNA, add to Napari
+            last_dna_cycle = natsorted(
+                [i for i in data.columns
+                 if dna_moniker in i])[-1]
+            channel_number = marker_channel_number(
+                markers, last_dna_cycle)
+            for file_path in glob.glob(
+              f'{self.inDir}/tif/{selected_sample}*.tif'):
+                dna_last = single_channel_pyramid(
+                    file_path,
+                    channel=channel_number.item() - 1)
+                viewer.add_image(
+                    dna_last, rgb=False, blending='additive',
+                    opacity=0.5, colormap='gray',
+                    visible=False,
+                    name=f'{last_dna_cycle}: ' +
+                    f'{selected_sample}')
+
+            # read first DNA, add to Napari
+            for file_path in glob.glob(
+              f'{self.inDir}/tif/{selected_sample}*.tif'):
+                dna_first = single_channel_pyramid(
+                    file_path, channel=0)
+            viewer.add_image(
+                dna_first, rgb=False, blending='additive',
+                opacity=0.5, colormap='gray', visible=True,
+                name=f'{dna1}: ' +
+                f'{selected_sample}')
+
+            napari.run()
+
+        def draw_plot(data, mcs):
+
+            # placeholder for lasso selection
             selector = None
 
-            def cluster_and_plot():
-                nonlocal iteration
-                nonlocal selector
-                nonlocal range_tuple
-
-                if not isinstance(range_tuple, tuple):
-                    range_tuple = (range_tuple, )
-
-                # loop for single-value MCS inputs
-                if iteration == 1:
-                    if len(range_tuple) == 1:
-
-                        mylist = [range_tuple[0]]
-
-                        for i in mylist:
-
-                            min_cluster_size = i
-
-                            clustering = hdbscan.HDBSCAN(
-                                min_cluster_size=min_cluster_size,
-                                min_samples=None,
-                                metric='euclidean', alpha=1.0, p=None,
-                                algorithm='best', leaf_size=40,
-                                memory=Memory(
-                                    location=None),
-                                approx_min_span_tree=True,
-                                gen_min_span_tree=False,
-                                core_dist_n_jobs=-1,
-                                cluster_selection_method='eom',
-                                allow_single_cluster=False,
-                                prediction_data=False,
-                                match_reference_implementation=False).fit(
-                                    data[['emb1', 'emb2']]
-                                    )
-                            data['cluster'] = clustering.labels_
-
-                            print(
-                                f'min_cluster_size = {i}',
-                                np.unique(clustering.labels_)
-                                )
-                            print()
-
-                            # PLOT embedding
-                            for color_by in ['cluster', 'Sample', 'Condition']:
-
-                                highlight = 'none'
-
-                                if color_by == 'cluster':
-
-                                    # build cmap
-                                    cmap = categorical_cmap(
-                                        numUniqueSamples=len(
-                                            data[color_by].unique()),
-                                        numCatagories=10,
-                                        cmap='tab10',
-                                        continuous=False
-                                        )
-
-                                    # make black the first color to specify
-                                    # unclustered cells (cluster -1)
-                                    cmap = ListedColormap(
-                                        np.insert(
-                                            arr=cmap.colors, obj=0,
-                                            values=[0, 0, 0], axis=0)
-                                            )
-
-                                    # trim cmap to # unique samples
-                                    trim = (
-                                        len(cmap.colors) - len(
-                                            data[color_by].unique())
-                                        )
-                                    cmap = ListedColormap(
-                                        cmap.colors[:-trim]
-                                        )
-
-                                    sample_dict = dict(
-                                        zip(
-                                            natsorted(
-                                                data[color_by].unique()),
-                                            list(range(len(data[color_by]
-                                                 .unique()))))
-                                            )
-
-                                    c = [sample_dict[i] for i
-                                         in data[color_by]]
-
-                                    ax_sc_cluster.cla()
-
-                                    cluster_paths = ax_sc_cluster.scatter(
-                                        data['emb1'],
-                                        data['emb2'],
-                                        c=c,
-                                        alpha=alpha,
-                                        s=point_size,
-                                        cmap=cmap,
-                                        ec=[
-                                            'k' if i == highlight
-                                            else 'none' for i in
-                                            data[color_by]
-                                            ],
-                                        linewidth=0.1
-                                        )
-
-                                    ax_sc_cluster.set_title('HDBSCAN')
-                                    ax_sc_cluster.axis('equal')
-                                    ax_sc_cluster.tick_params(labelsize=5)
-                                    ax_sc_cluster.grid(False)
-
-                                    legend_elements = []
-                                    for e, i in enumerate(
-                                        natsorted(data[color_by].unique())
-                                      ):
-
-                                        hi_markers = cluster_expression(
-                                            df=data, markers=abx_channels,
-                                            cluster=i, num_proteins=3,
-                                            standardize='within',
-                                            )
-
-                                        legend_elements.append(
-                                            Line2D([0], [0], marker='o',
-                                                   color='none',
-                                                   label=(
-                                                    f'Cluster {i}: '
-                                                    f'{hi_markers}'),
-                                                   markerfacecolor=(
-                                                    cmap.colors[e]),
-                                                   markeredgecolor='none',
-                                                   lw=0.001, markersize=6))
-
-                                    # cluster_lgd = ax_sc_cluster.legend(
-                                    #     handles=legend_elements,
-                                    #     prop={'size': 8},
-                                    #     bbox_to_anchor=[1.0, 1.0]
-                                    #     )
-
-                                elif color_by == 'Sample':
-
-                                    # build cmap
-                                    cmap = categorical_cmap(
-                                        numUniqueSamples=len(
-                                            data['Sample'].unique()),
-                                        numCatagories=10,
-                                        cmap='tab10',
-                                        continuous=False
-                                        )
-
-                                    sample_dict = dict(
-                                        zip(
-                                            natsorted(
-                                                data['Sample'].unique()),
-                                            list(range(len(data['Sample']
-                                                 .unique()))))
-                                            )
-
-                                    c = [sample_dict[i] for
-                                         i in data['Sample']]
-
-                                    ax_sc_sample.cla()
-
-                                    ax_sc_sample.scatter(
-                                        data['emb1'],
-                                        data['emb2'],
-                                        c=c,
-                                        cmap=cmap,
-                                        alpha=alpha,
-                                        s=point_size,
-                                        ec=[
-                                            'k' if i == highlight
-                                            else 'none' for i in
-                                            data['Sample']
-                                            ],
-                                        linewidth=0.1
-                                        )
-                                    ax_sc_sample.set_title('Sample')
-
-                                    ax_sc_sample.axis('equal')
-                                    ax_sc_sample.tick_params(labelsize=5)
-                                    ax_sc_sample.grid(False)
-
-                                    legend_elements = []
-                                    for e, i in enumerate(
-                                      natsorted(data['Sample'].unique())):
-
-                                        if i == highlight:
-                                            markeredgecolor = 'k'
-                                        else:
-                                            markeredgecolor = 'none'
-
-                                        sample_to_map = (
-                                            data['Sample'][
-                                                data['Sample'] == i]
-                                            .unique()[0]
-                                            )
-
-                                        legend_elements.append(
-                                            Line2D([0], [0], marker='o',
-                                                   color='none',
-                                                   label=i,
-                                                   markerfacecolor=(
-                                                    cmap.colors[e]
-                                                    ),
-                                                   markeredgecolor=(
-                                                    markeredgecolor),
-                                                   lw=0.001,
-                                                   markersize=6)
-                                                   )
-
-                                    sample_lgd = ax_sc_sample.legend(
-                                        handles=legend_elements,
-                                        prop={'size': 8}, loc='best')
-
-                                elif color_by == 'Condition':
-
-                                    # build cmap
-                                    cmap = categorical_cmap(
-                                        numUniqueSamples=len(
-                                            data['Condition'].unique()),
-                                        numCatagories=10,
-                                        cmap='tab10',
-                                        continuous=False
-                                        )
-
-                                    sample_dict = dict(
-                                        zip(
-                                            natsorted(
-                                                data['Condition'].unique()),
-                                            list(range(len(data['Condition']
-                                                 .unique()))))
-                                            )
-
-                                    c = [sample_dict[i] for
-                                         i in data['Condition']]
-
-                                    ax_sc_cond.cla()
-
-                                    ax_sc_cond.scatter(
-                                        data['emb1'],
-                                        data['emb2'],
-                                        c=c,
-                                        cmap=cmap,
-                                        alpha=alpha,
-                                        s=point_size,
-                                        ec=[
-                                            'k' if i == highlight
-                                            else 'none' for i in
-                                            data['Condition']
-                                            ],
-                                        linewidth=0.1
-                                        )
-                                    ax_sc_cond.set_title('Condition')
-
-                                    ax_sc_cond.axis('equal')
-                                    ax_sc_cond.tick_params(labelsize=5)
-                                    ax_sc_cond.grid(False)
-
-                                    legend_elements = []
-                                    for e, i in enumerate(
-                                        natsorted(data['Condition'].unique())
-                                      ):
-
-                                        if i == highlight:
-                                            markeredgecolor = 'k'
-                                        else:
-                                            markeredgecolor = 'none'
-
-                                        sample_to_map = (
-                                            data['Condition'][
-                                                data['Condition'] == i]
-                                            .unique()[0]
-                                            )
-
-                                        legend_elements.append(
-                                            Line2D([0], [0], marker='o',
-                                                   color='none',
-                                                   label=i,
-                                                   markerfacecolor=(
-                                                    cmap.colors[e]
-                                                    ),
-                                                   markeredgecolor=(
-                                                    markeredgecolor),
-                                                   lw=0.001,
-                                                   markersize=6)
-                                                   )
-
-                                    sample_lgd = ax_sc_cond.legend(
-                                        handles=legend_elements,
-                                        prop={'size': 8}, loc='best')
-
-                            fig.tight_layout()
-
-                            # must call draw() before creating selector,
-                            # or alpha setting doesn't work.
-                            fig.canvas.draw()
-                            print('Done!')
-                            print()
-
-                            if selector:
-                                selector.disconnect()
-                            selector = SelectFromCollection(
-                                ax_sc_cluster, cluster_paths
-                                )
-
-                            # allow for different behavior
-                            # on first iteration of plotting
-                            iteration += 1
-
-                            return min_cluster_size
-
-                    else:
-                        # loop for a range of input values
-                        mylist = list(
-                            range(range_tuple[0], range_tuple[1] + 1, 1)
-                            )
-                        mylist.reverse()  # run higher cluster sizes first
-
-                        for i in mylist:
-
-                            min_cluster_size = i
-
-                            clustering = hdbscan.HDBSCAN(
-                                min_cluster_size=min_cluster_size,
-                                min_samples=None,
-                                metric='euclidean', alpha=1.0, p=None,
-                                algorithm='best', leaf_size=40,
-                                memory=Memory(
-                                    location=None),
-                                approx_min_span_tree=True,
-                                gen_min_span_tree=False,
-                                core_dist_n_jobs=-1,
-                                cluster_selection_method='eom',
-                                allow_single_cluster=False,
-                                prediction_data=False,
-                                match_reference_implementation=False).fit(
-                                    data[['emb1', 'emb2']]
-                                    )
-                            data['cluster'] = clustering.labels_
-
-                            print(
-                                f'min_cluster_size = {i}',
-                                np.unique(clustering.labels_)
-                                )
-                        print()
-
-                        # acts to terminate loop
-                        return min_cluster_size
-
-                if iteration != 1:
-                    if len(range_tuple) == 1:
-
-                        mylist = [range_tuple[0]]
-
-                        for i in mylist:
-
-                            min_cluster_size = i
-
-                            clustering = hdbscan.HDBSCAN(
-                                min_cluster_size=min_cluster_size,
-                                min_samples=None,
-                                metric='euclidean', alpha=1.0, p=None,
-                                algorithm='best', leaf_size=40,
-                                memory=Memory(
-                                    location=None),
-                                approx_min_span_tree=True,
-                                gen_min_span_tree=False,
-                                core_dist_n_jobs=-1,
-                                cluster_selection_method='eom',
-                                allow_single_cluster=False,
-                                prediction_data=False,
-                                match_reference_implementation=False).fit(
-                                    data[['emb1', 'emb2']]
-                                    )
-                            data['cluster'] = clustering.labels_
-
-                            print(
-                                f'min_cluster_size = {i}',
-                                np.unique(clustering.labels_)
-                                )
-                            print()
-
-                            # PLOT embedding
-                            for color_by in ['cluster']:
-
-                                highlight = 'none'
-
-                                if color_by == 'cluster':
-
-                                    # build cmap
-                                    cmap = categorical_cmap(
-                                        numUniqueSamples=len(
-                                            data[color_by].unique()),
-                                        numCatagories=10,
-                                        cmap='tab10',
-                                        continuous=False
-                                        )
-
-                                    # make black the first color to specify
-                                    # unclustered cells (cluster -1)
-                                    cmap = ListedColormap(
-                                        np.insert(
-                                            arr=cmap.colors, obj=0,
-                                            values=[0, 0, 0], axis=0)
-                                            )
-
-                                    # trim cmap to # unique samples
-                                    trim = (
-                                        len(cmap.colors) - len(
-                                            data[color_by].unique())
-                                        )
-                                    cmap = ListedColormap(
-                                        cmap.colors[:-trim]
-                                        )
-
-                                    sample_dict = dict(
-                                        zip(
-                                            natsorted(
-                                                data[color_by].unique()),
-                                            list(range(len(data[color_by]
-                                                 .unique()))))
-                                            )
-
-                                    c = [sample_dict[i] for i
-                                         in data[color_by]]
-
-                                    ax_sc_cluster.cla()
-
-                                    cluster_paths = ax_sc_cluster.scatter(
-                                        data['emb1'],
-                                        data['emb2'],
-                                        c=c,
-                                        alpha=alpha,
-                                        s=point_size,
-                                        cmap=cmap,
-                                        ec=[
-                                            'k' if i == highlight
-                                            else 'none' for i in
-                                            data[color_by]
-                                            ],
-                                        linewidth=0.1
-                                        )
-
-                                    ax_sc_cluster.set_title('HDBSCAN')
-                                    ax_sc_cluster.axis('equal')
-                                    ax_sc_cluster.tick_params(labelsize=5)
-                                    ax_sc_cluster.grid(False)
-
-                                    legend_elements = []
-                                    for e, i in enumerate(
-                                      natsorted(data[color_by].unique())):
-
-                                        hi_markers = cluster_expression(
-                                            df=data, markers=abx_channels,
-                                            cluster=i, num_proteins=3,
-                                            standardize='within',
-                                            )
-
-                                        legend_elements.append(
-                                            Line2D([0], [0], marker='o',
-                                                   color='none',
-                                                   label=(
-                                                    f'Cluster {i}: '
-                                                    f'{hi_markers}'),
-                                                   markerfacecolor=(
-                                                    cmap.colors[e]),
-                                                   markeredgecolor='none',
-                                                   lw=0.001, markersize=6))
-
-                                    # cluster_lgd = ax_sc_cluster.legend(
-                                    #     handles=legend_elements,
-                                    #     prop={'size': 8},
-                                    #     bbox_to_anchor=[1.0, 1.0]
-                                    #     )
-
-                            fig.tight_layout()
-
-                            # Must call draw() before creating selector,
-                            # or alpha setting doesn't work.
-                            fig.canvas.draw()
-
-                            if selector:
-                                selector.disconnect()
-                            selector = SelectFromCollection(
-                                ax_sc_cluster, cluster_paths
-                                )
-
-                            # acts to terminate loop
-                            return min_cluster_size
-
-                    else:
-                        # loop for a range of input values
-                        mylist = list(
-                            range(range_tuple[0], range_tuple[1] + 1, 1)
-                            )
-                        mylist.reverse()  # run higher cluster sizes first
-
-                        for i in mylist:
-
-                            min_cluster_size = i
-
-                            clustering = hdbscan.HDBSCAN(
-                                min_cluster_size=min_cluster_size,
-                                min_samples=None,
-                                metric='euclidean', alpha=1.0, p=None,
-                                algorithm='best', leaf_size=40,
-                                memory=Memory(
-                                    location=None),
-                                approx_min_span_tree=True,
-                                gen_min_span_tree=False,
-                                core_dist_n_jobs=-1,
-                                cluster_selection_method='eom',
-                                allow_single_cluster=False,
-                                prediction_data=False,
-                                match_reference_implementation=False).fit(
-                                    data[['emb1', 'emb2']]
-                                    )
-                            data['cluster'] = clustering.labels_
-
-                            print(
-                                f'min_cluster_size = {i}',
-                                np.unique(clustering.labels_)
-                                )
-                        print()
-
-                        # acts to terminate loop
-                        return min_cluster_size
-
-            def mcs_tb_submit(text):
-                nonlocal range_tuple
-
-                numerical_input = text.split('.save')[0].strip()
-                new_range_tuple = tuple(map(
-                    int, numerical_input.split('-')))
-
-                # ensure code doesn't refire on
-                # navigating away from text box
-                if new_range_tuple != range_tuple:
-                    range_tuple = new_range_tuple
-                    min_cluster_size = cluster_and_plot()
-
-                if '.save' in text:
-                    if len(new_range_tuple) == 1:
-
-                        print(
-                            f'Saving current minimum cluster size: ' +
-                            f'{new_range_tuple[0]}')
-                        f = open(os.path.join(
-                            clustering_dir, 'MCS.pkl'), 'wb')
-                        pickle.dump(new_range_tuple[0], f)
-                        f.close()
-
-                        print('Saving current figure...')
-                        plt.savefig(
-                            os.path.join(
-                                clustering_dir,
-                                f'{self.embeddingAlgorithm}_'
-                                f'{new_range_tuple[0]}.png'),
-                            bbox_inches='tight', dpi=1000
-                            )
-                        plt.close('all')
-
-                    else:
-                        print('A single value must be entered to save an' +
-                              'optimal minimum cluster size.')
-
-            mcs_text_box = TextBox(
-                ax_mcs_tb, "Minimum Cluster Size",
-                range_tuple, label_pad=0.1)
-            mcs_text_box.on_submit(mcs_tb_submit)
-
-            label = mcs_text_box.ax.get_children()[1]
-            label.set_position([0.5, 1.3])
-            label.set_horizontalalignment('center')
-
-            def sample_tb_submit(text):
-                nonlocal sample
-
-                new_sample = str(text)
-
-                # ensure code doesn't refire on
-                # navigating away from text box
-                if new_sample != sample:
-                    sample = new_sample
-                    print(f'Setting sample-to-view to: {sample}')
+            # interpret input entry
+            mcs_entry = mcs.split('-')
+
+            # if single integer entered
+            if len(mcs_entry) == 1:
+
+                # check if mcs_entry can be converted to an integer
+                try:
+                    int(mcs_entry[0])
+                except ValueError:
                     print()
+                    print('Invalid entry for minimun cluster size ' +
+                          '(MCS) or reclassification cutoffs. ' +
+                          'Please enter single integer or range ' +
+                          'of integers (#-#) for MCS, and two floats ' +
+                          'separated by ", " as reclassification ' +
+                          'cutoffs.0')
+                    return None, None
 
-            sample_text_box = TextBox(
-                ax_sample_tb, "Sample Name",
-                f'{sample}', label_pad=0.1)
-            sample_text_box.on_submit(sample_tb_submit)
+                sns.set_style('whitegrid')
 
-            label = sample_text_box.ax.get_children()[1]
-            label.set_position([0.5, 1.3])
-            label.set_horizontalalignment('center')
+                fig = plt.figure(figsize=(10, 8.5))
+                matplotlib_warnings(fig)
 
-            # kick things off with cluster_and_plot function
-            cluster_and_plot()
+                gs = plt.GridSpec(2, 3, figure=fig)
 
-            plt.show(block=True)
+                # define axes
+                ax_cluster = fig.add_subplot(gs[0, 0])
+                ax_sample = fig.add_subplot(gs[0, 1])
+                ax_condition = fig.add_subplot(gs[0, 2])
 
-            # update new default MCS and reclassCutoffs
-            # to the last ones entered so window reopens with
-            # latest values (not original defaults)
-            if len(range_tuple) == 1:
-                new_default_range_tuple = range_tuple[0]
-                new_default_sample = sample
+                ax_cluster_lbs = fig.add_subplot(gs[1, 0])
+                ax_sample_lbs = fig.add_subplot(gs[1, 1])
+                ax_condition_lbs = fig.add_subplot(gs[1, 2])
 
-            return (selector.ind, new_default_range_tuple, new_default_sample)
+                plt.subplots_adjust(
+                    left=0.01, right=0.99, bottom=0.0,
+                    top=0.96, wspace=0.0, hspace=0.0)
 
-        #######################################################################
-        # define while loop
+                i = int(mcs_entry[0])
+
+                min_cluster_size = i
+
+                clustering = hdbscan.HDBSCAN(
+                    min_cluster_size=min_cluster_size,
+                    min_samples=None,
+                    metric='euclidean', alpha=1.0, p=None,
+                    algorithm='best', leaf_size=40,
+                    memory=Memory(
+                        location=None),
+                    approx_min_span_tree=True,
+                    gen_min_span_tree=False,
+                    core_dist_n_jobs=-1,
+                    cluster_selection_method='eom',
+                    allow_single_cluster=False,
+                    prediction_data=False,
+                    match_reference_implementation=False).fit(
+                        data[['emb1', 'emb2']])
+
+                data['cluster'] = clustering.labels_
+
+                print()
+                print(
+                    f'min_cluster_size = {i}',
+                    np.unique(clustering.labels_))
+
+                # PLOT embedding
+                for color_by in ['cluster', 'Sample', 'Condition']:
+
+                    highlight = 'none'
+
+                    if color_by == 'cluster':
+
+                        # build cmap
+                        cmap = categorical_cmap(
+                            numUniqueSamples=len(
+                                data[color_by].unique()),
+                            numCatagories=10,
+                            cmap='tab10',
+                            continuous=False)
+
+                        # make black the first color to specify
+                        # unclustered cells (cluster -1)
+                        cmap = ListedColormap(
+                            np.insert(
+                                arr=cmap.colors, obj=0,
+                                values=[0, 0, 0], axis=0))
+
+                        # trim cmap to # unique samples
+                        trim = (
+                            len(cmap.colors) - len(
+                                data[color_by].unique())
+                            )
+                        cmap = ListedColormap(
+                            cmap.colors[:-trim]
+                            )
+
+                        sample_dict = dict(
+                            zip(
+                                natsorted(
+                                    data[color_by].unique()),
+                                list(range(len(data[color_by]
+                                     .unique())))))
+
+                        c = [sample_dict[i] for i
+                             in data[color_by]]
+
+                        ax_cluster.cla()
+
+                        cluster_paths = ax_cluster.scatter(
+                            data['emb1'],
+                            data['emb2'],
+                            c=c,
+                            alpha=1.0,
+                            s=point_size,
+                            cmap=cmap,
+                            ec=[
+                                'k' if i == highlight
+                                else 'none' for i in
+                                data[color_by]
+                                ],
+                            linewidth=0.1)
+
+                        ax_cluster.set_title('HDBSCAN')
+                        ax_cluster.set_aspect('equal')
+                        ax_cluster.axes.xaxis.set_visible(False)
+                        ax_cluster.axes.yaxis.set_visible(False)
+                        ax_cluster.grid(False)
+
+                        legend_elements = []
+                        for e, i in enumerate(
+                            natsorted(data[color_by].unique())
+                          ):
+
+                            hi_markers = cluster_expression(
+                                df=data, markers=abx_channels,
+                                cluster=i, num_proteins=3,
+                                standardize='within')
+
+                            legend_elements.append(
+                                Line2D([0], [0], marker='o',
+                                       color='none',
+                                       label=(
+                                        f'Cluster {i}: '
+                                        f'{hi_markers}'),
+                                       markerfacecolor=(
+                                        cmap.colors[e]),
+                                       markeredgecolor='none',
+                                       lw=0.001, markersize=6))
+
+                        cluster_lgd = ax_cluster_lbs.legend(
+                            handles=legend_elements,
+                            prop={'size': 8}, loc='upper center')
+
+                        ax_cluster_lbs.axis('off')
+
+                    elif color_by == 'Sample':
+
+                        # build cmap
+                        cmap = categorical_cmap(
+                            numUniqueSamples=len(
+                                data['Sample'].unique()),
+                            numCatagories=10,
+                            cmap='tab10',
+                            continuous=False
+                            )
+
+                        sample_dict = dict(
+                            zip(
+                                natsorted(
+                                    data['Sample'].unique()),
+                                list(range(len(data['Sample']
+                                     .unique()))))
+                                )
+
+                        c = [sample_dict[i] for
+                             i in data['Sample']]
+
+                        ax_sample.cla()
+
+                        ax_sample.scatter(
+                            data['emb1'],
+                            data['emb2'],
+                            c=c,
+                            cmap=cmap,
+                            alpha=1.0,
+                            s=point_size,
+                            ec=[
+                                'k' if i == highlight
+                                else 'none' for i in
+                                data['Sample']
+                                ],
+                            linewidth=0.1)
+
+                        ax_sample.set_title('Sample')
+                        ax_sample.set_aspect('equal')
+                        ax_sample.axes.xaxis.set_visible(False)
+                        ax_sample.axes.yaxis.set_visible(False)
+                        ax_sample.grid(False)
+
+                        legend_elements = []
+                        for e, i in enumerate(
+                          natsorted(data['Sample'].unique())):
+
+                            if i == highlight:
+                                markeredgecolor = 'k'
+                            else:
+                                markeredgecolor = 'none'
+
+                            sample_to_map = (
+                                data['Sample'][
+                                    data['Sample'] == i]
+                                .unique()[0]
+                                )
+
+                            legend_elements.append(
+                                Line2D([0], [0], marker='o',
+                                       color='none',
+                                       label=i,
+                                       markerfacecolor=(
+                                        cmap.colors[e]
+                                        ),
+                                       markeredgecolor=(
+                                        markeredgecolor),
+                                       lw=0.001,
+                                       markersize=6)
+                                       )
+
+                        sample_lgd = ax_sample_lbs.legend(
+                            handles=legend_elements,
+                            prop={'size': 8}, loc='upper center')
+
+                        ax_sample_lbs.axis('off')
+
+                    elif color_by == 'Condition':
+
+                        # build cmap
+                        cmap = categorical_cmap(
+                            numUniqueSamples=len(
+                                data['Condition'].unique()),
+                            numCatagories=10,
+                            cmap='tab10',
+                            continuous=False
+                            )
+
+                        sample_dict = dict(
+                            zip(
+                                natsorted(
+                                    data['Condition'].unique()),
+                                list(range(len(data['Condition']
+                                     .unique())))))
+
+                        c = [sample_dict[i] for
+                             i in data['Condition']]
+
+                        ax_condition.cla()
+
+                        ax_condition.scatter(
+                            data['emb1'],
+                            data['emb2'],
+                            c=c,
+                            cmap=cmap,
+                            alpha=1.0,
+                            s=point_size,
+                            ec=[
+                                'k' if i == highlight
+                                else 'none' for i in
+                                data['Condition']
+                                ],
+                            linewidth=0.1)
+
+                        ax_condition.set_title('Condition')
+                        ax_condition.set_aspect('equal')
+                        ax_condition.axes.xaxis.set_visible(False)
+                        ax_condition.axes.yaxis.set_visible(False)
+                        ax_condition.grid(False)
+
+                        legend_elements = []
+                        for e, i in enumerate(
+                            natsorted(data['Condition'].unique())
+                          ):
+
+                            if i == highlight:
+                                markeredgecolor = 'k'
+                            else:
+                                markeredgecolor = 'none'
+
+                            sample_to_map = (
+                                data['Condition'][
+                                    data['Condition'] == i]
+                                .unique()[0])
+
+                            legend_elements.append(
+                                Line2D([0], [0], marker='o',
+                                       color='none',
+                                       label=i,
+                                       markerfacecolor=(
+                                        cmap.colors[e]
+                                        ),
+                                       markeredgecolor=(
+                                        markeredgecolor),
+                                       lw=0.001,
+                                       markersize=6)
+                                       )
+
+                        condition_lgd = ax_condition_lbs.legend(
+                            handles=legend_elements,
+                            prop={'size': 8}, loc='upper center')
+
+                        ax_condition_lbs.axis('off')
+
+                # must call draw() before creating selector,
+                # or alpha setting doesn't work.
+                fig.canvas.draw()
+
+                if selector:
+                    selector.disconnect()
+                selector = SelectFromCollection(
+                    ax_cluster, cluster_paths)
+
+                plt.show(block=True)
+
+                return selector.ind, fig
+
+            # if integer range entered
+            elif len(mcs_entry) == 2:
+
+                # check if mcs_entry can be converted to an integer
+                try:
+                    int(mcs_entry[0])
+                    int(mcs_entry[1])
+                except ValueError:
+                    print()
+                    print('Invalid entry for minimun cluster size ' +
+                          '(MCS) or reclassification cutoffs. ' +
+                          'Please enter single integer or range ' +
+                          'of integers (#-#) for MCS, and two floats ' +
+                          'separated by ", " as reclassification ' +
+                          'cutoffs.4')
+                    return None, None
+
+                rnge = list(range(int(mcs_entry[0]), int(mcs_entry[1]) + 1, 1))
+
+                for i in rnge:
+
+                    min_cluster_size = i
+
+                    clustering = hdbscan.HDBSCAN(
+                        min_cluster_size=min_cluster_size,
+                        min_samples=None,
+                        metric='euclidean', alpha=1.0, p=None,
+                        algorithm='best', leaf_size=40,
+                        memory=Memory(
+                            location=None),
+                        approx_min_span_tree=True,
+                        gen_min_span_tree=False,
+                        core_dist_n_jobs=-1,
+                        cluster_selection_method='eom',
+                        allow_single_cluster=False,
+                        prediction_data=False,
+                        match_reference_implementation=False).fit(
+                            data[['emb1', 'emb2']])
+
+                    data['cluster'] = clustering.labels_
+
+                    print(
+                        f'min_cluster_size = {i}',
+                        np.unique(clustering.labels_))
+                print()
+                return None, None
+
+            else:
+                print()
+                print('Invalid entry for minimun cluster size. Please enter '
+                      'single integer or range of integers (#-#).')
+                return None, None
 
         # define the point size for cells in the embedding
         point_size = 50000/len(data)
 
-        # interact with plots to identify optimal min cluster size
-        while not os.path.isfile(os.path.join(clustering_dir, 'MCS.pkl')):
+        # interact with plots to identify optimal minimum cluster size
+        while not os.path.isfile(os.path.join(clustering_dir, 'MCS.txt')):
 
-            (selected_idx,
-             default_range_tuple,
-             default_sample) = do_plots()
+            # define PySimpleGUIQt interface
+            layout = [
+                [
+                    sg.Text('Minimun Cluster Size', size=(12, 1),
+                            auto_size_text=False),
+                    sg.In(default_text=self.default_mcsQC, size=(10, 1),
+                          enable_events=False, key='-MCS-')
+                ],
 
-            # if lassoed cells...
-            if len(selected_idx) >= 1:
+                [
+                    sg.Text('Sample Name', size=(12, 1), auto_size_text=False),
+                    sg.Input(size=(10, 1), enable_events=False, key='-SAMPLE-')
+                ],
 
-                # show highest expression channels
-                data_copy = data.copy()
+                [
+                    sg.Button('Plot', size=(10, 1)),
+                    sg.VSeperator(),
+                    sg.Button('Show Lasso', size=(10, 1)),
+                    sg.VSeperator(),
+                    sg.Button('Save', size=(10, 1)),
+                ]
+            ]
 
-                # assign lassoed data a dummy cluster variable
-                # and get highest expressed markers
-                data_copy.loc[
-                    data_copy.index.isin(selected_idx),
-                    'cluster'] = 1000
-                hi_markers = cluster_expression(
-                    df=data_copy, markers=abx_channels,
-                    cluster=1000, num_proteins=3,
-                    standardize='within')
+            # create PySimpleGUIQt window
+            window = sg.Window('Clustering', layout)
 
-                print(f'Top three markers {hi_markers}')
-                print()
+            # define PySimpleGUIQt while loop
+            while True:
+                event, values = window.read()
 
-                # superimpose centroids of lassoed noisy cells
-                # colored by stage removed over channel images
-                print('Opening Napari...')
-                print()
+                if event in (None, 'Cancel'):
+                    break
 
-                napari_warnings()
-                if self.showAbChannels:
+                elif event == 'Plot':
 
-                    for e, ch in enumerate(reversed(abx_channels)):
-                        channel_number = marker_channel_number(
-                            markers, ch)
+                    # update default mcs
+                    self.default_mcsQC = values['-MCS-']
 
-                        # read antibody image
-                        for file_path in glob.glob(
-                          f'{self.inDir}/tif/{default_sample}*.tif'):
-                            img = single_channel_pyramid(
-                                file_path,
-                                channel=channel_number.item() - 1
-                                )
+                    mcs = values['-MCS-']
+                    selected_sample = values['-SAMPLE-']
 
-                        # initialize Napari viewer with first channel
-                        if e == 0:
-                            viewer = napari.view_image(
-                                img, rgb=False,
-                                blending='additive',
-                                colormap='green',
-                                visible=False,
-                                name=ch)
+                    selected_idx, fig = draw_plot(data=data, mcs=mcs)
+
+                elif event == 'Show Lasso':
+
+                    # test if plot has been run
+                    try:
+                        selected_idx
+                    except UnboundLocalError:
+                        print()
+                        print('No cells have been lassoed. ' +
+                              'Enter a single integer-valued ' +
+                              'minimum cluster size, and two ' +
+                              'floats separated by ", " as ' +
+                              'reclassification cutoffs then ' +
+                              'press Plot.')
+                        break
+
+                    # check for valid sample name entry
+                    selected_sample = values['-SAMPLE-']
+                    if selected_sample in self.sampleNames.values():
+
+                        # if plot was run and cells lassoed
+                        if selected_idx is not None:
+                            if len(selected_idx) >= 1:
+
+                                show_lasso(
+                                    data=data,
+                                    selected_idx=selected_idx)
+                            else:
+                                print()
+                                print('No cells have been lassoed. ' +
+                                      'Enter a single ' +
+                                      'integer-valued minimum ' +
+                                      'cluster size, and two ' +
+                                      'floats separated by ", " as ' +
+                                      'reclassification cutoffs ' +
+                                      'then press Plot.')
                         else:
-                            viewer.add_image(
-                                img, rgb=False,
-                                blending='additive',
-                                colormap='green',
-                                visible=False,
-                                name=ch)
+                            print()
+                            print('No cells have been lassoed. ' +
+                                  'Enter a single integer-valued ' +
+                                  'minimum cluster size, and two ' +
+                                  'floats separated by ", " as ' +
+                                  'reclassification cutoffs then ' +
+                                  'press Plot.')
+                    else:
+                        print()
+                        print('Must enter a valid sample name.')
 
-                # color noisy data points by module used to redact them
-                # len(data['cluster'].unique())
-                cmap = categorical_cmap(
-                    numUniqueSamples=len(data['Condition'].unique()),
-                    numCatagories=10,
-                    cmap='tab10',
-                    continuous=False
-                    )
+                elif event == 'Save':
 
-                centroids = data[['Y_centroid', 'X_centroid']][
-                        (data.index.isin(selected_idx))
-                        & (data['Sample'] == default_sample)]
+                    # test whether figure has been generated
+                    try:
+                        fig
+                    except UnboundLocalError:
+                        print()
+                        print(
+                            'Plot must be rendered before saving. ' +
+                            'Enter a single integer-valued ' +
+                            'minimum cluster size and press Plot.')
 
-                viewer.add_points(
-                    centroids, name='lassoed cells', visible=False,
-                    face_color='lime', edge_width=0.0, size=4.0)
+                        break
 
-                # read segmentation outlines, add to Napari
-                for file_path in glob.glob(
-                  f'{self.inDir}/seg/{default_sample}*.ome.tif'):
-                    seg = single_channel_pyramid(
-                        file_path, channel=0)
-                viewer.add_image(
-                    seg, rgb=False,
-                    blending='additive',
-                    colormap='gray',
-                    visible=False,
-                    name='segmentation')
+                    mcs = values['-MCS-']
+                    mcs_entry = mcs.split('-')
 
-                # read last DNA, add to Napari
-                last_dna_cycle = natsorted(
-                    [i for i in data.columns if dna_moniker in i])[-1]
-                channel_number = marker_channel_number(
-                    markers, last_dna_cycle)
-                for file_path in glob.glob(
-                  f'{self.inDir}/tif/{default_sample}*.tif'):
-                    dna_last = single_channel_pyramid(
-                        file_path,
-                        channel=channel_number.item() - 1)
-                    viewer.add_image(
-                        dna_last, rgb=False, blending='additive',
-                        opacity=0.5, colormap='gray', visible=False,
-                        name=f'{last_dna_cycle}: ' +
-                        f'{default_sample}')
+                    try:
+                        int(mcs_entry[0])
+                    except ValueError:
+                        print()
+                        print('Minimum cluster size must be ' +
+                              'a single integer value.')
+                        break
 
-                # read first DNA, add to Napari
-                for file_path in glob.glob(
-                  f'{self.inDir}/tif/{default_sample}*.tif'):
-                    dna_first = single_channel_pyramid(
-                        file_path, channel=0)
-                viewer.add_image(
-                    dna_first, rgb=False, blending='additive',
-                    opacity=0.5, colormap='gray', visible=True,
-                    name=f'{dna1}: ' +
-                    f'{default_sample}')
+                    if len(mcs_entry) == 1:
+                        print()
+                        print(
+                            'Saving current minimum ' +
+                            f'cluster size: {mcs_entry[0]}')
 
-                napari.run()
+                        with open(
+                          os.path.join(
+                           clustering_dir, 'MCS.txt'), 'w') as f:
+                            f.write(str(mcs_entry[0]))
+
+                        print('Saving current figure...')
+                        fig.savefig(
+                            os.path.join(
+                                clustering_dir,
+                                f'{self.embeddingAlgorithm}_'
+                                f'{mcs_entry[0]}.png'),
+                            bbox_inches='tight', dpi=1000)
+
+                        print('Close widget window to continue...')
+
+                    # test if tuple of integers entered
+                    else:
+                        print()
+                        print('Minimum cluster size must be ' +
+                              'a single integer value.')
+                        break
+            window.close()
 
         #######################################################################
         # apply final MCS and return data from clustering module
 
-        f = open(os.path.join(clustering_dir, 'MCS.pkl'), 'rb')
-        min_cluster_size = pickle.load(f)
+        with open(
+          os.path.join(clustering_dir, 'MCS.txt'), 'r') as f:
+            final_mcs_entry = f.readlines()
+            final_mcs_entry = int(final_mcs_entry[0])
 
         clustering = hdbscan.HDBSCAN(
-            min_cluster_size=min_cluster_size,
+            min_cluster_size=final_mcs_entry,
             min_samples=None,
             metric='euclidean', alpha=1.0, p=None,
             algorithm='best', leaf_size=40,
@@ -5627,7 +5291,7 @@ class QC(object):
 
         print()
         print(
-            f'FINAL min_cluster_size = {min_cluster_size}',
+            f'Applying final minimum cluster size = {final_mcs_entry}',
             np.unique(clustering.labels_)
             )
 
@@ -5817,10 +5481,19 @@ class QC(object):
 
         # read the indices of clusters that have already been run
         if os.path.exists(os.path.join(
-          thumbnails_dir, 'completed_clusters.pkl')):
-            f = open(os.path.join(
-                thumbnails_dir, 'completed_clusters.pkl'), 'rb')
-            completed_clusters = pickle.load(f)
+          thumbnails_dir, 'completed_clusters.txt')):
+
+            with open(
+              os.path.join(
+               thumbnails_dir, 'completed_clusters.txt'), 'r') as f:
+                completed_clusters = f.readlines()
+                completed_clusters = (
+                    completed_clusters[0]
+                    .lstrip('[')
+                    .rstrip(']')
+                    .split(', '))
+                completed_clusters = [int(i) for i in completed_clusters]
+
             total_clusters = set(data['cluster'].unique())
             clusters_to_run = natsorted(
                 total_clusters.difference(set(completed_clusters)))
@@ -5833,10 +5506,16 @@ class QC(object):
 
         # read names of samples that have already been run
         if os.path.exists(
-          os.path.join(thumbnails_dir, 'completed_zarrs.pkl')):
-            f = open(os.path.join(
-                thumbnails_dir, 'completed_zarrs.pkl'), 'rb')
-            completed_zarrs = pickle.load(f)
+          os.path.join(thumbnails_dir, 'completed_zarrs.txt')):
+
+            with open(
+              os.path.join(
+               thumbnails_dir, 'completed_zarrs.txt'), 'r') as f:
+                completed_zarrs = f.readlines()
+                completed_zarrs = (
+                    completed_zarrs[0].lstrip("['").rstrip("]'").split("', '"))
+                completed_zarrs = [i for i in completed_zarrs]
+
             total_zarrs = [
                 f'c{i}_{j}' for j in tifs
                 for i in natsorted(data['cluster'].unique())]
@@ -6068,10 +5747,10 @@ class QC(object):
 
                     # update completed_zarrs list
                     completed_zarrs.append(f'c{cluster}_{sample}')
-                    f = open(os.path.join(
-                        thumbnails_dir, 'completed_zarrs.pkl'), 'wb')
-                    pickle.dump(completed_zarrs, f)
-                    f.close()
+                    with open(
+                      os.path.join(
+                       thumbnails_dir, 'completed_zarrs.txt'), 'w') as f:
+                        f.write(str(completed_zarrs))
 
                 else:
                     print(
@@ -6206,13 +5885,12 @@ class QC(object):
 
             completed_clusters.append(cluster)
 
-            f = open(os.path.join(
-                thumbnails_dir, 'completed_clusters.pkl'), 'wb')
-            pickle.dump(completed_clusters, f)
-            f.close()
+            with open(
+              os.path.join(
+               thumbnails_dir, 'completed_clusters.txt'), 'w') as f:
+                f.write(str(completed_clusters))
             print()
 
-        print()
         print()
         return data
 
@@ -6515,6 +6193,5 @@ class QC(object):
                     'No statistics will be computed.')
                 print()
 
-        print()
         print()
         return data

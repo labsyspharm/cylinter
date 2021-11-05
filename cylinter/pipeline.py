@@ -67,16 +67,13 @@ def run_pipeline(config, start_module_name):
 
         delintMode=config.delintMode,
         showAbChannels=config.showAbChannels,
-
+        samplesForROISelection=config.samplesForROISelection,
         yAxisGating=config.yAxisGating,
-        logRatioRnge=config.logRatioRnge,
 
         hexbins=config.hexbins,
         hexbinGridSize=config.hexbinGridSize,
 
         metaQC=config.metaQC,
-        cleanReclassCutoff=config.cleanReclassCutoff,
-        noisyReclassCutoff=config.noisyReclassCutoff,
 
         channelExclusionsPCA=config.channelExclusionsPCA,
         samplesToRemovePCA=config.samplesToRemovePCA,

@@ -3,6 +3,7 @@ import sys
 import subprocess
 import re
 import gc
+import csv
 import glob
 import math
 import yaml
@@ -44,6 +45,21 @@ def log_multiline(log_function, msg):
     """Call log_function once for each line of msg."""
     for line in msg.split("\n"):
         log_function(line)
+
+
+def dict_to_csv(dict, path):
+    file = open(path, 'w')
+    writer = csv.writer(file)
+    for key, value in dict.items():
+        writer.writerow([key, repr(value)])
+    file.close()
+
+
+def csv_to_dict(path):
+    with open(path, 'r') as inp:
+        reader = csv.reader(inp)
+        dict = {rows[0]: rows[1] for rows in reader}
+    return dict
 
 
 def single_channel_pyramid(tiff_path, channel):

@@ -21,9 +21,11 @@ requires = [
     'umap-learn==0.5.1',
     'hurry.filesize==0.9',
     'synapseclient==2.4.0',
+    'PySimpleGUIQt==0.35.0',
+    'pyparsing==2.0.3',  # version compatible with hdbscan and matplotlib
 ]
 
-VERSION = '0.0.32'
+VERSION = '0.0.33'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
