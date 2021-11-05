@@ -24,19 +24,14 @@ class Config:
 
         config.delintMode = bool(data['delintMode'])
         config.showAbChannels = bool(data['showAbChannels'])
+        config.samplesForROISelection = list(data['samplesForROISelection'])
 
         config.yAxisGating = bool(data['yAxisGating'])
-        if (data['logRatioRnge']) is None:
-            config.logRatioRnge = (data['logRatioRnge'])
-        else:
-            config.logRatioRnge = tuple(data['logRatioRnge'])
 
         config.hexbins = bool(data['hexbins'])
         config.hexbinGridSize = int(data['hexbinGridSize'])
 
         config.metaQC = bool(data['metaQC'])
-        config.cleanReclassCutoff = float(data['cleanReclassCutoff'])
-        config.noisyReclassCutoff = float(data['noisyReclassCutoff'])
 
         config.channelExclusionsPCA = list(data['channelExclusionsPCA'])
         config.samplesToRemovePCA = list(data['samplesToRemovePCA'])

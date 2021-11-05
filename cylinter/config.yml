@@ -50,9 +50,6 @@ yAxisGating: False
 # of cells per tissue.
 # If False, apply lower and upper gates on log10(cycle1/cycleN) histogram bins
 
-logRatioRnge: null
-# In development. Set as null for now, has no effect on analysis.
-
 # pruneOutliers----------------------------------------------------------------
 hexbins: False
 # If True, use hexbins to plot single-cell signal intensities.
@@ -70,14 +67,6 @@ metaQC: False
 # redacted by prior QC modules.
 # If False, do not perform data reclassification and compute fraction of data
 # redacted by prior QC modules.
-
-cleanReclassCutoff: 0.75
-# Only applicable when metaQC is True; range: 0.0-1.0
-# All cells in clusters containing >= cleanReclassCutoff clustoff will be classified as "clean"
-
-noisyReclassCutoff: 0.75
-# Only applicable when metaQC is True; range: 0.0-1.0
-# All cells in clusters containing >= noisyReclassCutoff clustoff will be classified as "noisy"
 
 embeddingAlgorithmQC: 'UMAP'
 # Embedding algorithm to use for clustering (options: TSNE or UMAP)
@@ -274,5 +263,5 @@ numThumbnails: 10
 squareWindowDimension: 35
 # Number of pixels from the reference cell centroid in the x and y directions
 
-segOutlines: True
+segOutlines: False
 # If True, overlay cell segmentation outlines on thumbnail images
