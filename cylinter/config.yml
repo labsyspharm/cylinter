@@ -44,6 +44,9 @@ showAbChannels: True
 # True = show all immunomarker channels when Napari is open (may be memory limiting).
 # False = show cycle1 DNA channel only
 
+samplesForROISelection: ["13", "29", "33", "39"]
+# List a sample names (strs) for ROI selection
+
 # cycleCorrelation--------------------------------------------------------
 yAxisGating: False
 # If True, apply a single y-axis gate on counts of log10(cycle1/cycleN) histograms
@@ -61,7 +64,7 @@ hexbinGridSize: 20
 # Only applicable when hexbins parameter is True.
 
 # metaQC (optional)------------------------------------------------------------
-metaQC: False
+metaQC: True
 # If True, perform data reclassification based on clustering results of
 # clean and noisy data and compute fraction of data
 # redacted by prior QC modules.
@@ -238,7 +241,7 @@ repulsionStrength: 5.0
 # --------------------------------------
 
 # setContrast------------------------------------------------------------------
-viewSample: "29"
+viewSample: "39"
 # Sample used to assign image contrast settings that will be applied to all samples in the analysis.
 # Correspondings to first elements of sample_metadata dict values
 
