@@ -13,16 +13,9 @@ hero_ctas:
 # last_modified_date: 2021-03-28
 ---
 
-<html>
-   <head>
-   </head>
-
-   <body>
-      <div style = "position:absolute; left:780px; top:180px; font-size: 10px; z-index: 1000;">
-         Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
-      </div>
-   </body>
-</html>
+<div style = "position:absolute; left:780px; top:180px; font-size: 10px; z-index: 1000;">
+  Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
+</div>
 
 {% include cylinter_gif.html %}
 
