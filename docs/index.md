@@ -1,25 +1,35 @@
 ---
 layout: default
-title: Overview
+title: Home
 nav_order: 1
 description: ""
-permalink: /
-last_modified_date: 2021-05-07
+hero_heading: "Quality Control Software for Multiplex Microscopy."
+hero_body: "CyLinter is used to identify and remove noisy single-cell instances in multiplex images of tissue."
+hero_ctas:
+  - label: "pip install"
+    link: "installation/"
+  - label: "GitHub Repo"
+    link: "https://github.com/labsyspharm/cylinter"
+# last_modified_date: 2021-03-28
 ---
 
-![alt text](https://github.com/labsyspharm/cylinter/blob/master/docs/logo3.png?raw=true)
+<html>
+   <head>
+   </head>
 
-An Interactive Image Segmentation Filter for Multiplex Microscopy.
-{: .fs-6 .fw-300 }
+   <body>
+      <div style = "position:absolute; left:780px; top:180px; font-size: 10px; z-index: 1000;">
+         Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
+      </div>
+   </body>
+</html>
 
-CyLinter is quality control software for identifying and removing cell segmentation instances corrupted by optical and/or image-processing artifacts in multiplex microscopy images. The tool is user-guided and comprises a set of modular and extensible QC modules instantiated in a configurable [Python](https://www.python.org) Class object. Module results are cached to allow for dynamic restarts.
+{% include cylinter_gif.html %}
 
-CyLinter development is led by [Greg Baker](https://github.com/gjbaker) at the [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), Harvard Medical School.
+<br/>
 
-## Funding
+{% include home.md %}
 
-This work is supported by the following:
+<!-- {% include youtube.html id="DY_F-eG9nm4" autoplay=true mute=true controls=false loop=true related=false %} -->
 
-* *NCI grant U2C-CA233262: Pre-cancer Atlases of Cutaneous and Hematologic Origin*
-* *NIH grant U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs*
-* *Ludwig Center at Harvard Medical School and the Ludwig Cancer Research Foundation*
+<br/>

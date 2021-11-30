@@ -3280,17 +3280,19 @@ class QC(object):
 
                                 # make black the first color to specify
                                 # unclustered cells (cluster -1)
-                                cmap = ListedColormap(
-                                    np.insert(
-                                        arr=cmap.colors, obj=0,
-                                        values=[0, 0, 0], axis=0))
+                                if -1 in chunk[color_by].unique():
 
-                                # trim cmap to # unique samples
-                                trim = (
-                                    len(cmap.colors) - len(
-                                        chunk[color_by].unique()))
-                                cmap = ListedColormap(
-                                    cmap.colors[:-trim])
+                                    cmap = ListedColormap(
+                                        np.insert(
+                                            arr=cmap.colors, obj=0,
+                                            values=[0, 0, 0], axis=0))
+
+                                    # trim cmap to # unique samples
+                                    trim = (
+                                        len(cmap.colors) - len(
+                                            chunk[color_by].unique()))
+                                    cmap = ListedColormap(
+                                        cmap.colors[:-trim])
 
                                 sample_dict = dict(
                                     zip(natsorted(
@@ -3794,10 +3796,7 @@ class QC(object):
                             ax_reclass.scatter(
                                 chunk['emb1'], chunk['emb2'], c=c,
                                 cmap=cmap, alpha=1.0, s=point_size,
-                                ec=['k' if i == highlight
-                                    else 'none' for i in
-                                    chunk['Reclass']],
-                                linewidth=0.1)
+                                ec='k', linewidth=0.1)
 
                             ax_reclass.set_title(
                                 'Reclassification', fontsize=10)
@@ -4754,16 +4753,18 @@ class QC(object):
 
                         # make black the first color to specify
                         # unclustered cells (cluster -1)
-                        cmap = ListedColormap(
-                            np.insert(arr=cmap.colors, obj=0,
-                                      values=[0, 0, 0], axis=0))
+                        if -1 in data[color_by].unique():
 
-                        # trim cmap to # unique samples
-                        trim = (
-                            len(cmap.colors) - len(
-                                data[color_by].unique()))
-                        cmap = ListedColormap(
-                            cmap.colors[:-trim])
+                            cmap = ListedColormap(
+                                np.insert(arr=cmap.colors, obj=0,
+                                          values=[0, 0, 0], axis=0))
+
+                            # trim cmap to # unique samples
+                            trim = (
+                                len(cmap.colors) - len(
+                                    data[color_by].unique()))
+                            cmap = ListedColormap(
+                                cmap.colors[:-trim])
 
                         sample_dict = dict(
                             zip(natsorted(data[color_by].unique()),
@@ -5793,7 +5794,10 @@ class QC(object):
             g = sns.FacetGrid(
                 long_table, row='sample', col='example',
                 sharex=False, sharey=False,
-                gridspec_kws={'hspace': 0.1, 'wspace': 0.05})
+                gridspec_kws={'hspace': 0.0, 'wspace': 0.0})
+
+            g.fig.set_figheight(13)
+            g.fig.set_figwidth(25)
 
             g.map(
                 lambda image, **kwargs: (
@@ -5810,7 +5814,7 @@ class QC(object):
             g.set_titles(
                 col_template="Ex. {col_name}",
                 row_template="Smpl. {row_name}",
-                fontweight='bold', size=8)
+                fontweight='bold', size=10)
 
             custom_lines = []
             for k, v in color_dict.items():
