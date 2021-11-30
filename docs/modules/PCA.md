@@ -7,7 +7,7 @@ parent: Modules
 
 9\. `PCA`: This module performs principle component analysis (PCA) on mean immunomarker intensities of cells for each tissue sample in the analysis. The PCA scores plot is saved to `<output_dir/PCA/pcaScoresPlot.pdf>`.
 
-### YAML configurations
+### YAML configurations (`config.yml`)
 
 | Parameter | Default | Description |
 | --- | --- | --- |

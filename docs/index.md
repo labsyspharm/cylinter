@@ -13,7 +13,7 @@ hero_ctas:
 # last_modified_date: 2021-03-28
 ---
 
-<div style = "position:absolute; left:780px; top:180px; font-size: 10px; z-index: 1000;">
+<div style = "position:absolute; left:800px; top:200px; font-size: 10px; z-index: 1000;">
   Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
 </div>
 
