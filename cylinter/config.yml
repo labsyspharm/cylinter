@@ -1,19 +1,19 @@
 # GENERAL PROGRAM CONFIGURATIONS:
 
 inDir: /Users/<user>/Desktop/cylinter_demo
-# Path to CyLinter input directory containing multi-channel image files (TIF or OME-TIFF),
+# Path to CyLinter input directory containing multi-channel image files (TIFF or OME-TIFF),
 # segmentation outlines (OME-TIFF), and corresponding single-cell feature tables (CSV),
 
 outDir: /Users/<user>/Desktop/cylinter_demo/output
 # Path to arbitrary CyLinter output directory (created automatically)
 
 randomSampleSize: 1.0
-# Only analyze a fraction of single-cell data selected at random (range: 0.0-1.0)
+# Analyze a fraction of single-cell data selected at random (range: 0.0-1.0)
 
 sampleMetadata:
   unmicst-13_cellMask: ["13", "Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 1]
   unmicst-29_cellMask: ["29", "Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 2]
-  unmicst-33_cellMask: ["33", "Colon adenocarcinoma", "CA", "CANCER-TRUE", 2]
+  unmicst-33_cellMask: ["33", "Mesothelioma", "MTO", "CANCER-TRUE", 2]
   unmicst-39_cellMask: ["39", "Diverticulitis", "DVL", "CANCER-FALSE", 1]
 # Sample metadata dictionary:
 # Keys are file names; values are ordered lists of strings:
@@ -251,7 +251,7 @@ controlGroups: ["CANCER-FALSE"]
 # binary declarations in the third elements of sample_metadata dict values
 
 denominatorCluster: null
-# Cluster to be used as the denominator when computing cell type frequency ratios
+# Cluster to be used as the denominator when computing cell type frequency ratios.
 # Set to null first, change to cluster integer number to normalize cluster
 # frequencies to a particular cluster.
 

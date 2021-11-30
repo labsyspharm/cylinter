@@ -1,23 +1,21 @@
-# Exemplar data
+# Example data
 
-Multiplex immunofluorescence images of four different human tissue types (2 lung squamous cell carcinomas, 1 colon adenocarcinoma, and 1 diverticulitis) are used as a reference dataset for CyLinter testing and demonstration. The images were extracted from a reference dataset called Exemplar Microscopy Images of Tissues (EMIT TMA22; Synapse ID: [syn22345750](https://www.synapse.org/#!Synapse:syn22345750).
+<img align="right" src="/assets/images/cores.png" width="540" style="padding-left: 30px; padding-bottom: 20px;"> A set of four human tissue samples is provided as demonstration data: 2 lung squamous cell carcinomas, 1 mesothelioma, and 1 diverticulitis sample. These imaging data were collected using the [CyCIF method](https://www.cycif.org/) and are derived from a larger TMA dataset collected at the [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/) and referred to as Exemplar Microscopy Images of Tissues (EMIT) (Synapse ID: [syn22345750](https://www.synapse.org/#!Synapse:syn22345750)). The tissues were imaged at 20X magnification using a 0.75 NA objective and 2x2-pixel binning.
 
-Registration at the Sage Synapse data repository ([https://www.synapse.org/](https://www.synapse.org/)) is free and required for downloading the CyLinter exemplar dataset.
-
-Once registration is complete, download the exemplar data with the following commands:
+Access to the demonstration dataset requires free registration at the Sage Synapse data repository ([https://www.synapse.org/](https://www.synapse.org/)). Once registration is complete, the example dataset can be downloaded with the following commands:
 
 ``` bash
 # Activate the CyLinter virtual environment.
 source ~/cylinter/bin/activate
 
-# Download the demo dataset using the prep command.
+# Mac users can download the demo dataset using the 'prep' command.
 prep cylinter_demo ~/Desktop/cylinter_demo  # Enter Synapse ID and password when prompted.
 
-# The prep command is currently only available for Mac. PC users, please use the following command to download the demo dataset:  
+# PC users, run the following command to download the demo dataset:  
 synapse get -r syn25685780 --downloadLocation C:\Users\<username>\Desktop\cylinter_demo --multiThreaded
 ```
 
-Be sure to populate the `in_dir` and `out_dir` parameters in `~/Desktop/cylinter_demo/config.yml` with user-specific variables; all other metadata in `config.yml` is pre-configured for use with the exemplar dataset.
+Once downloaded, open the [YAML configuration file](/input#yaml-configuration-file) in `~/Desktop/cylinter_demo/config.yml` and update the `in_dir` and `out_dir` parameters with user-specific directory paths; all other parameters are pre-configured for use with the exemplar dataset.
 
 ```yaml
 in_dir: /Users/<user>/Desktop/cylinter_demo
@@ -27,14 +25,12 @@ out_dir: /Users/<user>/Desktop/cylinter_demo/output
 .
 ```
 
-Run CyLinter on the exemplar dataset:
+Pass the configuration file to the `cylinter` command to run Cylinter on the example data:
 
 ``` bash
-# Pass the YAML configuration file for the demonstration to CyLinter for analysis.
-
 # for Mac:
-cylinter --module (optional) ~/Desktop/cylinter_demo/config.yml  
+cylinter --module <module-name> (optional) ~/Desktop/cylinter_demo/config.yml  
 
 # for PC:
-cylinter --module (optional) C:\Users\<username>\Desktop\cylinter_demo\config.yml
+cylinter --module <module-name> (optional) C:\Users\<username>\Desktop\cylinter_demo\config.yml
 ```

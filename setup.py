@@ -24,7 +24,7 @@ requires = [
     'pyparsing==2.0.3',  # version compatible with hdbscan and matplotlib
 ]
 
-VERSION = '0.0.35'
+VERSION = '0.0.36'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
