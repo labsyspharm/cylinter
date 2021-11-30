@@ -7,7 +7,7 @@ parent: Modules
 
 14\. `frequencyStats`: This module computes pairwise statistics for binary declarations specified in the `sampleMetadata` dictionary in [`config.yml`]({{ site.baseurl }}{% link input/index.md %}) (fourth dictionary values). Test results are saved in `<cylinter_output_path>/clustering/final/frequency_stats`. This module is automated and configurable; see `config.yml` for details.
 
-### YAML configurations
+### YAML configurations (`config.yml`)
 
 | Parameter | Default | Description |
 | --- | --- | --- |
