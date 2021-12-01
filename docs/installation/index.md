@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Installation
 nav_order: 2
 has_children: false

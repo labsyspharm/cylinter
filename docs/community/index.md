@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Community
 nav_order: 8
 ---

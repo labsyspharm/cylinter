@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: clustermap
 nav_order: 11
 parent: Modules

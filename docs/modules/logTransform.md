@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: logTransform
 nav_order: 6
 parent: Modules

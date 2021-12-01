@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: cycleCorrelation
 nav_order: 5
 parent: Modules

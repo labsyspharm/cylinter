@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: curateThumbnails
 nav_order: 13
 parent: Modules

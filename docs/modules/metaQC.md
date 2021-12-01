@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: metaQC
 nav_order: 8
 parent: Modules

@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: PCA
 nav_order: 9
 parent: Modules

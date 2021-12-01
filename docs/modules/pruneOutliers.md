@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: pruneOutliers
 nav_order: 7
 parent: Modules

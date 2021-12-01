@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: intensityFilter
 nav_order: 3
 parent: Modules

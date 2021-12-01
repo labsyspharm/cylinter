@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: FAQ
 nav_order: 9
 ---
