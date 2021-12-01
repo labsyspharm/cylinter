@@ -1,3 +1,10 @@
+---
+layout: default
+title: Output
+nav_order: 2
+parent: Workflow
+---
+
 # Output File Structure
 
 

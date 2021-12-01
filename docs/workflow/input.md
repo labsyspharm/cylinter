@@ -1,3 +1,9 @@
+---
+layout: default
+title: Input
+nav_order: 1
+parent: Workflow
+---
 
 {: .no_toc }
 
@@ -60,7 +66,7 @@ CyLinter assumes input files take the standard MCMICRO output format. In the bel
 
 # YAML configuration file
 
-`config.yml` is the YAML configuration file passed to the `cylinter` command when the program is executed. It specifies module-specific parameters and general program configuration settings for a given analysis and should be included in the top-level CyLinter [input directory](#input-directory-structure). The template is pre-configured for use with [Example Data]({{ site.baseurl }}exemplar/index) used to demonstrate CyLinter.
+`config.yml` is the YAML configuration file passed to the `cylinter` command when the program is executed. It specifies module-specific parameters and general program configuration settings for a given analysis and should be included in the top-level CyLinter [input directory](#input-directory-structure). The template is pre-configured for use with [Example Data]({{ site.baseurl }}/exemplar) used to demonstrate CyLinter.
 
 ## General configurations
 
@@ -74,7 +80,7 @@ CyLinter assumes input files take the standard MCMICRO output format. In the bel
 | `markersToExclude` | [ ] (list of strs) | List of immunomarkers (strs) to exclude from the analysis (this does not include nuclear dye channels) |
 
 ## Module configurations
-For module-specific configurations, see [Modules]({{ site.baseurl }}modules/index)
+For module-specific configurations, see [Modules]({{ site.baseurl }}/modules)
 
 
 <br/>
