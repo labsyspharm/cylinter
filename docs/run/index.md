@@ -1,14 +1,14 @@
 ---
 layout: default-cylinter
 title: Running CyLinter
-nav_order: 5
+nav_order: 4
 has_children: false
 ---
 
 # Running CyLinter
 
 ## Step 1:
-Ensure that the desired configurations for a given analysis have been set in the [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file). 
+Ensure that the desired configurations for a given analysis have been set in the [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file).
 
 ## Step 2:
 Activate the dedicated CyLinter virtual environment:  
