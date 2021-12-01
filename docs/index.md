@@ -16,13 +16,13 @@ hero_ctas:
 .main-header {
     padding-top: 0px;
     background: url("{{ site.baseurl }}/assets/gifs/solitary_saunter.gif") center no-repeat;
-        background-position: bottom 580px right 300px;
+        background-position: bottom 587px right 400px;
     background-size: 18%;
     padding-bottom: 0px;
 }
 </style>
 
-<div style = "position:absolute; left:800px; top:200px; font-size: 10px; z-index: 1000;">
+<div style = "position:absolute; left:850px; top:180px; font-size: 10px; z-index: 1000;">
   Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
 </div>
 
