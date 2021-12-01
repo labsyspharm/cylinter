@@ -5,7 +5,7 @@ nav_order: 10
 parent: Modules
 ---
 
-10\. `clustering`: This module performs density-based, hierarchical clustering (HDBSCAN) on tSNE or UMAP embeddings of post-QC data using an approach similar to that described in the [`metaQC`]({{ site.baseurl }}{% link modules/metaQC.md %}). Clicking the "save" button after an optimal `min_cluster_size` has been selected causes the program to append the current cluster IDs to the post-QC dataframe and proceed to the next module.
+10\. `clustering`: This module performs density-based, hierarchical clustering (HDBSCAN) on tSNE or UMAP embeddings of post-QC data using an approach similar to that described in the [`metaQC`]({{ site.baseurl }}modules/metaQC). Clicking the "save" button after an optimal `min_cluster_size` has been selected causes the program to append the current cluster IDs to the post-QC dataframe and proceed to the next module.
 
 ### YAML configurations (`config.yml`)
 
