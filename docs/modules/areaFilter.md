@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: areaFilter
 nav_order: 4
 parent: Modules

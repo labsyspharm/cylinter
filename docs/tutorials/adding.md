@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Adding a module
 nav_order: 3
 parent: Tutorials

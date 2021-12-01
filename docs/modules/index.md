@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Modules
 nav_order: 5
 has_children: true

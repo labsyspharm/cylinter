@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Tutorials
 nav_order: 8
 has_children: true

@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Citing CyLinter
 nav_order: 12
 ---

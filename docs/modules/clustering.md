@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: clustering
 nav_order: 10
 parent: Modules

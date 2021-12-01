@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: selectROIs
 nav_order: 2
 parent: Modules

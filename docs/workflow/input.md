@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Input
 nav_order: 1
 parent: Workflow

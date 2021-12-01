@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: setContrast
 nav_order: 12
 parent: Modules

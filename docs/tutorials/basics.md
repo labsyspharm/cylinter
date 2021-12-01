@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Tissue Imaging Intro
 nav_order: 2
 parent: Tutorials

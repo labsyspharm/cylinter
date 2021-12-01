@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: default-cylinter
 title: Funding
 nav_order: 9
 ---
