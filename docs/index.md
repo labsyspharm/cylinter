@@ -19,7 +19,7 @@ hero_ctas:
 </p>
 </div> -->
 
-<div style = "position:relative; left: 88%; font-size: 10px; z-index: 1000;">
+<div style = "text-align:right; font-size: 10px; z-index: 1000;">
   Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
 </div>
 

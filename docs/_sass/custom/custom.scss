@@ -1,5 +1,9 @@
 .main-branding {
-    height: 175px;
+    height: 185px;
+}
+
+.site-logo::before {
+    content:"";
 }
 
 .site-logo {
@@ -7,6 +11,10 @@
     padding-top: 0px;
     padding-bottom: 0px;
     padding-right: 300px;
+}
+
+.hero {
+  background-size: contain;
 }
 
 .hero-heading {
@@ -21,8 +29,8 @@
 .hero {
     padding-top: 0px;
     padding-bottom: 0px;
-    padding-right: 50px;
-    padding-left: 50px;
+    padding-right: 25px;
+    padding-left: 25px;
 }
 
 .hero-inner {
@@ -44,8 +52,8 @@
 .main-content-wrap {
     padding-top: 0px;
     padding-bottom: 0px;
-    padding-right: 50px;
-    padding-left: 50px;
+    padding-right: 25px;
+    padding-left: 25px;
 }
 
 .btn-large {
