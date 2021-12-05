@@ -7,10 +7,12 @@
 ## QC for Multiplex Microscopy
 Although quality control (QC) methods have long been associated with analysis tools for single-cell genomics and transcriptomics research, analogous tools have lagged in the area of quantitative microscopy. There are now at least 9 different multiplex imaging platforms capable of routine acquisition of 20-40 channel microscopy data<sup>1,2,3,4,5,6,7,8,9</sup> and each is sensitive to microscopy artifacts. Current tools for microscopy-based QC act on pixel-level data<sup>10,11,12,13,14</sup>. CyLinter differs in that it allows users to work with both pixel-level and single-cell data to identify and remove cell segmentation instances corrupted by visual and image-processing artifacts that can significantly alter single-cell data quality.
 
+</div>
+<div markdown="1">
+
 ## About CyLinter
 CyLinter is open-source QC software for multiplex microscopy. The tool is instantiated as a Python Class and consists of multiple QC modules through which single-cell data are passed for serial redaction. Partially-redacted feature tables are cached within and between modules to allow for iterative QC strategies and progress bookmarking. CyLinter is agnostic to data acquisition platform (CyCIF<sup>1</sup>, CODEX<sup>2</sup>, MIBI<sup>3</sup>, mIHC<sup>4</sup>, mxIF<sup>5</sup>, IMC<sup>6</sup>, etc.) and takes standard TIFF/OME-TIFF imaging files and CSV tables as input.
 
-</div>
 <div markdown="1">
 
 1. Lin, J.-R. et al. Highly multiplexed immunofluorescence imaging of human tissues and tumors using t-CyCIF and conventional optical microscopes. Elife 7, (2018).
