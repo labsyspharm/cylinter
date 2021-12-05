@@ -12,17 +12,14 @@ hero_ctas:
     link: "https://github.com/labsyspharm/cylinter"
 # last_modified_date: 2021-03-28
 ---
-<style>
-.main-header {
-    padding-top: 0px;
-    background: url("{{ site.baseurl }}/assets/gifs/solitary_saunter.gif") center no-repeat;
-        background-position: bottom 587px right 400px;
-    background-size: 18%;
-    padding-bottom: 0px;
-}
-</style>
 
-<div style = "position:absolute; left:850px; top:180px; font-size: 10px; z-index: 1000;">
+<!-- <div class="image-container">
+<p class="image-holder">
+<img src="{{ site.baseurl }}/assets/gifs/solitary_saunter.gif" />
+</p>
+</div> -->
+
+<div style = "position:relative; left: 88%; font-size: 10px; z-index: 1000;">
   Tomas Brunsdon via <a href="https://dribbble.com/shots/3281814-Solitary-Saunter/">Dribble</a>
 </div>
 

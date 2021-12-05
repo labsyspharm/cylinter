@@ -1,11 +1,12 @@
 .main-branding {
-    height: 200px;
+    height: 175px;
 }
 
 .site-logo {
     height: 100%;
     padding-top: 0px;
     padding-bottom: 0px;
+    padding-right: 300px;
 }
 
 .hero-heading {
@@ -18,9 +19,10 @@
 }
 
 .hero {
-    padding-top: 425px;
-    padding-right: 32px;
-    padding-left: 32px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    padding-right: 50px;
+    padding-left: 50px;
 }
 
 .hero-inner {
@@ -49,8 +51,4 @@
 .btn-large {
     font-size: 1.0rem;
     text-transform: lowercase;
-}
-
-.basic-grid > div {
-    margin-bottom: 3rem;
 }

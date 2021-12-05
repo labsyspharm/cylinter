@@ -35,7 +35,7 @@ activate
 ```
 
 ## Install CyLinter
-Use the `pip` command line tool to install CyLinter via the [Python Package Index (PyPI)](https://pypi.org/): 
+Use the `pip` command line tool to install CyLinter via the [Python Package Index (PyPI)](https://pypi.org/):
 
 ``` bash
 pip install cylinter  
