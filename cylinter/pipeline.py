@@ -56,7 +56,6 @@ def run_pipeline(config, start_module_name):
     qc = components.QC(
         inDir=config.inDir,
         outDir=config.outDir,
-        randomSampleSize=config.randomSampleSize,
         sampleNames=config.sampleNames,
         sampleConditions=config.sampleConditions,
         sampleConditionAbbrs=config.sampleConditionAbbrs,
@@ -95,6 +94,7 @@ def run_pipeline(config, start_module_name):
         fracForEmbedding=config.fracForEmbedding,
         dimensionEmbeddingQC=config.dimensionEmbeddingQC,
         dimensionEmbedding=config.dimensionEmbedding,
+        colormapChannel=config.colormapChannel,
 
         perplexityQC=config.perplexityQC,
         perplexity=config.perplexity,
@@ -105,7 +105,7 @@ def run_pipeline(config, start_module_name):
         metricQC=config.metricQC,
         metric=config.metric,
         randomStateQC=config.randomStateQC,
-        randomState=config.randomState,
+        randomStateTSNE=config.randomStateTSNE,
 
         nNeighborsQC=config.nNeighborsQC,
         nNeighbors=config.nNeighbors,
@@ -115,6 +115,7 @@ def run_pipeline(config, start_module_name):
         minDist=config.minDist,
         repulsionStrengthQC=config.repulsionStrengthQC,
         repulsionStrength=config.repulsionStrength,
+        randomStateUMAP=config.randomStateUMAP,
 
         controlGroups=config.controlGroups,
         denominatorCluster=config.denominatorCluster,

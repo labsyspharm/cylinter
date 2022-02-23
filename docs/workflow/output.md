@@ -8,7 +8,7 @@ parent: Workflow
 # Output File Structure
 
 
-In the below example, `<sample-name>` corresponds to the names given to the various tissue samples in a given analysis. `<test-name>` refers to the binary declarations specified as the fourth value elements in the `sampleMetadata` dictionary (see [general configurations](input#yaml-configuration-file)). `<chunk>` refers to a slice of the combined single-cell feature table for QC status reclassification, and `<channel>` refers to the various immunomarkers used in the study.
+In the below example, `<sample-name>` corresponds to the names given to tissue samples for a given analysis. `<test-name>` refers to the binary declarations specified as the fourth value elements in the `sampleMetadata` dictionary (see [general configurations](input#yaml-configuration-file)). `<chunk>` refers to a slice of the combined single-cell feature table for QC status reclassification, and `<channel>` refers to the immunomarkers used in the study.
 
 ``` bash
 <output_dir>

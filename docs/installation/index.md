@@ -17,7 +17,7 @@ Check if Python 3 is installed.
 python3 --version
 ```
 
- Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version number less than 3.6.0 is installed, it is recommended to install a version > 3.6.0 using the official installer at [Python.org](https://www.python.org/downloads/mac-osx/).
+ Python 3 is installed if a version number is returned by the above command. If Python 3 is not installed, or a version number less than 3.6.0 is installed, it is recommended to install a version >= 3.6.0 using the official installer at [Python.org](https://www.python.org).
 
 ## Create a Python virtual environment
 

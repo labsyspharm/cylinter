@@ -11,7 +11,7 @@ Although quality control (QC) methods have long been associated with analysis to
 <div markdown="1">
 
 ## About CyLinter
-CyLinter is open-source QC software for multiplex microscopy. The tool is instantiated as a Python Class and consists of multiple QC modules through which single-cell data are passed for serial redaction. Partially-redacted feature tables are cached within and between modules to allow for iterative QC strategies and progress bookmarking. CyLinter is agnostic to data acquisition platform (CyCIF<sup>1</sup>, CODEX<sup>2</sup>, MIBI<sup>3</sup>, mIHC<sup>4</sup>, mxIF<sup>5</sup>, IMC<sup>6</sup>, etc.) and takes standard TIFF/OME-TIFF imaging files and CSV tables as input.
+CyLinter is open-source QC software for multiplex microscopy. The tool is instantiated as a Python Class and consists of multiple QC modules through which single-cell data are passed for serial redaction. Partially-redacted feature tables are cached within and between modules to allow for iterative QC strategies and progress bookmarking. CyLinter is agnostic to data acquisition platform (CyCIF<sup>1</sup>, CODEX<sup>2</sup>, MIBI<sup>3</sup>, mIHC<sup>4</sup>, mxIF<sup>5</sup>, IMC<sup>6</sup>, etc.) and takes standard TIFF/OME-TIFF imaging files and CSV single-cell feature tables as input.
 
 <div markdown="1">
 

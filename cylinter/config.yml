@@ -1,270 +1,287 @@
-# GENERAL PROGRAM CONFIGURATIONS:
+# GENERAL PROGRAM CONFIGURATIONS
 
 inDir: /Users/<user>/Desktop/cylinter_demo
-# Path to CyLinter input directory containing multi-channel image files (TIFF or OME-TIFF),
-# segmentation outlines (OME-TIFF), and corresponding single-cell feature tables (CSV),
+# Path to CyLinter input directory containing multi-channel
+# image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF),
+# and corresponding single-cell feature tables (CSV)
 
 outDir: /Users/<user>/Desktop/cylinter_demo/output
-# Path to arbitrary CyLinter output directory (created automatically)
-
-randomSampleSize: 1.0
-# Analyze a fraction of single-cell data selected at random (range: 0.0-1.0)
+# CyLinter output directory. Path is created if it does not already exist.
 
 sampleMetadata:
-  unmicst-13_cellMask: ["13", "Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 1]
-  unmicst-29_cellMask: ["29", "Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 2]
-  unmicst-33_cellMask: ["33", "Mesothelioma", "MTO", "CANCER-TRUE", 2]
-  unmicst-39_cellMask: ["39", "Diverticulitis", "DVL", "CANCER-FALSE", 1]
-# Sample metadata dictionary:
-# Keys are file names; values are ordered lists of strings:
+  unmicst-1_cellMask: ["1", "Normal kidney cortex", "NKC", "CANCER-FALSE", 1]
+  unmicst-15_cellMask: ["15", "Glioblastoma", "GBM", "CANCER-TRUE", 1]
+  unmicst-18_cellMask: ["18", "Mesothelioma", "MTO", "CANCER-TRUE", 1]
+  unmicst-68_cellMask: ["68", "Tonsil", "TSL", "CANCER-FALSE", 3]
+# Sample metadata dictionary: keys = file names; values = list of strings.
 # First elements: sample names (str)
 # Second elements: descriptive text of experimental condition (str)
-# Third elements: abbreviated version of experimental condition (str)
-# Fourth elements: comma-delimited string of binary declarations across samples
-#                 for computing t statistics between two groups (str dytpe)
-# Fifth elements: integer replicate number for biological/technical replicates
+# Third elements: abbreviation of experimental condition (str)
+# Fourth elements: comma-delimited string of arbitrary binary declarations
+# for computing t-statistics between two groups of samples (str dytpe)
+# Fifth elements: replicate number specifying biological or
+# technical replicates (int)
 
 samplesToExclude: []
-# List of sample names (strs) to exclude from the analysis: first elements of sampleMetadata dict values
+# (list of strs) Sample names to exclude from analysis specified
+# according to the first elements of sampleMetadata configuration.
 
-markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
-                     "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2"]
-# List of immunomarkers (strs) to exclude from the analysis
-# (this does not include nuclear dye channels)
+markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD73", "CD107B",
+                   "MART1", "CD56", "CD13", "CD32", "CDKN1C", "PCNA_1", "pAUR",
+                   "CDKN1B_1", "cPARP", "CDKN1B_2", "CCNB1", "CCNE", "PCNA_2",
+                   "CDK2", "CDKN2A"]
+# (list of strs) Immunomarkers to exclude from analysis
+# (does not include nuclear dyes).
+
 ###############################################################################
-
-# MODULE-SPECIFIC CONFIGURATIONS:
+# MODULE-SPECIFIC CONFIGURATIONS
 
 # selectROIs-------------------------------------------------------------------
-delintMode: False
-# Whether to retain (False) or drop (True) cells in selected ROIs (bool)
-# False = positive ROI selection; True = negative ROI selection
+delintMode: True
+# (bool) Whether to drop (True; negative selection) or
+# retain (False; positive selection) cells selected by ROIs.
 
 showAbChannels: True
-# True = show all immunomarker channels when Napari is open (may be memory limiting).
-# False = show cycle1 DNA channel only
+# (bool) Whether to show all immunomarker channels (True) when Napari
+# is open (may be memory limiting) or show only cycle 1 DNA (False).
 
-samplesForROISelection: ["13", "29", "33", "39"]
-# List a sample names (strs) for ROI selection
+samplesForROISelection: ["1", "15", "18", "68"]
+# (list of strs) Sample names for ROI selection specified
+# according to the first elements of sampleMetadata configuration.
 
-# cycleCorrelation--------------------------------------------------------
+# cycleCorrelation-------------------------------------------------------------
 yAxisGating: False
-# If True, apply a single y-axis gate on counts of log10(cycle1/cycleN) histograms
-# of cells per tissue.
-# If False, apply lower and upper gates on log10(cycle1/cycleN) histogram bins
+# (bool) Whether to apply a single y-axis counts cutoff (True) or lower
+# and upper bins cutoffs of log10(cycle1/cycleN) histograms of cells per tissue.
 
 # pruneOutliers----------------------------------------------------------------
 hexbins: False
-# If True, use hexbins to plot single-cell signal intensities.
-# If False, use scatter plots to plot single-cell signal intensities
-# (allows for higher resolution, but requires longer rendering times).
+# (bool) Whether to use hexbins (True) or scatter plots (False) to plot
+# single-cell signal intensities. Scatter plots allow for higher resolution,
+# but may require longer rendering times.
 
 hexbinGridSize: 20
-# Hexbin grid size (int); higher values increase bin resolution.
-# Only applicable when hexbins parameter is True.
+# (int) Hexbin grid size when hexins=True.
+# Higher values increase bin resolution.
 
 # metaQC (optional)------------------------------------------------------------
 metaQC: True
-# If True, perform data reclassification based on clustering results of
-# clean and noisy data and compute fraction of data
-# redacted by prior QC modules.
-# If False, do not perform data reclassification and compute fraction of data
-# redacted by prior QC modules.
+# (bool) Whether to perform data reclassification based on
+# unsupervised clustering results of combinations of clean and
+# noisy (previously-redacted) data.
 
-embeddingAlgorithmQC: 'UMAP'
-# Embedding algorithm to use for clustering (options: TSNE or UMAP)
+embeddingAlgorithmQC: "UMAP"
+# (str) Embedding algorithm used for clustering (options: "TSNE" or "UMAP").
 
 channelExclusionsClusteringQC: []
-# Immunomarkers to exclude from clustering and all subsequent modules (strs)
+# (list of strs) Immunomarkers to exclude from clustering.
 
 samplesToRemoveClusteringQC: []
-# Samples to exclude from clustering and all subsequent modules (strs)
+# (list of strs) Samples to exclude from clustering.
 
 fracForEmbeddingQC: 1.0
-# Fraction of cells to be embedded (range: 0.0-1.0)
-# limits the amount of data passed to downstream modules
+# (float) Fraction of cells to be embedded (range: 0.0-1.0)
+# Limits the amount of data passed to downstream modules.
 
 dimensionEmbeddingQC: 2
-# Dimension of the embedding (int, typically 2)
+# (int) Dimension of the embedding (fixed to 2 in current version).
 
 metricQC: "euclidean"
-# Distance metric for computing embedding.
+# (str) Distance metric for computing embedding.
 # Choose from valid metrics used by scipy.spatial.distance.pdist:
-# ‘braycurtis’, ‘canberra’, ‘chebyshev’, ‘cityblock’, ‘correlation’, ‘cosine’,
-# ‘dice’, ‘euclidean’, ‘hamming’, ‘jaccard’, ‘jensenshannon’, ‘kulsinski’,
-# ‘mahalanobis’, ‘matching’, ‘minkowski’, ‘rogerstanimoto’, ‘russellrao’,
-# ‘seuclidean’, ‘sokalmichener’, ‘sokalsneath’, ‘sqeuclidean’, ‘yule’.
+# "braycurtis", "canberra", "chebyshev", "cityblock", "correlation", "cosine",
+# "dice", "euclidean", "hamming", "jaccard", "jensenshannon", "kulsinski",
+# "mahalanobis", "matching", "minkowski", "rogerstanimoto", "russellrao",
+# "seuclidean", "sokalmichener", "sokalsneath", "sqeuclidean", "yule".
 
 # --------------------------------------
-# tSNE-specific configurations: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+# tSNE-specific configurations:
+# https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
 perplexityQC: 50.0
-# Related to the number of nearest neighbors used in other
+# (float) Related to the number of nearest neighbors used in other
 # manifold learning algorithms. Larger datasets usually require
 # larger perplexity. Different values can result in significantly
 # different results.
 
 earlyExaggerationQC: 12.0
-# For larger values, the space between natural clusters
-# will be larger in the embedded space (float).
+# (float) For larger values, the space between natural clusters
+# will be larger in the embedded space.
 
 learningRateTSNEQC: 200.0
-# tSNE learning rate (float, typically between 10.0 and 1000.0)
+# (float) tSNE learning rate (typically between 10.0 and 1000.0).
 
 randomStateQC: 5
-# Determines the random number generator for reproducible results
-# across multiple function calls (int).
+# (int) Determines the random number generator for reproducible results
+# across multiple function calls.
 # --------------------------------------
 
-# UMAP-specific configurations: https://umap-learn.readthedocs.io/en/latest/api.html
-nNeighborsQC: 5
-# The size of local neighborhood (in terms of number of
+# UMAP-specific configurations:
+# https://umap-learn.readthedocs.io/en/latest/api.html
+nNeighborsQC: 6
+# (int) The size of local neighborhood (in terms of number of
 # neighboring sample points) used for manifold approximation.
 # Larger values result in more global views of the manifold,
 # while smaller values result in more local data being preserved.
-# In general values should be in the range 2 to 100 (int).
+# In general values should be in the range 2 to 100.
 
 learningRateUMAPQC: 1.0
-# The initial learning rate for the embedding optimization (float).
+# (float) The initial learning rate for the embedding optimization.
 
 minDistQC: 0.1
-# The effective minimum distance between embedded points.
+# (float) The effective minimum distance between embedded points.
 # Smaller values will result in a more clustered/clumped
 # embedding where nearby points on the manifold are drawn
 # closer together, while larger values will result on a more
 # even dispersal of points. The value should be set relative
 # to the spread value, which determines the scale at which
-# embedded points will be spread out (float).
+# embedded points will be spread out.
 
 repulsionStrengthQC: 5.0
-# Weighting applied to negative samples in low dimensional
+# (float) Weighting applied to negative samples in low dimensional
 # embedding optimization. Values higher than one will
-# result in greater weight being given to negative samples (float).
+# result in greater weight being given to negative samples.
 # --------------------------------------
 
 # PCA--------------------------------------------------------------------------
 channelExclusionsPCA: []
-# Immunomarkers to exclude from PCA analysis and all subsequent modules (strs)
+# (strs) Immunomarkers to exclude from PCA analysis.
 
 samplesToRemovePCA: []
-# Samples to exclude from PCA analysis and all subsequent modules (strs)
+# (list of strs) Samples to exclude from PCA analysis.
 
 dimensionPCA: 2
-# Number of PCs to compute (int, typically 2)
+# (int) Number of PCs to compute.
 
 pointSize: 90.0
-# Scatter point size for sample scores plot
+# (float) scatter point size for sample scores plot.
 
 labelPoints: True
-# Annotate scatter points with condition abbreviations specified in the sample_metadata dict
+# (bool) Annotate scatter points with condition abbreviations
+# from sampleMetadata configuration.
 
 distanceCutoff: 0.15
-# Maximum distance between data points in PCA scores plot to be annotated with a common label.
-# Useful for increasing visual clarity of PCA plots containing many data points.
-# Only applicable when labelPoints is True.
+# (float) Maximum distance between data points in PCA scores plot to
+# be annotated with a common label. Useful for increasing visual clarity
+# of PCA plots containing many data points. Applicable when
+# labelPoints is True.
 
 conditionsToSilhouette: []
-# List of abbreviated condition names whose corresponding scores plot points
-# will be greyed out, left unannotated, and sent to the back of the plot (zorder).
-# Useful for increasing visual clarity of PCA plots containing many data points.
+# (list of strs) List of abbreviated condition names whose corresponding
+#scores plot points will be greyed out, left unannotated, and sent to the back
+# of the plot (zorder). Useful for increasing visual clarity of PCA
+# plots containing many data points.
 
 # clustering-------------------------------------------------------------------
-embeddingAlgorithm: 'UMAP'
-# Embedding algorithm to use for clustering (options: TSNE or UMAP)
+embeddingAlgorithm: "UMAP"
+# (str) Embedding algorithm to use for clustering (options: "TSNE" or "UMAP").
 
 channelExclusionsClustering: []
-# Immunomarkers to exclude from clustering and all subsequent modules (strs)
+# (list of strs) Immunomarkers to exclude from clustering.
 
 samplesToRemoveClustering: []
-# Samples to exclude from clustering and all subsequent modules (strs)
+# (list of strs) Samples to exclude from clustering.
 
 normalizeTissueCounts: True
-# Normalize the number of cells per tissue to be clustered by weighting sample sizes
+# (bool) Make the number of cells per tissue for clustering more similar
+# through sample-weighted random sampling.
 
 fracForEmbedding: 1.0
-# Fraction of cells to be embedded (range: 0.0-1.0)
+# (float) Fraction of cells to be embedded (range: 0.0-1.0).
+# Limits amount of data passed to downstream modules.
 
 dimensionEmbedding: 2
-# Dimension of the embedding (int, typically 2)
+# (int) Dimension of the embedding (options: 2 or 3).
+
+colormapChannel: null
+# (None type or str) Channel to colormap to the embedding.
 
 metric: "euclidean"
-# Distance metric for computing embedding.
+# (str) Distance metric for computing embedding.
 # Choose from valid metrics used by scipy.spatial.distance.pdist:
-# ‘braycurtis’, ‘canberra’, ‘chebyshev’, ‘cityblock’, ‘correlation’, ‘cosine’,
-# ‘dice’, ‘euclidean’, ‘hamming’, ‘jaccard’, ‘jensenshannon’, ‘kulsinski’,
-# ‘mahalanobis’, ‘matching’, ‘minkowski’, ‘rogerstanimoto’, ‘russellrao’,
-# ‘seuclidean’, ‘sokalmichener’, ‘sokalsneath’, ‘sqeuclidean’, ‘yule’.
+# "braycurtis", "canberra", "chebyshev", "cityblock", "correlation", "cosine",
+# "dice", "euclidean", "hamming", "jaccard", "jensenshannon", "kulsinski",
+# "mahalanobis", "matching", "minkowski", "rogerstanimoto", "russellrao",
+# "seuclidean", "sokalmichener", "sokalsneath", "sqeuclidean", "yule".
 
 # --------------------------------------
-# tSNE-specific configurations: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+# tSNE-specific configurations:
+# https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
 perplexity: 50.0
-# Related to the number of nearest neighbors used in other
+# (float) Related to the number of nearest neighbors used in other
 # manifold learning algorithms. Larger datasets usually require
 # larger perplexity. Different values can result in significantly
 # different results.
 
 earlyExaggeration: 12.0
-# For larger values, the space between natural clusters
-# will be larger in the embedded space (float).
+# (flaot) For larger values, the space between natural clusters
+# will be larger in the embedded space.
 
 learningRateTSNE: 200.0
-# tSNE learning rate (float, typically between 10.0 and 1000.0)
+# (float) tSNE learning rate (typically between 10.0 and 1000.0).
 
-randomState: 5
-# Determines the random number generator for reproducible results
-# across multiple function calls (int).
+randomStateTSNE: 5
+# (int) Determines the random number generator for reproducible results
+# across multiple function calls.
 # --------------------------------------
 
-# UMAP-specific configurations: https://umap-learn.readthedocs.io/en/latest/api.html
-nNeighbors: 5
-# The size of local neighborhood (in terms of number of
+# UMAP-specific configurations:
+# https://umap-learn.readthedocs.io/en/latest/api.html
+nNeighbors: 6
+# (int) The size of local neighborhood (in terms of number of
 # neighboring sample points) used for manifold approximation.
 # Larger values result in more global views of the manifold,
 # while smaller values result in more local data being preserved.
-# In general values should be in the range 2 to 100 (int).
+# In general values should be in the range 2 to 100.
 
 learningRateUMAP: 1.0
-# The initial learning rate for the embedding optimization (float).
+# (float) The initial learning rate for the embedding optimization.
 
 minDist: 0.1
-# The effective minimum distance between embedded points.
+# (float) The effective minimum distance between embedded points.
 # Smaller values will result in a more clustered/clumped
 # embedding where nearby points on the manifold are drawn
 # closer together, while larger values will result on a more
 # even dispersal of points. The value should be set relative
 # to the spread value, which determines the scale at which
-# embedded points will be spread out (float).
+# embedded points will be spread out.
 
 repulsionStrength: 5.0
-# Weighting applied to negative samples in low dimensional
+# (float) Weighting applied to negative samples in low dimensional
 # embedding optimization. Values higher than one will
-# result in greater weight being given to negative samples (float).
+# result in greater weight being given to negative samples.
+
+randomStateUMAP: 5
+# (int) Determines the random number generator for reproducible results
+# across multiple function calls.
 # --------------------------------------
 
 # setContrast------------------------------------------------------------------
-viewSample: "39"
-# Sample used to assign image contrast settings that will be applied to all samples in the analysis.
-# Correspondings to first elements of sample_metadata dict values
+viewSample: "1"
+# (str) Sample used to assign image contrast settings that will be
+# applied to all samples in the analysis. Corresponds to first elements
+# of sample_metadata dict values.
 
 # frequencyStats---------------------------------------------------------------
 controlGroups: ["CANCER-FALSE"]
-# List of strings corresponding to the control groups for each of the
-# binary declarations in the third elements of sample_metadata dict values
+# (list of strs) Corresponds to control groups for each binary declaration
+# specified as the third elements of sampleMetadata values.
 
 denominatorCluster: null
-# Cluster to be used as the denominator when computing cell type frequency ratios.
-# Set to null first, change to cluster integer number to normalize cluster
-# frequencies to a particular cluster.
+# (None type) Cluster to be used as the denominator when computing cluster
+# frequency ratios. Set to null first, change to cluster integer number
+# to normalize cluster frequencies to a particular cluster if desired.
 
 FDRCorrection: False
-# If True, compute p-vals and false discovery rate (FDR) q-vals.
-# If False, compute uncorrected p-vals only.
+# (bool) Whether to compute p-vals and false discovery rate (FDR)-corrected
+# q-vals (True) or compute uncorrected p-vals only (False).
 
 # curateThumbnails-------------------------------------------------------------
 numThumbnails: 10
-# Number of examples per cluster to be curated
+# (int) Number of examples per cluster to be curated.
 
 squareWindowDimension: 35
-# Number of pixels from the reference cell centroid in the x and y directions
+# (int) Number of pixels from the centroid of the reference
+# cell in x and y dimensions.
 
 segOutlines: False
-# If True, overlay cell segmentation outlines on thumbnail images
+# (bool) Whether to overlay cell segmentation outlines on thumbnail images.
