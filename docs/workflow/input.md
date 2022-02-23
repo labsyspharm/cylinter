@@ -17,7 +17,7 @@ parent: Workflow
 </details>
 
 # Transferring and organizing input
-CyLinter supports analysis of **whole slide image (WSI)** and **tissue microarray (TMA)** data processed by the [MCMICRO](https://mcmicro.org) image-processing pipeline. The program comes with a secondary command called `prep` which programmatically transfers and organizes standard MCMICRO output as CyLinter input (currently only available for Mac users). However, CyLinter can analyze any multiplex imaging data so long as they are in the correct format: TIFF/OME-TIFF images, OME-TIFF cell segmentation outlines, and CSV single-cell feature tables.
+CyLinter supports analysis of **whole slide image (WSI)** and **tissue microarray (TMA)** data processed by the [MCMICRO](https://mcmicro.org) image-processing pipeline. The program comes with a helper command called `prep` that programmatically transfers and organizes standard MCMICRO output as CyLinter input (currently only available for Mac). However, CyLinter can analyze any multiplex imaging data so long as they conform to the correct file formats: TIFF/OME-TIFF images, TIFF/OME-TIFF cell segmentation outlines, and CSV single-cell feature tables with a cell segmentation area column labeled "Area".
 
 <br/>
 
@@ -34,7 +34,7 @@ Use the **"-t"** flag to organize **TMA DATA** as CyLinter input:
 prep -t <mcmicro_output_dir> <cylinter_input_dir>
 ```
 
- * *PC and linux users should organize CyLinter input data according to the below [input directory structure](#input-directory-structure).*
+ * PC and linux users should organize CyLinter input data according to the standard [input directory structure](#input-directory-structure).
 
 <br/>
 
@@ -66,18 +66,17 @@ CyLinter assumes input files take the standard MCMICRO output format. In the bel
 
 # YAML configuration file
 
-`config.yml` is the YAML configuration file passed to the `cylinter` command when the program is executed. It specifies module-specific parameters and general program configuration settings for a given analysis and should be included in the top-level CyLinter [input directory](#input-directory-structure). The template is pre-configured for use with [Example Data]({{ site.baseurl }}/exemplar) used to demonstrate CyLinter.
+`config.yml` is the YAML configuration file passed to the `cylinter` command when the program is executed. It specifies general program configuration settings and module-specific parameters for a given analysis and should be included in the top-level CyLinter [input directory](#input-directory-structure). The `config.yml` file downloaded with the program is pre-configured for use with [Example Data]({{ site.baseurl }}/exemplar) used to demonstrate CyLinter.
 
 ## General configurations
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `inDir` | /Users/user/Desktop/cylinter_demo | Path to CyLinter input directory containing multi-channel image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF), and corresponding single-cell feature tables (CSV) |
-| `outDir` | /Users/user/Desktop/cylinter_demo/output | Path to arbitrary CyLinter output directory (created automatically) |
-| `randomSampleSize` | 1.0 (float) | Analyze a fraction of single-cell data selected at random (range: 0.0-1.0) |
-| `sampleMetadata` | unmicst\<sample-name>\_cellMask: <br />  ["13", "Lung squamous cell carcinoma", "LSC", "CANCER-TRUE", 1] (dict) | Sample metadata dictionary: keys are file names; values are ordered lists of strings. First element: sample names (str), second element: descriptive text of experimental condition (str), third element: abbreviated version of experimental condition (str), fourth element: comma-delimited string of binary declarations across samples for computing t statistics between two groups (str dytpe), fifth element: integer replicate number for biological/technical replicates |
-| `samplesToExclude` | [ ] (list of strs) | List of sample names (strs) to exclude from the analysis: first elements of sampleMetadata dict values |
-| `markersToExclude` | [ ] (list of strs) | List of immunomarkers (strs) to exclude from the analysis (this does not include nuclear dye channels) |
+| `inDir` | /Users/user/Desktop/cylinter_demo | CyLinter input directory. Contains multi-channel image files (OME-TIFF or TIFF), segmentation outlines (OME-TIFF or TIFF), corresponding single-cell feature tables (CSV), `config.yml`, and `markers.csv` organized according to [input directory structure.](#input-directory-structure) |
+| `outDir` | /Users/user/Desktop/cylinter_demo/output |CyLinter output directory. Path is created if it does not already exist. |
+| `sampleMetadata` | unmicst-\<sample-name>\_cellMask: <br />  ["15", "Glioblastoma", "GBM", "CANCER-TRUE", 1] | Sample metadata dictionary: keys = file names; values = list of strings. First elements: sample names (str). Second elements: descriptive text of experimental condition (str). Third elements: abbreviation of experimental condition (str). Fourth elements: comma-delimited string of arbitrary binary declarations for computing t-statistics between two groups of samples (str dytpe). Fifth elements: replicate number specifying biological or technical replicates (int). |
+| `samplesToExclude` | [ ] | (list of strs) Sample names to exclude from analysis specified according to the first elements of sampleMetadata configuration. |
+| `markersToExclude` | [ ] | (list of strs) Immunomarkers to exclude from analysis (does not include nuclear dyes). |
 
 ## Module configurations
 For module-specific configurations, see [Modules]({{ site.baseurl }}/modules)

@@ -14,7 +14,6 @@ class Config:
             data = yaml.safe_load(f)
         config.inDir = pathlib.Path(data['inDir']).resolve()
         config.outDir = pathlib.Path(data['outDir']).resolve()
-        config.randomSampleSize = float(data['randomSampleSize'])
         config._parse_sample_metadata(data['sampleMetadata'])
         config.samplesToExclude = (data['samplesToExclude'])
         config.markersToExclude = (data['markersToExclude'])
@@ -60,6 +59,10 @@ class Config:
         config.fracForEmbedding = float(data['fracForEmbedding'])
         config.dimensionEmbeddingQC = int(data['dimensionEmbeddingQC'])
         config.dimensionEmbedding = int(data['dimensionEmbedding'])
+        if (data['colormapChannel']) is None:
+            config.colormapChannel = (data['colormapChannel'])
+        else:
+            config.colormapChannel = str(data['colormapChannel'])
 
         config.perplexityQC = float(data['perplexityQC'])
         config.perplexity = float(data['perplexity'])
@@ -70,7 +73,7 @@ class Config:
         config.metricQC = str(data['metricQC'])
         config.metric = str(data['metric'])
         config.randomStateQC = int(data['randomStateQC'])
-        config.randomState = int(data['randomState'])
+        config.randomStateTSNE = int(data['randomStateTSNE'])
 
         config.nNeighborsQC = int(data['nNeighborsQC'])
         config.nNeighbors = int(data['nNeighbors'])
@@ -80,6 +83,7 @@ class Config:
         config.minDist = float(data['minDist'])
         config.repulsionStrengthQC = float(data['repulsionStrengthQC'])
         config.repulsionStrength = float(data['repulsionStrength'])
+        config.randomStateUMAP = int(data['randomStateUMAP'])
 
         config.controlGroups = list(data['controlGroups'])
         if (data['denominatorCluster']) is None:

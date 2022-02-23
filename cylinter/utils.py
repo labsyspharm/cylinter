@@ -183,18 +183,23 @@ def save_dataframe(df, outDir, moduleName):
         )
 
 
-def read_markers(markers_filepath, markers_to_exclude):
+def read_markers(markers_filepath, markers_to_exclude, data):
 
     markers = pd.read_csv(
         markers_filepath,
         dtype={0: 'int16', 1: 'int16', 2: 'str'},
         comment='#'
         )
-
-    markers_to_include = [
-        i for i in markers['marker_name']
-        if i not in markers_to_exclude
-        ]
+    if data is None:
+        markers_to_include = [
+            i for i in markers['marker_name']
+            if i not in markers_to_exclude
+            ]
+    else:
+        markers_to_include = [
+            i for i in markers['marker_name']
+            if i not in markers_to_exclude if i in data.columns
+            ]
     markers = markers[markers['marker_name'].isin(markers_to_include)]
 
     dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
@@ -268,13 +273,16 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
     return cmap
 
 
-def cluster_expression(df, markers, cluster, num_proteins, standardize='within'):
+def cluster_expression(df, markers, cluster, num_proteins, clus_dim, standardize='within'):
 
     if cluster != -1:
 
-        df = df[df['cluster'] != -1]
+        df = df[df[f'cluster_{clus_dim}d'] != -1]
 
-        cluster_means = df[markers + ['cluster']].groupby('cluster').mean()
+        cluster_means = (
+            df[markers + [f'cluster_{clus_dim}d']]
+            .groupby(f'cluster_{clus_dim}d').mean()
+            )
 
         if standardize == 'across':
 

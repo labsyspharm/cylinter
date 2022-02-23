@@ -24,10 +24,14 @@ CyLinter development is led by [Greg Baker](https://scholar.harvard.edu/gregoryj
 # Early adopters
 * [Clarence Yapp](https://scholar.harvard.edu/clarence/who-clarence)
 * [Kenichi Shimada](https://scholar.harvard.edu/kenichi_shimada)
-* [Roxy Pelletier](https://github.com/rjp21)
+* [Roxy Pelletier](https://www.linkedin.com/in/roxanne-pelletier)
 * [Tuulia Vallius](https://scholar.harvard.edu/vallius/home)
 * [Connor Jacobson](https://scholar.harvard.edu/connorjacobson/home)
 * [Ajit Johnson](https://scholar.harvard.edu/ajitjohnson/home)
+* [Shishir Pant](https://fi.linkedin.com/in/shishir-pant)
+* [Jackson Appelt](https://www.linkedin.com/in/jackson-appelt-311405142)
+* [Ana Verma](https://www.linkedin.com/in/anaverma)
+* [Sheheryar Kabraji](https://www.dana-farber.org/find-a-doctor/sheheryar-k-kabraji/)
 
 # Suggest a module
 

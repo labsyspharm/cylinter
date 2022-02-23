@@ -7,9 +7,9 @@ requires = [
     'numba==0.53.1',
     'PyYAML==5.4',
     'pyarrow==5.0.0',
-    'pandas==1.1.5',
+    'pandas>=1.1.5',
     'hdbscan==0.8.26',
-    'joblib==0.17.0',  # newly-released joblib==1.0.0 results in issues with parallel processing with larger datasets
+    'joblib==0.17.0',  # joblib==1.0.0 parallel processing fails on larger datasets
     'matplotlib==3.3.3',
     'seaborn==0.11.1',
     'scikit-learn==0.24.2',
@@ -22,9 +22,10 @@ requires = [
     'hurry.filesize==0.9',
     'synapseclient==2.4.0',
     'pyparsing==2.0.3',  # version compatible with hdbscan and matplotlib
+    'PyOpenGL-accelerate',  # suppresses "No OpenGL_accelerate..." message
 ]
 
-VERSION = '0.0.36'
+VERSION = '0.0.37'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'

@@ -1,6 +1,7 @@
 import logging
 import functools
 
+import sys
 import os
 import re
 import glob
@@ -36,6 +37,7 @@ from matplotlib.colors import ListedColormap
 from matplotlib.path import Path
 import matplotlib.patheffects as path_effects
 from matplotlib.patches import Ellipse
+from matplotlib import animation
 
 import napari
 from tifffile import imread
@@ -113,7 +115,6 @@ class QC(object):
                  # config.yaml —
                  inDir=None,
                  outDir=None,
-                 randomSampleSize=None,
                  startModule=None,
                  sampleNames=None,
                  sampleConditions=None,
@@ -173,15 +174,17 @@ class QC(object):
                  normalizeTissueCounts=None,
                  fracForEmbedding=None,
                  dimensionEmbedding=None,
+                 colormapChannel=None,
                  perplexity=None,
                  earlyExaggeration=None,
                  learningRateTSNE=None,
                  metric=None,
-                 randomState=None,
+                 randomStateTSNE=None,
                  nNeighbors=None,
                  learningRateUMAP=None,
                  minDist=None,
                  repulsionStrength=None,
+                 randomStateUMAP=None,
 
                  # frequencyStats —
                  controlGroups=None,
@@ -198,7 +201,6 @@ class QC(object):
 
         self.inDir = inDir
         self.outDir = outDir
-        self.randomSampleSize = randomSampleSize
         self.startModule = startModule
         self.sampleNames = sampleNames
         self.sampleConditions = sampleConditions
@@ -251,15 +253,17 @@ class QC(object):
         self.normalizeTissueCounts = normalizeTissueCounts
         self.fracForEmbedding = fracForEmbedding
         self.dimensionEmbedding = dimensionEmbedding
+        self.colormapChannel = colormapChannel
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
         self.learningRateTSNE = learningRateTSNE
         self.metric = metric
-        self.randomState = randomState
+        self.randomStateTSNE = randomStateTSNE
         self.nNeighbors = nNeighbors
         self.learningRateUMAP = learningRateUMAP
         self.minDist = minDist
         self.repulsionStrength = repulsionStrength
+        self.randomStateUMAP = randomStateUMAP
 
         self.controlGroups = controlGroups
         self.denominatorCluster = denominatorCluster
@@ -278,6 +282,7 @@ class QC(object):
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
             markers_to_exclude=self.markersToExclude,
+            data=None
             )
 
         df_list = []
@@ -288,17 +293,6 @@ class QC(object):
 
                 file_name = file.split('.csv')[0]
 
-                # REMOVE: FOR UPDATING CSV FILE NAMES FOR COMPATIBILITY #####
-                # csv = pd.read_csv(
-                #     os.path.join(f'{self.inDir}/csv', file)
-                #     )
-                # keys = [i for i in csv.columns]
-                # vals = [i.split('_cellMask')[0] for i in csv.columns]
-                # mydict = dict(zip(keys, vals))
-                # csv.rename(columns=mydict, inplace=True)
-                # csv.to_csv(os.path.join(f'{self.inDir}/csv2', file))
-
-                #################################################
                 # disregard samples specified in
                 # "samplesToExclude" config parameter
                 sample_name = self.sampleNames[file_name]
@@ -365,7 +359,7 @@ class QC(object):
                          'MajorAxisLength', 'MinorAxisLength',
                          'Eccentricity', 'Solidity', 'Extent',
                          'Orientation'] +
-                        [i for i in markers['marker_name']]
+                        [i for i in markers['marker_name'] if i in csv.columns]
                          )
 
                     csv = csv[cols]
@@ -377,7 +371,7 @@ class QC(object):
                          'MajorAxisLength', 'MinorAxisLength',
                          'Eccentricity', 'Solidity', 'Extent',
                          'Orientation'] +
-                        [i for i in markers['marker_name']]
+                        [i for i in markers['marker_name'] if i in csv.columns]
                          )
 
                     # add sample column
@@ -409,7 +403,7 @@ class QC(object):
             ['CellID', 'Sample', 'Condition', 'Replicate', 'X_centroid',
              'Y_centroid', 'Area', 'MajorAxisLength', 'MinorAxisLength',
              'Eccentricity', 'Solidity', 'Extent', 'Orientation'] +
-            [i for i in markers['marker_name']]
+            [i for i in markers['marker_name'] if i in data.columns]
              )
         data = data[cols]
 
@@ -425,6 +419,7 @@ class QC(object):
             pass
         else:
             markers_to_drop = list(before.difference(after))
+            print()
             print(
                 f'Features {markers_to_drop} were not probed in all' +
                 ' samples and will be dropped from the analysis.'
@@ -432,7 +427,7 @@ class QC(object):
         data = data[channels_set].copy()
 
         # perform data subsetting
-        data = data.sample(frac=self.randomSampleSize, random_state=1)
+        data = data.sample(frac=1.0, random_state=1)
         data.sort_values(by=['Sample', 'CellID'], inplace=True)
 
         # assign global index
@@ -445,10 +440,12 @@ class QC(object):
     @module
     def selectROIs(data, self, args):
 
+        print()
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
             markers_to_exclude=self.markersToExclude,
+            data=data
             )
 
         # create ROIs directory if it doesn't already exist
@@ -469,6 +466,8 @@ class QC(object):
         # loop over samples
         for sample_name in self.samplesForROISelection:
 
+            print(f'Working on sample {sample_name}')
+
             try:
                 # make a list of exisiting polygon vertices
                 polygon_dict[sample_name]
@@ -488,7 +487,8 @@ class QC(object):
 
                     # read antibody image
                     for file_path in glob.glob(
-                      f'{self.inDir}/tif/{sample_name}*.tif'):
+                      f'{self.inDir}/tif/{sample_name}.*tif'):
+
                         img = single_channel_pyramid(
                             file_path, channel=channel_number.item() - 1)
 
@@ -507,18 +507,18 @@ class QC(object):
                             )
 
             # read segmentation outlines
-            file_path = f'{self.inDir}/seg/{sample_name}.ome.tif'
+            file_path = f'{self.inDir}/seg/{sample_name}.*tif'
             seg = single_channel_pyramid(
                 glob.glob(file_path)[0], channel=0)
 
             viewer.add_image(
                 seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='red', visible=False,
+                opacity=0.5, colormap='gray', visible=False,
                 name='segmentation')
 
             # read DNA1 channel
             for file_path in glob.glob(
-              f'{self.inDir}/tif/{sample_name}*.tif'):
+              f'{self.inDir}/tif/{sample_name}.*tif'):
                 dna = single_channel_pyramid(file_path, channel=0)
 
             viewer.add_image(
@@ -600,7 +600,7 @@ class QC(object):
                         )
 
                     for file_path in glob.glob(
-                      f'{self.inDir}/tif/{sample_name}*.tif'):
+                      f'{self.inDir}/tif/{sample_name}.*tif'):
                         dna = imread(file_path, key=0)
 
                     columns, rows = np.meshgrid(
@@ -683,8 +683,8 @@ class QC(object):
         dict_to_csv(
             dict=idxs_to_drop,
             path=os.path.join(roi_dir, 'idxs_to_drop.csv'))
-        print()
 
+        print()
         # drop cells from samples
         for sample_name, cell_ids in idxs_to_drop.items():
             if cell_ids:
@@ -707,7 +707,7 @@ class QC(object):
             print(f'Plotting ROI selections for sample: {sample_name}')
 
             for file_path in glob.glob(
-              f'{self.inDir}/tif/{sample_name}*.tif'):
+              f'{self.inDir}/tif/{sample_name}.*tif'):
                 dna = imread(file_path, key=0)
 
             fig, ax = plt.subplots()
@@ -740,7 +740,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # create intensity directory if it doesn't already exist
         intensity_dir = os.path.join(self.outDir, 'intensity')
@@ -748,7 +750,7 @@ class QC(object):
             os.makedirs(intensity_dir)
 
         # set histogram bin size
-        num_bins = 175
+        num_bins = 125
 
         # set histogram type
         histtype = 'stepfilled'
@@ -817,7 +819,7 @@ class QC(object):
 
             # read DNA1 channel
             for file_path in glob.glob(
-              f'{self.inDir}/tif/{name}*.tif'):
+              f'{self.inDir}/tif/{name}.*tif'):
                 # create image pyramid
                 dna = single_channel_pyramid(file_path, channel=0)
 
@@ -826,7 +828,7 @@ class QC(object):
                 dna, rgb=False, name=f'{dna1}: {name}')
 
             # read segmentation outlines
-            file_path = f'{self.inDir}/seg/{name}*.ome.tif'
+            file_path = f'{self.inDir}/seg/{name}.*tif'
 
             # create image pyramid
             seg = single_channel_pyramid(
@@ -835,7 +837,7 @@ class QC(object):
             # add segmentation image to viewer
             viewer.add_image(
                 seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='red', visible=False,
+                opacity=0.5, colormap='gray', visible=False,
                 name='segmentation')
 
             # generate Qt widget to dock in Napari viewer
@@ -1073,7 +1075,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # create area directory if it doesn't already exist
         area_dir = os.path.join(self.outDir, 'area')
@@ -1081,7 +1085,7 @@ class QC(object):
             os.makedirs(area_dir)
 
         # set histogram bin size
-        num_bins = 125
+        num_bins = 90
 
         # set histogram type
         histtype = 'stepfilled'
@@ -1151,7 +1155,7 @@ class QC(object):
 
             # read DNA1 channel
             for file_path in glob.glob(
-              f'{self.inDir}/tif/{name}*.tif'):
+              f'{self.inDir}/tif/{name}.*tif'):
 
                 # create image pyramid
                 dna = single_channel_pyramid(file_path, channel=0)
@@ -1161,7 +1165,7 @@ class QC(object):
                 dna, rgb=False, name=f'{dna1}: {name}')
 
             # read segmentation outlines
-            file_path = f'{self.inDir}/seg/{name}*.ome.tif'
+            file_path = f'{self.inDir}/seg/{name}.*tif'
 
             # create image pyramid
             seg = single_channel_pyramid(
@@ -1170,7 +1174,7 @@ class QC(object):
             # add segmentation outlines image to viewer
             viewer.add_image(
                 seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='red', visible=False,
+                opacity=0.5, colormap='gray', visible=False,
                 name='segmentation')
 
             # generate Qt widget to dock in Napari viewer
@@ -1405,7 +1409,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # create cycles directory if it doesn't already exist
         cycles_dir = os.path.join(self.outDir, 'cycles')
@@ -1794,7 +1800,7 @@ class QC(object):
                 #     cycles_dir, 'cycle_correlation(logRatio).pdf')
                 # open_file(filename)
 
-                for name, group in ratios_melt.groupby(['sample']):
+                for name, group in natsorted(ratios_melt.groupby(['sample'])):
 
                     print()
                     print(f'Sample: {name}')
@@ -1823,7 +1829,7 @@ class QC(object):
 
                     # read last DNA channel
                     for file_path in glob.glob(
-                      f'{self.inDir}/tif/{name}*.tif'):
+                      f'{self.inDir}/tif/{name}.*tif'):
                         dna_last = single_channel_pyramid(
                             file_path, channel=channel_number.item() - 1)
 
@@ -1836,7 +1842,7 @@ class QC(object):
 
                     # read first DNA channel
                     for file_path in glob.glob(
-                      f'{self.inDir}/tif/{name}*.tif'):
+                      f'{self.inDir}/tif/{name}.*tif'):
 
                         # create image pyramid
                         dna_first = single_channel_pyramid(
@@ -1849,7 +1855,7 @@ class QC(object):
                         name=f'{dna1}')
 
                     # read segmentation outlines
-                    file_path = f'{self.inDir}/seg/{name}*.ome.tif'
+                    file_path = f'{self.inDir}/seg/{name}.*tif'
 
                     # create image pyramid
                     seg = single_channel_pyramid(
@@ -1858,7 +1864,7 @@ class QC(object):
                     # add segmentation outlines image to viewer
                     viewer.add_image(
                         seg, rgb=False, blending='additive',
-                        opacity=0.5, colormap='red', visible=False,
+                        opacity=0.5, colormap='gray', visible=False,
                         name='segmentation')
 
                     # generate Qt widget to dock in Napari viewer
@@ -1875,7 +1881,7 @@ class QC(object):
                     layout.addWidget(NavigationToolbar(canvas, widget))
                     layout.addWidget(canvas)
 
-                    num_bins = 175
+                    num_bins = 125
                     histtype = 'stepfilled'
 
                     # set plot style
@@ -1993,7 +1999,7 @@ class QC(object):
                                 properties=None,
                                 face_color='yellow',
                                 edge_color='k',
-                                edge_width=0.0, size=4.0)
+                                edge_width=0.0, size=7.0)
 
                     # add button functionality
                     button.on_clicked(apply_cutoffs)
@@ -2146,7 +2152,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         abx_channels_mod = data[abx_channels].copy()
         abx_channels_mod += 0.00000000001
@@ -2166,6 +2174,7 @@ class QC(object):
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
             markers_to_exclude=self.markersToExclude,
+            data=data
             )
 
         # create pruning directory if it doesn't already exist
@@ -2231,7 +2240,7 @@ class QC(object):
         for ab in markers_to_prune:
 
             print()
-            print(f'Working on sample: {ab}')
+            print(f'Working on channel: {ab}')
 
             # initialize Napari window without an image
             # before first cutoffs are applied
@@ -2263,10 +2272,6 @@ class QC(object):
                 hist_facet, col='for_plot', col_wrap=4,
                 height=1, aspect=1.0, sharex=True, sharey=False)
 
-            # suppresses matplotlib tight_layout warning
-            g_raw.fig.set_figheight(2)
-            g_raw.fig.set_figwidth(7)
-
             # use hexbins for plotting
             if self.hexbins:
                 g_raw.map(
@@ -2277,14 +2282,16 @@ class QC(object):
             # use scatter plots for plotting
             else:
                 g_raw.map(
-                    plt.scatter, 'signal', 'Area', s=1.0,
+                    plt.scatter, 'signal', 'Area', s=0.05,
                     linewidths=0.0, color='k')
+
+                # suppresses matplotlib tight_layout warning
+                g_raw.fig.set_figheight(2.5)
+                g_raw.fig.set_figwidth(7)
 
             g_raw.set_titles(
                 col_template="{col_name}", fontweight='bold',
                 size=5.0, pad=4.0)
-
-            g_raw.fig.suptitle(ab, x=0.05, y=0.98, size=9.0)
 
             for ax in g_raw.axes.flatten():
                 ax.tick_params(
@@ -2316,8 +2323,8 @@ class QC(object):
             raw_layout.addWidget(raw_canvas)
 
             plt.subplots_adjust(
-                left=0.08, bottom=0.30, right=0.99,
-                top=0.70, hspace=0.4, wspace=0.4)
+                left=0.03, bottom=0.13, right=0.99,
+                top=0.92, hspace=0.8, wspace=0.3)
 
             plt.savefig(
                 os.path.join(pruning_dir, f'{ab}_raw.png'), dpi=300,
@@ -2426,10 +2433,6 @@ class QC(object):
                     hist_facet, col='for_plot', col_wrap=4,
                     height=1.0, aspect=1.0, sharex=True, sharey=False)
 
-                # suppresses matplotlib tight_layout warning
-                g_pruned.fig.set_figheight(2)
-                g_pruned.fig.set_figwidth(7)
-
                 # use hexbins for plotting
                 if self.hexbins:
                     g_pruned.map(
@@ -2440,14 +2443,16 @@ class QC(object):
                 # use scatter plots for plotting
                 else:
                     g_pruned.map(
-                        plt.scatter, 'signal', 'Area', s=1.0,
+                        plt.scatter, 'signal', 'Area', s=0.05,
                         linewidths=0.0, color='k')
+
+                    # suppresses matplotlib tight_layout warning
+                    g_pruned.fig.set_figheight(2.5)
+                    g_pruned.fig.set_figwidth(7)
 
                 g_pruned.set_titles(
                     col_template="{col_name}", fontweight='bold',
                     size=5.0, pad=4.0)
-
-                g_pruned.fig.suptitle(ab, x=0.05, y=0.98, size=9.0)
 
                 for ax in g_pruned.axes.flatten():
                     ax.tick_params(
@@ -2465,8 +2470,8 @@ class QC(object):
                         ax.spines['bottom'].set_linewidth(0.1)
 
                 plt.subplots_adjust(
-                    left=0.08, bottom=0.30, right=0.99,
-                    top=0.70, hspace=0.4, wspace=0.4)
+                    left=0.03, bottom=0.13, right=0.99,
+                    top=0.92, hspace=0.8, wspace=0.3)
 
                 count = pruned_layout.count()
                 # print('layout count:', count)
@@ -2514,17 +2519,17 @@ class QC(object):
 
                         # read DNA1 channel
                         for file_path in glob.glob(
-                          f'{self.inDir}/tif/{value}*.tif'):
+                          f'{self.inDir}/tif/{value}.*tif'):
                             dna = single_channel_pyramid(file_path, channel=0)
 
                         # read antibody channel
                         for file_path in glob.glob(
-                          f'{self.inDir}/tif/{value}*.tif'):
+                          f'{self.inDir}/tif/{value}.*tif'):
                             channel = single_channel_pyramid(
                                 file_path, channel=channel_number.item() - 1)
 
                         # read segmentation outlines
-                        file_path = f'{self.inDir}/seg/{value}*.ome.tif'
+                        file_path = f'{self.inDir}/seg/{value}.*tif'
                         seg = single_channel_pyramid(
                             glob.glob(file_path)[0], channel=0)
 
@@ -2542,7 +2547,9 @@ class QC(object):
 
                         viewer.add_image(
                             seg, rgb=False, blending='additive', opacity=0.5,
-                            colormap='red', visible=False, name='segmentation')
+                            colormap='gray', visible=False,
+                            name='segmentation'
+                            )
 
                         # grab centroids of low signal intensity outliers
                         low_centroids = data_copy1[
@@ -2805,7 +2812,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # drop antibody channel exclusions for metaQC clustering
         abx_channels = [
@@ -2860,16 +2869,19 @@ class QC(object):
                     # the number of dictionary value enteries should be 3:
                     # module name, clean data, noisy data if noisy data exists
                     if len(module_dict[module_idx]) == 3:
-                        noisyData = noisyData.append(
-                            module_dict[module_idx][2])
+                        noisyData = pd.concat(
+                            [noisyData, module_dict[module_idx][2]], axis=0
+                            )
             else:
                 # if postive ROI selection, exlcude cells not gated on
                 noisyData = pd.DataFrame()
                 for module_idx, module in enumerate(modules):
                     if len(module_dict[module_idx]) == 3:
                         if not module == 'selectROIs':
-                            noisyData = noisyData.append(
-                                module_dict[module_idx][2])
+                            noisyData = pd.concat(
+                                [noisyData, module_dict[module_idx][2]],
+                                axis=0
+                                )
 
             if noisyData.empty:
                 print('No data were filtered during prior QC steps. ' +
@@ -2917,7 +2929,7 @@ class QC(object):
             else:
                 # if QCData.pkl doesn't exist, append noisyData
                 # to cleanDataRaw, row-wise
-                QCData = cleanDataRaw.append(noisyData)
+                QCData = pd.concat([cleanDataRaw, noisyData], axis=0)
 
                 # shuffle QCData row order to randomize cells
                 # for batch clustering
@@ -3120,7 +3132,7 @@ class QC(object):
                     clean = pd.DataFrame()
                     noisy = pd.DataFrame()
                     for name, cluster in chunk.groupby(
-                      'cluster'):
+                      f'cluster_{self.dimensionEmbedding}d'):
                         if name != -1:
                             # if a cluster contains
                             # >= n% noisy data,
@@ -3131,8 +3143,7 @@ class QC(object):
                                 'QC_status'] == 'clean'])
                                / len(cluster)) >=
                               clean_cutoff):
-                                clean = clean.append(
-                                    cluster)
+                                clean = pd.concat([clean, cluster], axis=0)
                             # elif a cluster contains
                             # >= n% clean data,
                             # reclassify all clustering
@@ -3142,35 +3153,36 @@ class QC(object):
                                 'QC_status'] == 'noisy'])
                                / len(cluster)) >=
                               noisy_cutoff):
-                                noisy = noisy.append(
-                                    cluster)
+                                noisy = pd.concat([noisy, cluster], axis=0)
                             # else keep respective
                             # cell statuses
                             else:
-                                noisy = noisy.append(
-                                    cluster[cluster[
-                                        'QC_status'] ==
-                                        'noisy'])
-                                clean = clean.append(
-                                    cluster[cluster[
-                                        'QC_status'] ==
-                                        'clean'])
+                                noisy = pd.concat(
+                                    [noisy,
+                                     cluster[cluster['QC_status'] == 'noisy']],
+                                    axis=0
+                                    )
+                                clean = pd.concat(
+                                    [clean,
+                                     cluster[cluster['QC_status'] == 'clean']],
+                                    axis=0
+                                    )
 
                     # consider -1 cells from clean data
                     # to be "clean"
                     clean_outliers = chunk[
-                        (chunk['cluster'] == -1) &
+                        (chunk[f'cluster_{self.dimensionEmbedding}d'] == -1) &
                         (chunk['QC_status'] == 'clean')
                         ].copy()
-                    clean = clean.append(clean_outliers)
+                    clean = pd.concat([clean, clean_outliers], axis=0)
 
                     # consider -1 cells from noisy data
                     # to be "noisy"
                     noisy_outliers = chunk[
-                        (chunk['cluster'] == -1) &
+                        (chunk[f'cluster_{self.dimensionEmbedding}d'] == -1) &
                         (chunk['QC_status'] == 'noisy')
                         ].copy()
-                    noisy = noisy.append(noisy_outliers)
+                    noisy = pd.concat([noisy, noisy_outliers], axis=0)
 
                     chunk['Reclass'] = 'init'
                     chunk.loc[
@@ -3205,10 +3217,7 @@ class QC(object):
                         call_button='Cluster and Plot',
                         MCS={'label': 'Min Cluster Size (MCS)'},
                         )
-                    def cluster_and_plot(
-                      MCS: int = 200.0,
-                      chunk=chunk,
-                    ):
+                    def cluster_and_plot(MCS: int = 200.0):
 
                         # placeholder for lasso selection
                         selector = None
@@ -3250,7 +3259,9 @@ class QC(object):
                             match_reference_implementation=False).fit(
                                 chunk[['emb1', 'emb2']])
 
-                        chunk['cluster'] = clustering.labels_
+                        chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                            clustering.labels_
+                            )
 
                         # scatter point selection tool assumes a
                         # sorted index, but the index of QCdata is
@@ -3264,12 +3275,13 @@ class QC(object):
                             np.unique(clustering.labels_))
 
                         # PLOT embedding
-                        for color_by in ['cluster', 'QC_status',
-                                         'Reclass', 'Sample']:
+                        for color_by in [
+                          f'cluster_{self.dimensionEmbedding}d',
+                          'QC_status', 'Reclass', 'Sample']:
 
                             highlight = 'none'
 
-                            if color_by == 'cluster':
+                            if color_by == f'cluster_{self.dimensionEmbedding}d':
 
                                 # build cmap
                                 cmap = categorical_cmap(
@@ -3308,7 +3320,7 @@ class QC(object):
                                 cluster_paths = ax_cluster.scatter(
                                     chunk['emb1'], chunk['emb2'], c=c,
                                     alpha=1.0, s=point_size,
-                                    cmap=cmap, ec='k', linewidth=0.1)
+                                    cmap=cmap, ec='k', linewidth=0.0)
 
                                 ax_cluster.set_title(
                                     'HDBSCAN (lasso)', fontsize=10)
@@ -3324,7 +3336,9 @@ class QC(object):
                                     hi_markers = cluster_expression(
                                         df=chunk, markers=abx_channels,
                                         cluster=i, num_proteins=3,
-                                        standardize='within')
+                                        clus_dim=self.dimensionEmbedding,
+                                        standardize='within'
+                                        )
 
                                     legend_elements.append(
                                         Line2D([0], [0], marker='o',
@@ -3365,7 +3379,7 @@ class QC(object):
                                 ax_status.scatter(
                                     chunk['emb1'], chunk['emb2'], c=c,
                                     cmap=cmap, alpha=1.0, s=point_size,
-                                    ec='k', linewidth=0.1)
+                                    ec='k', linewidth=0.0)
 
                                 ax_status.set_title(
                                     'QC Status', fontsize=10)
@@ -3428,7 +3442,7 @@ class QC(object):
                                 ax_reclass.scatter(
                                     chunk['emb1'], chunk['emb2'], c=c,
                                     cmap=cmap, alpha=1.0, s=point_size,
-                                    ec='k', linewidth=0.1)
+                                    ec='k', linewidth=0.0)
 
                                 ax_reclass.set_title(
                                     'Reclassification', fontsize=10)
@@ -3493,7 +3507,7 @@ class QC(object):
                                 ax_sample.scatter(
                                     chunk['emb1'], chunk['emb2'], c=c,
                                     cmap=cmap, alpha=1.0, s=point_size,
-                                    ec='k', linewidth=0.1)
+                                    ec='k', linewidth=0.0)
 
                                 ax_sample.set_title('Sample', fontsize=10)
                                 ax_sample.axis('equal')
@@ -3605,11 +3619,14 @@ class QC(object):
                                     # expressed markers
                                     chunk_copy.loc[
                                         chunk_copy.index.isin(selector.ind),
-                                        'cluster'] = 1000
+                                        f'cluster_{self.dimensionEmbedding}d'
+                                        ] = 1000
                                     hi_markers = cluster_expression(
                                         df=chunk_copy, markers=abx_channels,
                                         cluster=1000, num_proteins=3,
-                                        standardize='within')
+                                        clus_dim=self.dimensionEmbedding,
+                                        standardize='within'
+                                        )
 
                                     print()
                                     print(
@@ -3639,11 +3656,13 @@ class QC(object):
                                             # read antibody image
                                             for file_path in glob.glob(
                                               f'{self.inDir}/tif/' +
-                                              f'{value}*.tif'):
+                                              f'{value}.*tif'):
                                                 img = single_channel_pyramid(
                                                     file_path,
                                                     channel=(
-                                                        channel_number.item()-1))
+                                                        channel_number
+                                                        .item()-1)
+                                                        )
 
                                             viewer.add_image(
                                                 img, rgb=False,
@@ -3687,7 +3706,7 @@ class QC(object):
                                     # read segmentation outlines, add to Napari
                                     for file_path in glob.glob(
                                       f'{self.inDir}/seg/' +
-                                      f'{value}*.ome.tif'):
+                                      f'{value}.*tif'):
                                         seg = single_channel_pyramid(
                                             file_path, channel=0)
                                     viewer.add_image(
@@ -3705,7 +3724,7 @@ class QC(object):
                                         markers, last_dna_cycle)
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
-                                      f'{value}*.tif'):
+                                      f'{value}.*tif'):
                                         dna_last = single_channel_pyramid(
                                             file_path,
                                             channel=channel_number.item() - 1)
@@ -3720,7 +3739,7 @@ class QC(object):
                                     # read first DNA, add to Napari
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
-                                      f'{value}*.tif'):
+                                      f'{value}.*tif'):
                                         dna_first = single_channel_pyramid(
                                             file_path, channel=0)
                                     viewer.add_image(
@@ -3754,7 +3773,6 @@ class QC(object):
                         def reclass_selector(
                             cleanReclass: float = 1.0,
                             noisyReclass: float = 1.0,
-                            chunk=chunk,
                           ):
 
                             return cleanReclass, noisyReclass, chunk
@@ -3796,7 +3814,7 @@ class QC(object):
                             ax_reclass.scatter(
                                 chunk['emb1'], chunk['emb2'], c=c,
                                 cmap=cmap, alpha=1.0, s=point_size,
-                                ec='k', linewidth=0.1)
+                                ec='k', linewidth=0.0)
 
                             ax_reclass.set_title(
                                 'Reclassification', fontsize=10)
@@ -3917,7 +3935,9 @@ class QC(object):
                                 match_reference_implementation=False).fit(
                                     chunk[['emb1', 'emb2']])
 
-                            chunk['cluster'] = clustering.labels_
+                            chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                                clustering.labels_
+                                )
 
                             print(
                                 f'min_cluster_size = {i}',
@@ -3968,7 +3988,7 @@ class QC(object):
                     # (not applicable to first chunk, which gets
                     # clustered during plotting above)
 
-                    if 'cluster' not in chunk.columns:
+                    if f'cluster_{self.dimensionEmbedding}d' not in chunk.columns:
 
                         print()
                         print(
@@ -3991,7 +4011,9 @@ class QC(object):
                             match_reference_implementation=False).fit(
                                 chunk[['emb1', 'emb2']]
                                 )
-                        chunk['cluster'] = clustering.labels_
+                        chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                            clustering.labels_
+                            )
 
                     ###########################################################
                     # add clean and noisy data (based on final reclass_tuple)
@@ -4011,12 +4033,12 @@ class QC(object):
                         noisy_cutoff=final_reclass_entry[1])
 
                     # update clean and noisy storage dataframes and save
-                    reclass_storage_dict['clean'] = (
-                        reclass_storage_dict['clean'].append(
-                            clean))
-                    reclass_storage_dict['noisy'] = (
-                        reclass_storage_dict['noisy'].append(
-                            noisy))
+                    reclass_storage_dict['clean'] = pd.concat(
+                        [reclass_storage_dict['clean'], clean], axis=0
+                        )
+                    reclass_storage_dict['noisy'] = pd.concat(
+                        [reclass_storage_dict['noisy'], noisy], axis=0
+                        )
 
                     f = open(os.path.join(
                         reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
@@ -4035,7 +4057,8 @@ class QC(object):
 
                     # exit program if all cells are considered ambiguous by the
                     # clustering algorithm (likely too few cells per chunk)
-                    if chunk['cluster'].eq(-1).all():
+                    if chunk[
+                        f'cluster_{self.dimensionEmbedding}d'].eq(-1).all():
                         print(
                             f'WARNING: All cells in chunk {chunk_index + 1} ' +
                             'were deemed ambiguous by clustering algorithm ' +
@@ -4043,10 +4066,15 @@ class QC(object):
                             + 'Try using a larger batch size.')
                         exit()
 
-                    clustermap_input = chunk[chunk['cluster'] != -1]
+                    clustermap_input = chunk[
+                        chunk[f'cluster_{self.dimensionEmbedding}d'] != -1]
 
-                    cluster_heatmap_input = clustermap_input[
-                        abx_channels + ['cluster']].groupby('cluster').mean()
+                    cluster_heatmap_input = (
+                        clustermap_input[
+                            abx_channels +
+                            [f'cluster_{self.dimensionEmbedding}d']]
+                        .groupby(f'cluster_{self.dimensionEmbedding}d').mean()
+                        )
 
                     sns.set(font_scale=0.8)
                     for name, axis in zip(['within', 'across'], [0, 1]):
@@ -4116,7 +4144,7 @@ class QC(object):
                 replace['Sample'])
             replaced = pre_qc[pre_qc['handle'].isin(replace['handle'])]
 
-            data = dropped.append(replaced)
+            data = pd.concat([dropped, replaced], axis=0)
 
             ###################################################################
             # transform data
@@ -4249,6 +4277,7 @@ class QC(object):
             markers, dna1, dna_moniker, abx_channels = read_markers(
                 markers_filepath=os.path.join(self.inDir, 'markers.csv'),
                 markers_to_exclude=self.markersToExclude,
+                data=data
                 )
 
             # drop antibody channel exclusions for PCA
@@ -4437,7 +4466,10 @@ class QC(object):
 
                                 # slice scatter_input to get samples
                                 # proximal to data point e
-                                neighbors_df = scatter_input.loc[neighbors]
+
+                                neighbors_df = scatter_input.loc[
+                                    list(neighbors)
+                                    ]
 
                                 # generate centroid between samples
                                 # neighboring data point e
@@ -4539,17 +4571,21 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # drop antibody channel exclusions for clustering
         abx_channels = [
             i for i in abx_channels
             if i not in self.channelExclusionsClustering]
 
-        # create clustering directory if it hasn't already
-        clustering_dir = os.path.join(self.outDir, 'clustering')
-        if not os.path.exists(clustering_dir):
-            os.makedirs(clustering_dir)
+        # create N-dimensional clustering subdirectory if it hasn't already
+        dim_dir = os.path.join(
+            self.outDir, 'clustering', f'{self.dimensionEmbedding}d'
+            )
+        if not os.path.exists(dim_dir):
+            os.makedirs(dim_dir)
 
         # recapitulate df index at the point of embedding
         data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
@@ -4566,16 +4602,13 @@ class QC(object):
                   'with the fracForEmbedding configuration setting.')
             print()
 
-            # calculate per tissue cell-count weighted random sample
+            # calculate per tissue random samples weighted by cell count
             groups = data.groupby('Sample')
-
             sample_weights = pd.DataFrame({
                 'weights': 1 / (groups.size() * len(groups))})
-
             weights = pd.merge(
                 data[['Sample']], sample_weights,
                 left_on='Sample', right_index=True)
-
             data = data.sample(
                 frac=self.fracForEmbedding, replace=False,
                 weights=weights['weights'], random_state=random_state,
@@ -4594,13 +4627,28 @@ class QC(object):
         print(data[abx_channels])
 
         # if embedding has already been computed
-        if os.path.exists(os.path.join(clustering_dir, 'embedding.npy')):
+        if os.path.exists(os.path.join(dim_dir, 'embedding.npy')):
 
-            embedding = np.load(os.path.join(clustering_dir, 'embedding.npy'))
-            data['emb1'] = embedding[:, 0]
-            data['emb2'] = embedding[:, 1]
+            embedding = np.load(os.path.join(dim_dir, 'embedding.npy'))
+
+            if embedding.shape[1] == 2:
+                data['emb1'] = embedding[:, 0]
+                data['emb2'] = embedding[:, 1]
+                clustering_input = data[['emb1', 'emb2']]
+
+            elif embedding.shape[1] == 3:
+                data['emb1'] = embedding[:, 0]
+                data['emb2'] = embedding[:, 1]
+                data['emb3'] = embedding[:, 2]
+                clustering_input = data[['emb1', 'emb2', 'emb3']]
 
         else:
+            # exit program is dimensionEmbedding configuration is not 2 or 3
+            if self.dimensionEmbedding not in [2, 3]:
+                print()
+                print('Embedding dimension must be set to 2 or 3.')
+                exit()
+
             startTime = datetime.now()
 
             if self.embeddingAlgorithm == 'TSNE':
@@ -4611,7 +4659,7 @@ class QC(object):
                     early_exaggeration=self.earlyExaggeration,
                     learning_rate=self.learningRateTSNE,
                     metric=self.metric,
-                    random_state=self.randomState,
+                    random_state=self.randomStateTSNE,
                     init='pca', n_jobs=-1).fit_transform(data[abx_channels])
 
             elif self.embeddingAlgorithm == 'UMAP':
@@ -4623,7 +4671,7 @@ class QC(object):
                     output_metric=self.metric,
                     min_dist=self.minDist,
                     repulsion_strength=self.repulsionStrength,
-                    random_state=3,
+                    random_state=self.randomStateUMAP,
                     n_epochs=1000,
                     init='spectral',
                     metric='euclidean',
@@ -4657,17 +4705,28 @@ class QC(object):
 
             print('Embedding completed in ' + str(datetime.now() - startTime))
 
-            np.save(os.path.join(clustering_dir, 'embedding'), embedding)
-            data['emb1'] = embedding[:, 0]
-            data['emb2'] = embedding[:, 1]
+            np.save(
+                os.path.join(dim_dir, 'embedding'), embedding
+                )
+
+            if embedding.shape[1] == 2:
+                data['emb1'] = embedding[:, 0]
+                data['emb2'] = embedding[:, 1]
+                clustering_input = data[['emb1', 'emb2']]
+
+            elif embedding.shape[1] == 3:
+                data['emb1'] = embedding[:, 0]
+                data['emb2'] = embedding[:, 1]
+                data['emb3'] = embedding[:, 2]
+                clustering_input = data[['emb1', 'emb2', 'emb3']]
 
         #######################################################################
 
         # define the point size for cells in the embedding
-        point_size = 50000/len(data)
+        point_size = 30000/len(data)
 
         # interact with plots to identify optimal minimum cluster size
-        while not os.path.isfile(os.path.join(clustering_dir, 'MCS.txt')):
+        while not os.path.isfile(os.path.join(dim_dir, 'MCS.txt')):
 
             # initial Napari viewer without images
             viewer = napari.Viewer()
@@ -4681,7 +4740,7 @@ class QC(object):
             cluster_widget.setSizePolicy(
                 QtWidgets.QSizePolicy.Minimum,
                 QtWidgets.QSizePolicy.Maximum,
-            )
+                )
 
             ###################################################################
             @magicgui(
@@ -4689,32 +4748,7 @@ class QC(object):
                 call_button='Cluster and Plot',
                 MCS={'label': 'Min Cluster Size (MCS)'},
                 )
-            def cluster_and_plot(
-              MCS: int = 200.0,
-            ):
-
-                # placeholder for lasso selection
-                selector = None
-
-                sns.set_style('whitegrid')
-
-                fig = plt.figure(figsize=(8, 7))
-                matplotlib_warnings(fig)
-
-                gs = plt.GridSpec(2, 3, figure=fig)
-
-                # define axes
-                ax_cluster = fig.add_subplot(gs[0, 0])
-                ax_sample = fig.add_subplot(gs[0, 1])
-                ax_condition = fig.add_subplot(gs[0, 2])
-
-                ax_cluster_lbs = fig.add_subplot(gs[1, 0])
-                ax_sample_lbs = fig.add_subplot(gs[1, 1])
-                ax_condition_lbs = fig.add_subplot(gs[1, 2])
-
-                plt.subplots_adjust(
-                    left=0.01, right=0.99, bottom=0.0,
-                    top=0.95, wspace=0.0, hspace=0.0)
+            def cluster_and_plot(MCS: int = 200.0):
 
                 clustering = hdbscan.HDBSCAN(
                     min_cluster_size=MCS,
@@ -4728,199 +4762,214 @@ class QC(object):
                     cluster_selection_method='eom',
                     allow_single_cluster=False,
                     prediction_data=False,
-                    match_reference_implementation=False).fit(
-                        data[['emb1', 'emb2']])
+                    match_reference_implementation=False).fit(clustering_input)
 
-                data['cluster'] = clustering.labels_
+                data[f'cluster_{self.dimensionEmbedding}d'] = (
+                    clustering.labels_
+                    )
 
                 print()
                 print(
                     f'min_cluster_size = {MCS}',
                     np.unique(clustering.labels_))
 
-                # PLOT embedding
-                for color_by in ['cluster', 'Sample', 'Condition']:
+                if embedding.shape[1] == 2:
 
-                    highlight = 'none'
+                    # placeholder for lasso selection
+                    selector = None
 
-                    if color_by == 'cluster':
+                    sns.set_style('whitegrid')
 
-                        # build cmap
-                        cmap = categorical_cmap(
-                            numUniqueSamples=len(data[color_by].unique()),
-                            numCatagories=10, cmap='tab10',
-                            continuous=False)
+                    fig = plt.figure(figsize=(8, 7))
+                    matplotlib_warnings(fig)
 
-                        # make black the first color to specify
-                        # unclustered cells (cluster -1)
-                        if -1 in data[color_by].unique():
+                    gs = plt.GridSpec(2, 3, figure=fig)
 
-                            cmap = ListedColormap(
-                                np.insert(arr=cmap.colors, obj=0,
-                                          values=[0, 0, 0], axis=0))
+                    # define axes
+                    ax_cluster = fig.add_subplot(gs[0, 0])
+                    ax_channel = fig.add_subplot(gs[0, 1])
+                    ax_sample = fig.add_subplot(gs[0, 2])
 
-                            # trim cmap to # unique samples
-                            trim = (
-                                len(cmap.colors) - len(
-                                    data[color_by].unique()))
-                            cmap = ListedColormap(
-                                cmap.colors[:-trim])
+                    ax_cluster_lbs = fig.add_subplot(gs[1, 0])
+                    ax_channel_lbs = fig.add_subplot(gs[1, 1])
+                    ax_sample_lbs = fig.add_subplot(gs[1, 2])
 
-                        sample_dict = dict(
-                            zip(natsorted(data[color_by].unique()),
-                                list(range(len(data[color_by]
-                                     .unique())))))
+                    plt.subplots_adjust(
+                        left=0.01, right=0.99, bottom=0.0,
+                        top=0.95, wspace=0.0, hspace=0.0)
 
-                        c = [sample_dict[i] for i
-                             in data[color_by]]
+                    # PLOT embedding
+                    for color_by in [
+                      f'cluster_{self.dimensionEmbedding}d',
+                      'channel', 'Sample'
+                      ]:
 
-                        ax_cluster.cla()
+                        highlight = 'none'
 
-                        cluster_paths = ax_cluster.scatter(
-                            data['emb1'], data['emb2'], c=c, alpha=1.0,
-                            s=point_size, cmap=cmap, ec='k', linewidth=0.1)
+                        if color_by == f'cluster_{self.dimensionEmbedding}d':
 
-                        ax_cluster.set_title('HDBSCAN (lasso)', fontsize=10)
-                        ax_cluster.set_aspect('equal')
-                        ax_cluster.axes.xaxis.set_visible(False)
-                        ax_cluster.axes.yaxis.set_visible(False)
-                        ax_cluster.grid(False)
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(data[color_by].unique()),
+                                numCatagories=10, cmap='tab10',
+                                continuous=False)
 
-                        legend_elements = []
-                        for e, i in enumerate(
-                          natsorted(data[color_by].unique())):
+                            # make black the first color to specify
+                            # unclustered cells (cluster -1)
+                            if -1 in data[color_by].unique():
 
-                            hi_markers = cluster_expression(
-                                df=data, markers=abx_channels,
-                                cluster=i, num_proteins=3,
-                                standardize='within')
+                                cmap = ListedColormap(
+                                    np.insert(arr=cmap.colors, obj=0,
+                                              values=[0, 0, 0], axis=0))
 
-                            legend_elements.append(
-                                Line2D([0], [0], marker='o',
-                                       color='none',
-                                       label=(
-                                        f'Cluster {i}: '
-                                        f'{hi_markers}'),
-                                       markerfacecolor=(
-                                        cmap.colors[e]),
-                                       markeredgecolor='none',
-                                       lw=0.001, markersize=3))
+                                # trim cmap to # unique samples
+                                trim = (
+                                    len(cmap.colors) - len(
+                                        data[color_by].unique()))
+                                cmap = ListedColormap(
+                                    cmap.colors[:-trim])
 
-                        cluster_lgd = ax_cluster_lbs.legend(
-                            handles=legend_elements, prop={'size': 5},
-                            loc='upper left', frameon=False)
+                            sample_dict = dict(
+                                zip(natsorted(data[color_by].unique()),
+                                    list(range(len(data[color_by]
+                                         .unique())))))
 
-                        ax_cluster_lbs.axis('off')
+                            c = [sample_dict[i] for i
+                                 in data[color_by]]
 
-                    elif color_by == 'Sample':
+                            ax_cluster.cla()
 
-                        # build cmap
-                        cmap = categorical_cmap(
-                            numUniqueSamples=len(data['Sample'].unique()),
-                            numCatagories=10, cmap='tab10',
-                            continuous=False)
+                            cluster_paths = ax_cluster.scatter(
+                                data['emb1'], data['emb2'], c=c, alpha=1.0,
+                                s=point_size, cmap=cmap, ec='k', linewidth=0.0)
 
-                        sample_dict = dict(
-                            zip(natsorted(data['Sample'].unique()),
-                                list(range(len(data['Sample']
-                                     .unique())))))
+                            ax_cluster.set_title(
+                                'HDBSCAN (lasso)', fontsize=10)
+                            ax_cluster.set_aspect('equal')
+                            ax_cluster.axes.xaxis.set_visible(False)
+                            ax_cluster.axes.yaxis.set_visible(False)
+                            ax_cluster.grid(False)
 
-                        c = [sample_dict[i] for
-                             i in data['Sample']]
+                            legend_elements = []
+                            for e, i in enumerate(
+                              natsorted(data[color_by].unique())):
 
-                        ax_sample.cla()
+                                hi_markers = cluster_expression(
+                                    df=data, markers=abx_channels,
+                                    cluster=i, num_proteins=3,
+                                    clus_dim=self.dimensionEmbedding,
+                                    standardize='within'
+                                    )
 
-                        ax_sample.scatter(
-                            data['emb1'], data['emb2'], c=c, cmap=cmap,
-                            alpha=1.0, s=point_size, ec='k', linewidth=0.1)
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none',
+                                           label=(
+                                            f'Cluster {i}: '
+                                            f'{hi_markers}'),
+                                           markerfacecolor=(
+                                            cmap.colors[e]),
+                                           markeredgecolor='none',
+                                           lw=0.001, markersize=3))
 
-                        ax_sample.set_title('Sample', fontsize=10)
-                        ax_sample.set_aspect('equal')
-                        ax_sample.axes.xaxis.set_visible(False)
-                        ax_sample.axes.yaxis.set_visible(False)
-                        ax_sample.grid(False)
+                            cluster_lgd = ax_cluster_lbs.legend(
+                                handles=legend_elements, prop={'size': 5},
+                                loc='upper left', frameon=False)
 
-                        legend_elements = []
-                        for e, i in enumerate(
-                          natsorted(data['Sample'].unique())):
+                            ax_cluster_lbs.axis('off')
 
-                            if i == highlight:
-                                markeredgecolor = 'k'
+                        elif color_by == 'channel':
+
+                            ax_channel.cla()
+
+                            if self.colormapChannel is None:
+                                c = 'gray'
+                                title = 'No channel selected'
+                            elif self.colormapChannel in abx_channels:
+                                c = data[self.colormapChannel]
+                                title = self.colormapChannel
                             else:
-                                markeredgecolor = 'none'
+                                print()
+                                print(
+                                    'Selected channel for colormap' +
+                                    'not in markers.csv'
+                                    )
+                                sys.exit()
 
-                            sample_to_map = (
-                                data['Sample'][data['Sample'] == i]
-                                .unique()[0])
+                            ax_channel.scatter(
+                                data['emb1'], data['emb2'], cmap='viridis',
+                                c=c, alpha=1.0, s=point_size, ec='k',
+                                linewidth=0.0
+                                )
 
-                            legend_elements.append(
-                                Line2D([0], [0], marker='o',
-                                       color='none', label=i,
-                                       markerfacecolor=cmap.colors[e],
-                                       markeredgecolor=markeredgecolor,
-                                       lw=0.001, markersize=3))
+                            ax_channel.set_title(title, fontsize=10)
+                            ax_channel.set_aspect('equal')
+                            ax_channel.axes.xaxis.set_visible(False)
+                            ax_channel.axes.yaxis.set_visible(False)
+                            ax_channel.grid(False)
 
-                        sample_lgd = ax_sample_lbs.legend(
-                            handles=legend_elements, prop={'size': 5},
-                            loc='upper left', frameon=False)
+                            ax_channel_lbs.axis('off')
 
-                        ax_sample_lbs.axis('off')
+                        elif color_by == 'Sample':
 
-                    elif color_by == 'Condition':
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(data['Sample'].unique()),
+                                numCatagories=10, cmap='tab10',
+                                continuous=False)
 
-                        # build cmap
-                        cmap = categorical_cmap(
-                            numUniqueSamples=len(
-                                data['Condition'].unique()),
-                            numCatagories=10, cmap='tab10',
-                            continuous=False)
+                            sample_dict = dict(
+                                zip(natsorted(data['Sample'].unique()),
+                                    list(range(len(data['Sample']
+                                         .unique())))))
 
-                        sample_dict = dict(
-                            zip(natsorted(data['Condition'].unique()),
-                                list(range(len(data['Condition']
-                                     .unique())))))
+                            c = [sample_dict[i] for
+                                 i in data['Sample']]
 
-                        c = [sample_dict[i] for
-                             i in data['Condition']]
+                            ax_sample.cla()
 
-                        ax_condition.cla()
+                            ax_sample.scatter(
+                                data['emb1'], data['emb2'], c=c, cmap=cmap,
+                                alpha=1.0, s=point_size, ec='k', linewidth=0.0)
 
-                        ax_condition.scatter(
-                            data['emb1'], data['emb2'], c=c, cmap=cmap,
-                            alpha=1.0, s=point_size, ec='k', linewidth=0.1)
+                            ax_sample.set_title('Sample', fontsize=10)
+                            ax_sample.set_aspect('equal')
+                            ax_sample.axes.xaxis.set_visible(False)
+                            ax_sample.axes.yaxis.set_visible(False)
+                            ax_sample.grid(False)
 
-                        ax_condition.set_title('Condition', fontsize=10)
-                        ax_condition.set_aspect('equal')
-                        ax_condition.axes.xaxis.set_visible(False)
-                        ax_condition.axes.yaxis.set_visible(False)
-                        ax_condition.grid(False)
+                            legend_elements = []
+                            for e, i in enumerate(
+                              natsorted(data['Sample'].unique())):
 
-                        legend_elements = []
-                        for e, i in enumerate(
-                          natsorted(data['Condition'].unique())):
+                                if i == highlight:
+                                    markeredgecolor = 'k'
+                                else:
+                                    markeredgecolor = 'none'
 
-                            if i == highlight:
-                                markeredgecolor = 'k'
-                            else:
-                                markeredgecolor = 'none'
+                                sample_to_map = (
+                                    data['Sample'][data['Sample'] == i]
+                                    .unique()[0])
 
-                            sample_to_map = (
-                                data['Condition'][data['Condition'] == i]
-                                .unique()[0])
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none', label=i,
+                                           markerfacecolor=cmap.colors[e],
+                                           markeredgecolor=markeredgecolor,
+                                           lw=0.001, markersize=3))
 
-                            legend_elements.append(
-                                Line2D([0], [0], marker='o',
-                                       color='none',
-                                       label=i,
-                                       markerfacecolor=cmap.colors[e],
-                                       markeredgecolor=markeredgecolor,
-                                       lw=0.001, markersize=3))
+                            sample_lgd = ax_sample_lbs.legend(
+                                handles=legend_elements, prop={'size': 5},
+                                loc='upper left', frameon=False)
 
-                        condition_lgd = ax_condition_lbs.legend(
-                            handles=legend_elements, prop={'size': 5},
-                            loc='upper left', frameon=False)
+                            ax_sample_lbs.axis('off')
 
-                        ax_condition_lbs.axis('off')
+                elif embedding.shape[1] == 3:
+                    # initialize figure and add to FigureCanvas
+                    # before rendering plot in 3D
+                    sns.set_style('whitegrid')
+                    fig = plt.figure(figsize=(7, 7))
+                    matplotlib_warnings(fig)
 
                 count = cluster_layout.count()
                 # print('layout count:', count)
@@ -4937,18 +4986,210 @@ class QC(object):
 
                 # add updated widgets to widget layout
                 cluster_canvas = FigureCanvas(fig)
+
+                if embedding.shape[1] == 3:
+
+                    gs = plt.GridSpec(2, 3, figure=fig)
+
+                    # define axes
+                    ax_cluster = fig.add_subplot(gs[0, 0], projection='3d')
+                    ax_channel = fig.add_subplot(gs[0, 1], projection='3d')
+                    ax_sample = fig.add_subplot(gs[0, 2], projection='3d')
+
+                    ax_cluster_lbs = fig.add_subplot(gs[1, 0])
+                    ax_channel_lbs = fig.add_subplot(gs[1, 1])
+                    ax_sample_lbs = fig.add_subplot(gs[1, 2])
+
+                    plt.subplots_adjust(
+                        left=0.0, right=1.00, bottom=0.0,
+                        top=0.94, wspace=0.0, hspace=0.0)
+
+                    for color_by in [
+                      f'cluster_{self.dimensionEmbedding}d',
+                      'channel', 'Sample'
+                      ]:
+
+                        highlight = 'none'
+
+                        if color_by == f'cluster_{self.dimensionEmbedding}d':
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(data[color_by].unique()),
+                                numCatagories=10,
+                                cmap='tab10',
+                                continuous=False
+                                )
+
+                            # make black the first color to specify
+                            # cluster outliers (i.e. cluster -1 cells)
+                            cmap = ListedColormap(
+                                np.insert(
+                                    arr=cmap.colors, obj=0,
+                                    values=[0.0, 0.0, 0.0], axis=0)
+                                    )
+
+                            # trim qualitative cmap to number of unique samples
+                            trim = (
+                                len(cmap.colors) - len(data[color_by].unique())
+                                )
+                            cmap = ListedColormap(
+                                cmap.colors[:-trim]
+                                )
+
+                            sample_dict = dict(
+                                zip(
+                                    natsorted(data[color_by].unique()),
+                                    list(range(len(data[color_by].unique()))))
+                                    )
+
+                            c = [sample_dict[i] for i in data[color_by]]
+
+                            ax_cluster.scatter(
+                                data['emb1'], data['emb2'], data['emb3'],
+                                c=c, cmap=cmap, alpha=1.0, s=point_size,
+                                ec='k', linewidth=0.0)
+
+                            ax_cluster.set_title(
+                                'HDBSCAN', fontsize=10)
+                            ax_cluster.tick_params(labelsize=5)
+                            ax_cluster.xaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_cluster.yaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_cluster.zaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                              natsorted(data[color_by].unique())):
+
+                                hi_markers = cluster_expression(
+                                    df=data, markers=abx_channels,
+                                    cluster=i, num_proteins=3,
+                                    clus_dim=self.dimensionEmbedding,
+                                    standardize='within'
+                                    )
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none',
+                                           label=(
+                                            f'Cluster {i}: '
+                                            f'{hi_markers}'),
+                                           markerfacecolor=(
+                                            cmap.colors[e]),
+                                           markeredgecolor='none',
+                                           lw=0.001, markersize=3))
+
+                            cluster_lgd = ax_cluster_lbs.legend(
+                                handles=legend_elements, prop={'size': 5},
+                                loc='upper left', frameon=False)
+                            ax_cluster_lbs.axis('off')
+
+                        elif color_by == 'channel':
+
+                            if self.colormapChannel is None:
+                                c = 'gray'
+                                title = 'No channel selected'
+                            elif self.colormapChannel in abx_channels:
+                                c = data[self.colormapChannel]
+                                title = self.colormapChannel
+                            else:
+                                print()
+                                print(
+                                    'Selected channel for colormap' +
+                                    'not in markers.csv'
+                                    )
+                                sys.exit()
+
+                            ax_channel.scatter(
+                                data['emb1'], data['emb2'], data['emb3'],
+                                cmap='viridis', c=c, alpha=1.0, s=point_size,
+                                ec='k', linewidth=0.0)
+
+                            ax_channel.set_title(title, fontsize=10)
+                            ax_channel.tick_params(labelsize=5)
+                            ax_channel.xaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_channel.yaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_channel.zaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+
+                            ax_channel_lbs.axis('off')
+
+                        elif color_by == 'Sample':
+
+                            # build cmap
+                            cmap = categorical_cmap(
+                                numUniqueSamples=len(data['Sample'].unique()),
+                                numCatagories=10, cmap='tab10',
+                                continuous=False)
+
+                            sample_dict = dict(
+                                zip(natsorted(data['Sample'].unique()),
+                                    list(range(len(data['Sample']
+                                         .unique())))))
+
+                            c = [sample_dict[i] for
+                                 i in data['Sample']]
+
+                            ax_sample.scatter(
+                                data['emb1'], data['emb2'], data['emb3'],
+                                c=c, cmap=cmap, alpha=1.0, s=point_size,
+                                ec='k', linewidth=0.0)
+
+                            ax_sample.set_title(
+                                'Sample', fontsize=10)
+                            ax_sample.tick_params(labelsize=5)
+                            ax_sample.xaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_sample.yaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+                            ax_sample.zaxis._axinfo['grid'].update(
+                                {'linewidth': 0.5})
+
+                            legend_elements = []
+                            for e, i in enumerate(
+                              natsorted(data['Sample'].unique())):
+
+                                if i == highlight:
+                                    markeredgecolor = 'k'
+                                else:
+                                    markeredgecolor = 'none'
+
+                                sample_to_map = (
+                                    data['Sample'][data['Sample'] == i]
+                                    .unique()[0])
+
+                                legend_elements.append(
+                                    Line2D([0], [0], marker='o',
+                                           color='none', label=i,
+                                           markerfacecolor=cmap.colors[e],
+                                           markeredgecolor=markeredgecolor,
+                                           lw=0.001, markersize=3))
+
+                            sample_lgd = ax_sample_lbs.legend(
+                                handles=legend_elements, prop={'size': 5},
+                                loc='upper left', frameon=False)
+
+                            ax_sample_lbs.axis('off')
+
                 cluster_layout.addWidget(
                     NavigationToolbar(cluster_canvas, cluster_widget))
                 cluster_layout.addWidget(cluster_canvas)
 
-                # must call draw() before creating selector,
-                # or alpha setting doesn't work.
-                fig.canvas.draw()
+                if embedding.shape[1] == 2:
+                    # must call draw() before creating selector,
+                    # or alpha setting doesn't work.
+                    fig.canvas.draw()
 
-                if selector:
-                    selector.disconnect()
-                selector = SelectFromCollection(
-                    ax_cluster, cluster_paths)
+                    if selector:
+                        selector.disconnect()
+                    selector = SelectFromCollection(
+                        ax_cluster, cluster_paths)
+                ###############################################################
 
                 ###############################################################
                 @magicgui(
@@ -4971,9 +5212,9 @@ class QC(object):
                     print(f'Sample selection: {value}')
 
                     # if cells lassoed
-                    if not (
-                      selector.ind is not None and
-                      len(selector.ind) >= 1
+                    if (
+                      selector.ind is None or
+                      len(selector.ind) == 0
                       ):
 
                         print()
@@ -4993,11 +5234,13 @@ class QC(object):
                             # and get highest expressed markers
                             data_copy.loc[
                                 data_copy.index.isin(selector.ind),
-                                'cluster'] = 1000
+                                f'cluster_{self.dimensionEmbedding}d'] = 1000
                             hi_markers = cluster_expression(
                                 df=data_copy, markers=abx_channels,
                                 cluster=1000, num_proteins=3,
-                                standardize='within')
+                                clus_dim=self.dimensionEmbedding,
+                                standardize='within'
+                                )
 
                             print()
                             print(f'Top three expressed markers: {hi_markers}')
@@ -5021,7 +5264,7 @@ class QC(object):
                                     # read antibody image
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
-                                      f'{value}*.tif'):
+                                      f'{value}.*tif'):
                                         img = single_channel_pyramid(
                                             file_path,
                                             channel=channel_number.item() - 1)
@@ -5033,16 +5276,6 @@ class QC(object):
                                         visible=False,
                                         name=ch)
 
-                            # color noisy data points by module used to
-                            # redact them
-                            # len(data['cluster'].unique())
-                            cmap = categorical_cmap(
-                                numUniqueSamples=len(
-                                    data['Condition'].unique()),
-                                numCatagories=10,
-                                cmap='tab10',
-                                continuous=False)
-
                             centroids = data[['Y_centroid', 'X_centroid']][
                                     (data.index.isin(selector.ind))
                                     & (data['Sample'] == value)]
@@ -5053,7 +5286,7 @@ class QC(object):
 
                             # read segmentation outlines, add to Napari
                             for file_path in glob.glob(
-                              f'{self.inDir}/seg/{value}*.ome.tif'):
+                              f'{self.inDir}/seg/{value}.*tif'):
                                 seg = single_channel_pyramid(
                                     file_path, channel=0)
                             viewer.add_image(
@@ -5063,30 +5296,9 @@ class QC(object):
                                 visible=False,
                                 name='segmentation')
 
-                            # read last DNA, add to Napari
-                            last_dna_cycle = natsorted(
-                                [i for i in data.columns
-                                 if dna_moniker in i])[-1]
-
-                            channel_number = marker_channel_number(
-                                markers, last_dna_cycle)
-
-                            for file_path in glob.glob(
-                              f'{self.inDir}/tif/{value}*.tif'):
-                                dna_last = single_channel_pyramid(
-                                    file_path,
-                                    channel=channel_number.item() - 1)
-
-                                viewer.add_image(
-                                    dna_last, rgb=False, blending='additive',
-                                    opacity=0.5, colormap='gray',
-                                    visible=False,
-                                    name=f'{last_dna_cycle}: ' +
-                                    f'{value}')
-
                             # read first DNA, add to Napari
                             for file_path in glob.glob(
-                              f'{self.inDir}/tif/{value}*.tif'):
+                              f'{self.inDir}/tif/{value}.*tif'):
                                 dna_first = single_channel_pyramid(
                                     file_path, channel=0)
                                 viewer.add_image(
@@ -5120,19 +5332,43 @@ class QC(object):
                     print(
                         f'Saving current min cluster size: {current_MCS}')
                     with open(
-                       os.path.join(clustering_dir, 'MCS.txt'), 'w') as f:
+                       os.path.join(dim_dir, 'MCS.txt'), 'w') as f:
                         f.write(str(current_MCS))
 
-                    print()
-                    print('Saving cluster plot')
-                    if selector:
-                        selector.disconnect()
-                    fig.savefig(os.path.join(
-                        clustering_dir,
-                        f'{self.embeddingAlgorithm}_'
-                        f'{current_MCS}.png'),
-                        bbox_inches='tight', dpi=1000)
-                    plt.close('all')
+                    if embedding.shape[1] == 2:
+                        print()
+                        print('Saving 2D cluster plot')
+
+                        if selector:
+                            selector.disconnect()
+
+                        fig.savefig(os.path.join(
+                            dim_dir,
+                            f'{self.embeddingAlgorithm}_'
+                            f'{current_MCS}.png'),
+                            bbox_inches='tight', dpi=1000)
+                        plt.close('all')
+
+                    elif embedding.shape[1] == 3:
+                        print()
+                        print('Saving 3D cluster plot')
+
+                        def animate(i):
+                            ax_cluster.view_init(elev=10., azim=i)
+                            ax_channel.view_init(elev=10., azim=i)
+                            ax_sample.view_init(elev=10., azim=i)
+                            return fig,
+
+                        anim = animation.FuncAnimation(
+                            fig, animate, frames=360, interval=20, blit=True)
+
+                        anim.save(os.path.join(
+                            dim_dir,
+                            f'{self.embeddingAlgorithm}_'
+                            f'{current_MCS}.mp4'), dpi=500, fps=30,
+                            extra_args=['-vcodec', 'libx264'],
+                            savefig_kwargs={'bbox_inches': 'tight'})
+                        plt.close('all')
 
                     QTimer().singleShot(0, viewer.close)
 
@@ -5144,8 +5380,8 @@ class QC(object):
                 )
 
                 ###############################################################
-
-                cluster_layout.addWidget(sample_selector.native)
+                if self.dimensionEmbedding == 2:
+                    cluster_layout.addWidget(sample_selector.native)
 
                 cluster_layout.addWidget(save_selector.native)
 
@@ -5190,9 +5426,11 @@ class QC(object):
                         allow_single_cluster=False,
                         prediction_data=False,
                         match_reference_implementation=False).fit(
-                            data[['emb1', 'emb2']])
+                            clustering_input)
 
-                    data['cluster'] = clustering.labels_
+                    data[f'cluster_{self.dimensionEmbedding}d'] = (
+                        clustering.labels_
+                        )
 
                     print(
                         f'min_cluster_size = {i}',
@@ -5219,7 +5457,7 @@ class QC(object):
         # apply final MCS and return data from clustering module
 
         with open(
-          os.path.join(clustering_dir, 'MCS.txt'), 'r') as f:
+          os.path.join(dim_dir, 'MCS.txt'), 'r') as f:
             final_mcs_entry = f.readlines()
             final_mcs_entry = int(final_mcs_entry[0])
 
@@ -5242,9 +5480,8 @@ class QC(object):
             allow_single_cluster=False,
             prediction_data=False,
             match_reference_implementation=False).fit(
-                data[['emb1', 'emb2']]
-                )
-        data['cluster'] = clustering.labels_
+                clustering_input)
+        data[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
 
         print()
         print()
@@ -5256,12 +5493,16 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
-        # create clustering directory if it hasn't already
-        clustering_dir = os.path.join(self.outDir, 'clustering')
-        if not os.path.exists(clustering_dir):
-            os.makedirs(clustering_dir)
+        # create clustering dimension directory if it hasn't already
+        dim_dir = os.path.join(
+            self.outDir, 'clustering', f'{self.dimensionEmbedding}d'
+            )
+        if not os.path.exists(dim_dir):
+            os.makedirs(dim_dir)
 
         # drop antibody channel exclusions for clustering
         abx_channels = [
@@ -5269,12 +5510,14 @@ class QC(object):
             if i not in self.channelExclusionsClustering]
 
         # drop unclustered cells before plotting clustermap
-        clustermap_input = data[data['cluster'] != -1]
+        clustermap_input = data[
+            data[f'cluster_{self.dimensionEmbedding}d'] != -1]
 
         # compute mean antibody signals for clusters
         clustermap_input = (
-            clustermap_input[abx_channels + ['cluster']]
-            .groupby('cluster').mean())
+            clustermap_input[abx_channels +
+                             [f'cluster_{self.dimensionEmbedding}d']]
+            .groupby(f'cluster_{self.dimensionEmbedding}d').mean())
 
         sns.set(font_scale=0.8)
         for name, axis in zip(['channels', 'clusters'], [0, 1]):
@@ -5287,7 +5530,7 @@ class QC(object):
             g.fig.set_size_inches(6.0, 6.0)
 
             plt.savefig(os.path.join(
-                    clustering_dir, f'clustermap_norm_{name}.pdf'),
+                    dim_dir, f'clustermap_norm_{name}.pdf'),
                     bbox_inches='tight')
 
         print()
@@ -5300,7 +5543,9 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # create contrast directory if it hasn't already
         contrast_dir = os.path.join(self.outDir, 'contrast')
@@ -5309,76 +5554,406 @@ class QC(object):
 
         napari_warnings()
 
-        # loop over antibody channels and add them to Napari viewer
-        for e, ch in enumerate(reversed(abx_channels)):
+        if self.viewSample in data['Sample'].unique():
+            # loop over antibody channels and add them to Napari viewer
+            for e, ch in enumerate(reversed(abx_channels)):
 
-            channel_number = marker_channel_number(markers, ch)
+                channel_number = marker_channel_number(markers, ch)
 
-            # read antibody image
+                # read antibody image
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/{self.viewSample}.*tif'):
+                    img = single_channel_pyramid(
+                        file_path, channel=channel_number.item() - 1)
+
+                # initialize Napari viewer with first channel
+                if e == 0:
+                    viewer = napari.view_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False, name=ch)
+
+                else:
+                    viewer.add_image(
+                        img, rgb=False, blending='additive',
+                        colormap='green', visible=False, name=ch)
+
+            # read DNA1 channel
             for file_path in glob.glob(
-              f'{self.inDir}/tif/{self.viewSample}*.tif'):
-                img = single_channel_pyramid(
-                    file_path, channel=channel_number.item() - 1)
+              f'{self.inDir}/tif/{self.viewSample}.*tif'):
+                dna = single_channel_pyramid(file_path, channel=0)
 
-            # initialize Napari viewer with first channel
-            if e == 0:
-                viewer = napari.view_image(
-                    img, rgb=False, blending='additive',
-                    colormap='green', visible=False, name=ch)
+            viewer.add_image(
+                dna, rgb=False, blending='additive', colormap='gray',
+                name=f'{dna1}: {self.viewSample}')
+
+            # apply previously defined contrast limits if they exist
+            if os.path.exists(
+              os.path.join(contrast_dir, 'contrast_limits.yml')):
+
+                print()
+                print('Applying existing channel contrast settings.')
+
+                contrast_limits = yaml.safe_load(
+                    open(f'{contrast_dir}/contrast_limits.yml'))
+
+                viewer.layers[f'{dna1}: {self.viewSample}'].contrast_limits = (
+                    contrast_limits[dna1][0], contrast_limits[dna1][1])
+
+                for ch in reversed(abx_channels):
+                    viewer.layers[ch].contrast_limits = (
+                        contrast_limits[ch][0], contrast_limits[ch][1])
+
+                napari.run()
 
             else:
-                viewer.add_image(
-                    img, rgb=False, blending='additive',
-                    colormap='green', visible=False, name=ch)
+                print()
+                print('Channel contrast settings have not been defined.')
 
-        # read DNA1 channel
-        for file_path in glob.glob(
-          f'{self.inDir}/tif/{self.viewSample}*.tif'):
-            dna = single_channel_pyramid(file_path, channel=0)
+                napari.run()
 
-        viewer.add_image(
-            dna, rgb=False, blending='additive', colormap='gray',
-            name=f'{dna1}: {self.viewSample}')
+                # create channel settings configuration file and
+                # update with chosen constrast limits
+                contrast_limits = {}
+                for ch in [dna1] + abx_channels:
+                    if ch == dna1:
+                        contrast_limits[ch] = (
+                            viewer.layers[f'{dna1}: {self.viewSample}']
+                            .contrast_limits)
+                    else:
+                        contrast_limits[ch] = viewer.layers[ch].contrast_limits
 
-        # apply previously defined contrast limits if they exist
-        if os.path.exists(os.path.join(contrast_dir, 'contrast_limits.yml')):
+                with open(f'{contrast_dir}/contrast_limits.yml', 'w') as file:
+                    yaml.dump(contrast_limits, file)
 
             print()
-            print('Applying existing channel contrast settings.')
-
-            contrast_limits = yaml.safe_load(
-                open(f'{contrast_dir}/contrast_limits.yml'))
-
-            viewer.layers[f'{dna1}: {self.viewSample}'].contrast_limits = (
-                contrast_limits[dna1][0], contrast_limits[dna1][1])
-
-            for ch in reversed(abx_channels):
-                viewer.layers[ch].contrast_limits = (
-                    contrast_limits[ch][0], contrast_limits[ch][1])
-
-            napari.run()
+            print()
+            return data
 
         else:
             print()
-            print('Channel contrast settings have not been defined.')
+            print(
+                'Sample name for image contrast adjustment not valid. '
+                'Please assign a valid sample name to the "viewSample" '
+                'setting in config.yml.')
+            exit()
 
-            napari.run()
+    @module
+    def frequencyStats(data, self, args):
 
-            # create channel settings configuration file and
-            # update with chosen constrast limits
-            contrast_limits = {}
-            for ch in [dna1] + abx_channels:
-                if ch == dna1:
-                    contrast_limits[ch] = (
-                        viewer.layers[f'{dna1}: {self.viewSample}']
-                        .contrast_limits)
+        # prepare input data for computing statistics
+        stats_input = data[
+            ['Sample', 'Replicate', f'cluster_{self.dimensionEmbedding}d']][
+            data[f'cluster_{self.dimensionEmbedding}d'] >= 0]
+
+        # loop over comma-delimited binary declarations
+        for i in range(len(list(self.sampleStatuses.values())[0].split(', '))):
+
+            # get unique declaration categories (should be 2 per test)
+            comparison = set(
+                [j.split(', ')[i] for j in self.sampleStatuses.values()
+                 if '-UNK' not in j.split(', ')[i]])
+
+            if len(comparison) > 1:
+
+                # assign test and control groups
+                test = [
+                    i for i in comparison if i not in self.controlGroups][0]
+                control = [
+                    i for i in comparison if i in self.controlGroups][0]
+
+                # create frequency stats directory if it hasn't already
+                frequency_dir = os.path.join(
+                    self.outDir, 'clustering', f'{self.dimensionEmbedding}d',
+                    'frequency_stats', f'{test}_v_{control}'
+                    )
+                if not os.path.exists(frequency_dir):
+                    os.makedirs(frequency_dir)
+
+                # create single-column dataFrame containing all sample names
+                # to pad counts tables with zeros if a celltype
+                # is not in a tissue
+                pad = pd.DataFrame(
+                    natsorted(stats_input['Sample'].unique())).rename(
+                        columns={0: 'Sample'})
+
+                cluster_list = []
+                ratio_list = []
+                dif_list = []
+                pval_list = []
+
+                # intialize a dataframe to collect catplot data
+                catplot_input = pd.DataFrame()
+
+                # loop over clusters
+                for cluster, group in stats_input.groupby(
+                  f'cluster_{self.dimensionEmbedding}d'
+                  ):
+
+                    print(
+                        f'Calculating log2({test}/{control})'
+                        f' of mean cell density for cluster {str(cluster)}.')
+
+                    group = (
+                        group.groupby(
+                            ['Sample', 'Replicate',
+                             f'cluster_{self.dimensionEmbedding}d'])
+                        .size()
+                        .reset_index(drop=False)
+                        .rename(columns={0: 'count'})
+                        )
+
+                    group = (
+                        group
+                        .merge(pad, how='right', on='Sample')
+                        .sort_values(by='count', ascending=False)
+                        )
+
+                    # guard against NaNs induced by the absence
+                    # of a given cluster in one or
+                    # more of the tissue samples
+                    group['count'] = [
+                        0 if np.isnan(i) else int(i) for i in group['count']]
+
+                    # get sample file names (i.e. sampleMetadata keys)
+                    # from config.yml based on "Sample" column
+                    # (first elements of sampleMetadata vals)
+                    def get_key(val):
+                        for key, value in self.sampleNames.items():
+                            if val == value:
+                                return key
+
+                        return "key doesn't exist"
+                    file_names = [get_key(i) for i in group['Sample']]
+
+                    # add binary declarations column to group data
+                    group['status'] = [
+                        self.sampleStatuses[j].split(', ')[i]
+                        for j in file_names]
+
+                    # add replicates column to group data
+                    group['Replicate'] = [
+                        self.sampleReplicates[i]
+                        for i in file_names]
+
+                    group[f'cluster_{self.dimensionEmbedding}d'] = cluster
+
+                    # drop samples for which a declaration cannot be made
+                    group = group[~group['status'].str.contains('-UNK')]
+
+                    group.reset_index(drop=True, inplace=True)
+
+                    # get denominator cell count for each sample
+                    if self.denominatorCluster is None:
+                        group['tissue_count'] = [
+                            len(stats_input[stats_input['Sample'] == i]) for
+                            i in group['Sample']]
+                    else:
+                        group['tissue_count'] = [
+                            len(stats_input[(stats_input['Sample'] == i) &
+                                (stats_input[
+                                    f'cluster_{self.dimensionEmbedding}d'] ==
+                                 self.denominatorCluster)])
+                            for i in group['Sample']]
+
+                    # compute density of cells per sample
+                    group['density'] = group['count']/group['tissue_count']
+
+                    # append group data to catplot_input
+                    catplot_input = pd.concat([catplot_input, group], axis=0)
+
+                    # isolate test and control group values
+                    cnd1_values = group['density'][group['status'] == test]
+                    cnd2_values = group['density'][group['status'] == control]
+
+                    # perform Welch's t-test (equal_var=False)
+                    stat, pval = ttest_ind(
+                        cnd1_values, cnd2_values,
+                        axis=0, equal_var=False, nan_policy='propagate')
+
+                    # round resulting values
+                    stat = round(stat, 3)
+                    pval = round(pval, 3)
+
+                    # compute mean of test and control group values
+                    cnd1_mean = np.mean(cnd1_values)
+                    cnd2_mean = np.mean(cnd2_values)
+
+                    # compute mean ratio
+                    ratio = np.log2(
+                        (cnd1_mean + 0.000001)/(cnd2_mean + 0.000001))
+
+                    # compute mean difference
+                    dif = cnd1_mean-cnd2_mean
+
+                    cluster_list.append(cluster)
+                    ratio_list.append(ratio)
+                    dif_list.append(dif)
+                    pval_list.append(pval)
+
+                # create stats dataframe
+                statistics = pd.DataFrame(
+                    list(zip(cluster_list, ratio_list, dif_list, pval_list)),
+                    columns=[f'cluster_{self.dimensionEmbedding}d',
+                             'ratio', 'dif', 'pval']).sort_values(
+                        by=f'cluster_{self.dimensionEmbedding}d')
+
+                # save total stats table
+                statistics.to_csv(
+                    os.path.join(
+                        frequency_dir, 'stats_total.csv'), index=False)
+
+                # compute FDR p-val corrections
+                # (uses statsmodels.stats.multitest implementation)
+                rejected, p_adjust = fdrcorrection(
+                    statistics['pval'].tolist(), alpha=0.05,
+                    method='indep', is_sorted=False)
+
+                statistics['qval'] = p_adjust
+
+                if self.FDRCorrection:
+                    stat = 'qval'
                 else:
-                    contrast_limits[ch] = viewer.layers[ch].contrast_limits
+                    stat = 'pval'
 
-            with open(f'{contrast_dir}/contrast_limits.yml', 'w') as file:
-                yaml.dump(contrast_limits, file)
+                # isolate statistically significant stat values
+                significant = statistics[
+                    statistics[stat] <= 0.05].sort_values(by=stat)
 
-        print()
+                # save significant stats table
+                significant.to_csv(
+                    os.path.join(
+                        frequency_dir, 'stats_sig.csv'), index=False)
+
+                # plot
+                sns.set_style('whitegrid')
+                fig, ax = plt.subplots()
+                plt.scatter(abs(significant['dif']), significant['ratio'])
+
+                for label, qval, x, y in zip(
+                  significant[f'cluster_{self.dimensionEmbedding}d'],
+                  significant[stat],
+                  abs(significant['dif']), significant['ratio']):
+
+                    plt.annotate(
+                        (label, f'{stat[0]}=' + str(qval)), size=3,
+                        xy=(x, y), xytext=(10, 10),
+                        textcoords='offset points', ha='right', va='bottom',
+                        bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
+                                  alpha=0.0))
+
+                for tick in ax.xaxis.get_major_ticks():
+                    tick.label.set_fontsize(5)
+
+                plt.title(
+                    f'{test} vs. {control} ({stat[0]}<0.05)',
+                    fontsize=12
+                    )
+                plt.xlabel(
+                    f'abs({test} - {control})', fontsize=10
+                    )
+                plt.ylabel(
+                    f'log2({test} / {control})',
+                    fontsize=10
+                    )
+                plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
+                plt.close()
+
+                catplot_input.reset_index(drop=True, inplace=True)
+
+                catplot_input[stat] = [
+                     'ns' if i not in
+                     significant[
+                        f'cluster_{self.dimensionEmbedding}d'].unique() else
+                     significant[stat][
+                        significant[
+                            f'cluster_{self.dimensionEmbedding}d']
+                        == i].values[0]
+                     for i in catplot_input[
+                        f'cluster_{self.dimensionEmbedding}d']]
+
+                # build cmap
+                cmap = categorical_cmap(
+                    numUniqueSamples=len(catplot_input['Sample'].unique()),
+                    numCatagories=10,
+                    cmap='tab10',
+                    continuous=False
+                    )
+
+                sample_color_dict = dict(
+                    zip(natsorted(catplot_input['Sample'].unique()),
+                        cmap.colors))
+
+                catplot_input.sort_values(
+                    by=[f'cluster_{self.dimensionEmbedding}d',
+                        'status', 'density'],
+                    ascending=[True, False, True], inplace=True)
+
+                catplot_input[f'cluster_{self.dimensionEmbedding}d'] = (
+                    catplot_input[
+                        f'cluster_{self.dimensionEmbedding}d'].astype(str) +
+                    f'; {stat} = ' + catplot_input[stat].astype(str)
+                    )
+
+                catplot_input[f'cluster_{self.dimensionEmbedding}d'] = [
+                    i.split(f'; {stat} = ns')[0] for i in
+                    catplot_input[f'cluster_{self.dimensionEmbedding}d']]
+
+                sns.set(font_scale=0.4)
+                g = sns.catplot(
+                    x='status', y='density',
+                    hue=catplot_input['Sample'],
+                    col=f'cluster_{self.dimensionEmbedding}d', col_wrap=6,
+                    data=catplot_input, kind='bar', palette=sample_color_dict,
+                    height=2, aspect=0.8, sharex=True, sharey=False,
+                    edgecolor='k', linewidth=0.1, legend=False)
+
+                g.set(ylim=(0.0, None))
+
+                file_names = [
+                    get_key(i) for i in
+                    natsorted(catplot_input['Sample'].unique())]
+
+                sample_conds = [
+                    self.sampleConditions[i]
+                    for i in file_names]
+
+                sample_abbrs = [
+                    self.sampleConditionAbbrs[i]
+                    for i in file_names]
+
+                cond_abbr = [
+                    f'{i}-{j}' for i, j in zip(sample_conds, sample_abbrs)]
+
+                handles_dict = dict(zip(
+                    natsorted(catplot_input['Sample'].unique()), cond_abbr))
+
+                legend_handles = []
+                for k, v in handles_dict.items():
+                    legend_handles.append(
+                        Line2D([0], [0], marker='o', color='none',
+                               label=v, markerfacecolor=sample_color_dict[k],
+                               markeredgecolor='k', markeredgewidth=0.2,
+                               markersize=5.0))
+
+                plt.legend(
+                    handles=legend_handles,
+                    prop={'size': 5.0},
+                    bbox_to_anchor=[1.03, 1.0])
+
+                plt.savefig(
+                    os.path.join(frequency_dir, 'catplot.pdf'),
+                    bbox_inches='tight')
+                plt.close('all')
+
+                print()
+
+            else:
+                print(
+                    'Only one binary declaration ' +
+                    f'class represented for {list(comparison)[0]}. ' +
+                    'No statistics will be computed.')
+                print()
+
         print()
         return data
 
@@ -5388,24 +5963,14 @@ class QC(object):
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-            markers_to_exclude=self.markersToExclude)
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # drop antibody channel exclusions for clustering
         abx_channels = [
             i for i in abx_channels
             if i not in self.channelExclusionsClustering]
-
-        # create thumbnails directory if it hasn't already
-        thumbnails_dir = os.path.join(
-            self.outDir, 'clustering/thumbnails')
-        if not os.path.exists(thumbnails_dir):
-            os.mkdir(thumbnails_dir)
-
-        # create zarr directory if it hasn't already
-        zarr_dir = os.path.join(
-            self.outDir, 'clustering/thumbnails/zarrs')
-        if not os.path.exists(zarr_dir):
-            os.mkdir(zarr_dir)
 
         # create list of tifs sorted from largest to smallest
         # (allows for early test of memory limitation)
@@ -5424,7 +5989,23 @@ class QC(object):
                 open(f'{contrast_dir}/contrast_limits.yml'))
 
         # drop unclustered cells from data
-        data = data[data['cluster'] != -1]
+        data = data[data[f'cluster_{self.dimensionEmbedding}d'] != -1]
+
+        # create thumbnails directory if it hasn't already
+        thumbnails_dir = os.path.join(
+            self.outDir, 'clustering', f'{self.dimensionEmbedding}d',
+            'thumbnails'
+            )
+        if not os.path.exists(thumbnails_dir):
+            os.makedirs(thumbnails_dir)
+
+        # create zarr directory if it hasn't already
+        zarr_dir = os.path.join(
+            self.outDir, 'clustering', f'{self.dimensionEmbedding}d',
+            'thumbnails', 'zarrs'
+            )
+        if not os.path.exists(zarr_dir):
+            os.makedirs(zarr_dir)
 
         #######################################################################
 
@@ -5443,14 +6024,18 @@ class QC(object):
                     .split(', '))
                 completed_clusters = [int(i) for i in completed_clusters]
 
-            total_clusters = set(data['cluster'].unique())
+            total_clusters = set(
+                data[f'cluster_{self.dimensionEmbedding}d'].unique()
+                )
             clusters_to_run = natsorted(
                 total_clusters.difference(set(completed_clusters)))
             print(f'Clusters to run: {len(clusters_to_run)}')
         else:
             # create a list of clusters to run
             completed_clusters = []
-            clusters_to_run = natsorted(data['cluster'].unique())
+            clusters_to_run = natsorted(
+                data[f'cluster_{self.dimensionEmbedding}d'].unique()
+                )
             print(f'Clusters to run: {len(clusters_to_run)}')
 
         # read names of samples that have already been run
@@ -5467,7 +6052,9 @@ class QC(object):
 
             total_zarrs = [
                 f'c{i}_{j}' for j in tifs
-                for i in natsorted(data['cluster'].unique())]
+                for i in natsorted(
+                    data[f'cluster_{self.dimensionEmbedding}d'].unique())
+                    ]
             zarrs_to_run = [
                 x for x in total_zarrs if x not in completed_zarrs]
             print(f'Samples to Zarr: {len(zarrs_to_run)}')
@@ -5477,7 +6064,9 @@ class QC(object):
             completed_zarrs = []
             total_zarrs = [
                 f'c{i}_{j}' for j in tifs
-                for i in natsorted(data['cluster'].unique())]
+                for i in natsorted(
+                    data[f'cluster_{self.dimensionEmbedding}d'].unique())
+                    ]
             zarrs_to_run = total_zarrs
             print(f'Samples to Zarr: {len(zarrs_to_run)}')
             print()
@@ -5493,7 +6082,9 @@ class QC(object):
             markers_to_show = cluster_expression(
                 df=data, markers=abx_channels,
                 cluster=cluster, num_proteins=3,
-                standardize='within')
+                clus_dim=self.dimensionEmbedding,
+                standardize='within'
+                )
 
             markers_to_show = [
                 i for i in [dna1] + markers_to_show[1].split(', ')]
@@ -5518,7 +6109,7 @@ class QC(object):
                 # crop out thumbnail images
                 sample_cluster_subset = data[
                     (data['Sample'] == sample.split('.')[0])
-                    & (data['cluster'] == cluster)]
+                    & (data[f'cluster_{self.dimensionEmbedding}d'] == cluster)]
 
                 sample_cluster_subset.reset_index(
                     drop=True, inplace=True)
@@ -5531,8 +6122,9 @@ class QC(object):
                         data=0,
                         index=list(range(dif)),
                         columns=sample_cluster_subset.columns)
-                    sample_cluster_subset = (
-                        sample_cluster_subset.append(extra_rows))
+                    sample_cluster_subset = pd.concat(
+                        [sample_cluster_subset, extra_rows], axis=0
+                        )
                     sample_cluster_subset.reset_index(
                         drop=True, inplace=True)
 
@@ -5667,7 +6259,7 @@ class QC(object):
                     else:
                         file_path = os.path.join(
                             f'{self.inDir}/seg/',
-                            f"{sample.split('.tif')[0]}.ome.tif")
+                            f"{sample.split('.tif')[0]}.*tif")
                         seg_img = imread(file_path, key=0)
 
                     seg_img = gray2rgb(seg_img)
@@ -5719,11 +6311,16 @@ class QC(object):
                             (self.squareWindowDimension,
                              self.squareWindowDimension))
 
-                        long_table = long_table.append(
+                        append_df = pd.DataFrame.from_dict(
                             {'sample': sample.split('.')[0],
                              'example': int(example),
-                             'image': blank_img},
-                            ignore_index=True)
+                             'image': blank_img}, orient='index'
+                             ).T
+
+                        long_table = pd.concat(
+                            [long_table, append_df],
+                            axis=0, ignore_index=True
+                            )
 
                     else:
                         # specify window x, y ranges
@@ -5771,11 +6368,16 @@ class QC(object):
 
                             thumbnail += seg_thumbnail
 
-                        long_table = long_table.append(
+                        append_df = pd.DataFrame.from_dict(
                             {'sample': sample.split('.')[0],
                              'example': int(example),
-                             'image': thumbnail},
-                            ignore_index=True)
+                             'image': thumbnail}, orient='index'
+                             ).T
+
+                        long_table = pd.concat(
+                            [long_table, append_df],
+                            axis=0, ignore_index=True
+                            )
                 print()
 
             # known pandas foible: integers are stored as floats
@@ -5814,7 +6416,7 @@ class QC(object):
             g.set_titles(
                 col_template="Ex. {col_name}",
                 row_template="Smpl. {row_name}",
-                fontweight='bold', size=10)
+                fontweight='bold', size=7)
 
             custom_lines = []
             for k, v in color_dict.items():
@@ -5842,308 +6444,6 @@ class QC(object):
                thumbnails_dir, 'completed_clusters.txt'), 'w') as f:
                 f.write(str(completed_clusters))
             print()
-
-        print()
-        return data
-
-    @module
-    def frequencyStats(data, self, args):
-
-        # prepare input data for computing statistics
-        stats_input = data[['Sample', 'Replicate', 'cluster']][
-            data['cluster'] >= 0]
-
-        # loop over comma-delimited binary declarations
-        for i in range(len(list(self.sampleStatuses.values())[0].split(', '))):
-
-            # get unique declaration categories (should be 2 per test)
-            comparison = set(
-                [j.split(', ')[i] for j in self.sampleStatuses.values()
-                 if '-UNK' not in j.split(', ')[i]])
-
-            if len(comparison) > 1:
-
-                # assign test and control groups
-                test = [
-                    i for i in comparison if i not in self.controlGroups][0]
-                control = [
-                    i for i in comparison if i in self.controlGroups][0]
-
-                # create frequency stats directory if it hasn't already
-                frequency_dir = os.path.join(
-                    self.outDir, 'clustering/frequency_stats',
-                    f"{test}_v_{control}")
-                if not os.path.exists(frequency_dir):
-                    os.makedirs(frequency_dir)
-
-                # create single-column dataFrame containing all sample names
-                # to pad counts tables with zeros if a celltype
-                # is not in a tissue
-                pad = pd.DataFrame(
-                    natsorted(stats_input['Sample'].unique())).rename(
-                        columns={0: 'Sample'})
-
-                cluster_list = []
-                ratio_list = []
-                dif_list = []
-                pval_list = []
-
-                # intialize a dataframe to collect catplot data
-                catplot_input = pd.DataFrame()
-
-                # loop over clusters
-                for cluster, group in stats_input.groupby('cluster'):
-
-                    print(
-                        f'Calculating log2({test}/{control})'
-                        f' of mean cell density for cluster {str(cluster)}.')
-
-                    group = (
-                        group.groupby(['Sample', 'Replicate', 'cluster'])
-                        .size()
-                        .reset_index(drop=False)
-                        .rename(columns={0: 'count'})
-                        )
-
-                    group = (
-                        group
-                        .merge(pad, how='right', on='Sample')
-                        .sort_values(by='count', ascending=False)
-                        )
-
-                    # guard against NaNs induced by the absence
-                    # of a given cluster in one or
-                    # more of the tissue samples
-                    group['count'] = [
-                        0 if np.isnan(i) else int(i) for i in group['count']]
-
-                    # get sample file names (i.e. sampleMetadata keys)
-                    # from config.yml based on "Sample" column
-                    # (first elements of sampleMetadata vals)
-                    def get_key(val):
-                        for key, value in self.sampleNames.items():
-                            if val == value:
-                                return key
-
-                        return "key doesn't exist"
-                    file_names = [get_key(i) for i in group['Sample']]
-
-                    # add binary declarations column to group data
-                    group['status'] = [
-                        self.sampleStatuses[j].split(', ')[i]
-                        for j in file_names]
-
-                    # add replicates column to group data
-                    group['Replicate'] = [
-                        self.sampleReplicates[i]
-                        for i in file_names]
-
-                    group['cluster'] = cluster
-
-                    # drop samples for which a declaration cannot be made
-                    group = group[~group['status'].str.contains('-UNK')]
-
-                    group.reset_index(drop=True, inplace=True)
-
-                    # get denominator cell count for each sample
-                    if self.denominatorCluster is None:
-                        group['tissue_count'] = [
-                            len(stats_input[stats_input['Sample'] == i]) for
-                            i in group['Sample']]
-                    else:
-                        group['tissue_count'] = [
-                            len(stats_input[(stats_input['Sample'] == i) &
-                                (stats_input['cluster'] ==
-                                 self.denominatorCluster)])
-                            for i in group['Sample']]
-
-                    # compute density of cells per sample
-                    group['density'] = group['count']/group['tissue_count']
-
-                    # append group data to catplot_input
-                    catplot_input = catplot_input.append(group)
-
-                    # isolate test and control group values
-                    cnd1_values = group['density'][group['status'] == test]
-                    cnd2_values = group['density'][group['status'] == control]
-
-                    # perform Welch's t-test (equal_var=False)
-                    stat, pval = ttest_ind(
-                        cnd1_values, cnd2_values,
-                        axis=0, equal_var=False, nan_policy='propagate')
-
-                    # round resulting values
-                    stat = round(stat, 3)
-                    pval = round(pval, 3)
-
-                    # compute mean of test and control group values
-                    cnd1_mean = np.mean(cnd1_values)
-                    cnd2_mean = np.mean(cnd2_values)
-
-                    # compute mean ratio
-                    ratio = np.log2(
-                        (cnd1_mean + 0.000001)/(cnd2_mean + 0.000001))
-
-                    # compute mean difference
-                    dif = cnd1_mean-cnd2_mean
-
-                    cluster_list.append(cluster)
-                    ratio_list.append(ratio)
-                    dif_list.append(dif)
-                    pval_list.append(pval)
-
-                # create stats dataframe
-                statistics = pd.DataFrame(
-                    list(zip(cluster_list, ratio_list, dif_list, pval_list)),
-                    columns=['cluster', 'ratio', 'dif', 'pval']).sort_values(
-                        by='cluster')
-
-                # save total stats table
-                statistics.to_csv(
-                    os.path.join(
-                        frequency_dir, 'stats_total.csv'), index=False)
-
-                # compute FDR p-val corrections
-                # (uses statsmodels.stats.multitest implementation)
-                rejected, p_adjust = fdrcorrection(
-                    statistics['pval'].tolist(), alpha=0.05,
-                    method='indep', is_sorted=False)
-
-                statistics['qval'] = p_adjust
-
-                if self.FDRCorrection:
-                    stat = 'qval'
-                else:
-                    stat = 'pval'
-
-                # isolate statistically significant stat values
-                significant = statistics[
-                    statistics[stat] <= 0.05].sort_values(by=stat)
-
-                # save significant stats table
-                significant.to_csv(
-                    os.path.join(
-                        frequency_dir, 'stats_sig.csv'), index=False)
-
-                # plot
-                sns.set_style('whitegrid')
-                fig, ax = plt.subplots()
-                plt.scatter(abs(significant['dif']), significant['ratio'])
-
-                for label, qval, x, y in zip(
-                  significant['cluster'], significant[stat],
-                  abs(significant['dif']), significant['ratio']):
-
-                    plt.annotate(
-                        (label, f'{stat[0]}=' + str(qval)), size=3,
-                        xy=(x, y), xytext=(10, 10),
-                        textcoords='offset points', ha='right', va='bottom',
-                        bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
-                                  alpha=0.0))
-
-                for tick in ax.xaxis.get_major_ticks():
-                    tick.label.set_fontsize(5)
-
-                plt.title(
-                    f'{test} vs. {control} ({stat[0]}<0.05)',
-                    fontsize=12
-                    )
-                plt.xlabel(
-                    f'abs({test} - {control})', fontsize=10
-                    )
-                plt.ylabel(
-                    f'log2({test} / {control})',
-                    fontsize=10
-                    )
-                plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
-                plt.close()
-
-                catplot_input.reset_index(drop=True, inplace=True)
-
-                catplot_input[stat] = [
-                     'ns' if i not in significant['cluster'].unique() else
-                     significant[stat][significant['cluster'] == i].values[0]
-                     for i in catplot_input['cluster']]
-
-                # build cmap
-                cmap = categorical_cmap(
-                    numUniqueSamples=len(catplot_input['Sample'].unique()),
-                    numCatagories=10,
-                    cmap='tab10',
-                    continuous=False
-                    )
-
-                sample_color_dict = dict(
-                    zip(natsorted(catplot_input['Sample'].unique()),
-                        cmap.colors))
-
-                catplot_input.sort_values(
-                    by=['cluster', 'status', 'density'],
-                    ascending=[True, False, True], inplace=True)
-
-                catplot_input['cluster'] = (
-                    catplot_input['cluster'].astype(str) + f'; {stat} = ' +
-                    catplot_input[stat].astype(str)
-                    )
-
-                catplot_input['cluster'] = [
-                    i.split(f'; {stat} = ns')[0]
-                    for i in catplot_input['cluster']]
-
-                sns.set(font_scale=0.4)
-                g = sns.catplot(
-                    x='status', y='density',
-                    hue=catplot_input['Sample'], col='cluster', col_wrap=6,
-                    data=catplot_input, kind='bar', palette=sample_color_dict,
-                    height=2, aspect=0.8, sharex=True, sharey=False,
-                    edgecolor='k', linewidth=0.1, legend=False)
-
-                g.set(ylim=(0.0, None))
-
-                file_names = [
-                    get_key(i) for i in
-                    natsorted(catplot_input['Sample'].unique())]
-
-                sample_conds = [
-                    self.sampleConditions[i]
-                    for i in file_names]
-
-                sample_abbrs = [
-                    self.sampleConditionAbbrs[i]
-                    for i in file_names]
-
-                cond_abbr = [
-                    f'{i}-{j}' for i, j in zip(sample_conds, sample_abbrs)]
-
-                handles_dict = dict(zip(
-                    natsorted(catplot_input['Sample'].unique()), cond_abbr))
-
-                legend_handles = []
-                for k, v in handles_dict.items():
-                    legend_handles.append(
-                        Line2D([0], [0], marker='o', color='none',
-                               label=v, markerfacecolor=sample_color_dict[k],
-                               markeredgecolor='k', markeredgewidth=0.2,
-                               markersize=5.0))
-
-                plt.legend(
-                    handles=legend_handles,
-                    prop={'size': 5.0},
-                    bbox_to_anchor=[1.03, 1.0])
-
-                plt.savefig(
-                    os.path.join(frequency_dir, 'catplot.pdf'),
-                    bbox_inches='tight')
-                plt.close('all')
-
-                print()
-
-            else:
-                print(
-                    'Only one binary declaration ' +
-                    f'class represented for {list(comparison)[0]}. ' +
-                    'No statistics will be computed.')
-                print()
 
         print()
         return data
