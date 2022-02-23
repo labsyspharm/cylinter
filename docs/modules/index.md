@@ -21,8 +21,8 @@ has_children: true
 | `clustering` | Identify cell states | [Details]({{ site.baseurl }}/modules/clustering)
 | `clustermap` | Visualize cell state protein expression | [Details]({{ site.baseurl }}/modules/clustermap)
 | `setContrast` | Adjust image contrast settings | [Details]({{ site.baseurl }}/modules/setContrast)
-| `curateThumbnails` | Visualize example cells from each cluster | [Details]({{ site.baseurl }}/modules/curateThumbnails)
 | `frequencyStats` | Compute cluster frequency statistics | [Details]({{ site.baseurl }}/modules/frequencyStats) |
+| `curateThumbnails` | Visualize example cells from each cluster | [Details]({{ site.baseurl }}/modules/curateThumbnails)
 
 <br/>
 
