@@ -25,7 +25,7 @@ requires = [
     'PyOpenGL-accelerate',  # suppresses "No OpenGL_accelerate..." message
 ]
 
-VERSION = '0.0.37'
+VERSION = '0.0.38'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
