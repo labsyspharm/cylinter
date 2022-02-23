@@ -3132,7 +3132,7 @@ class QC(object):
                     clean = pd.DataFrame()
                     noisy = pd.DataFrame()
                     for name, cluster in chunk.groupby(
-                      f'cluster_{self.dimensionEmbedding}d'):
+                      f'cluster_{self.dimensionEmbeddingQC}d'):
                         if name != -1:
                             # if a cluster contains
                             # >= n% noisy data,
@@ -3171,7 +3171,8 @@ class QC(object):
                     # consider -1 cells from clean data
                     # to be "clean"
                     clean_outliers = chunk[
-                        (chunk[f'cluster_{self.dimensionEmbedding}d'] == -1) &
+                        (chunk[f'cluster_{self.dimensionEmbeddingQC}d'] == -1)
+                        &
                         (chunk['QC_status'] == 'clean')
                         ].copy()
                     clean = pd.concat([clean, clean_outliers], axis=0)
@@ -3179,7 +3180,8 @@ class QC(object):
                     # consider -1 cells from noisy data
                     # to be "noisy"
                     noisy_outliers = chunk[
-                        (chunk[f'cluster_{self.dimensionEmbedding}d'] == -1) &
+                        (chunk[f'cluster_{self.dimensionEmbeddingQC}d'] == -1)
+                        &
                         (chunk['QC_status'] == 'noisy')
                         ].copy()
                     noisy = pd.concat([noisy, noisy_outliers], axis=0)
@@ -3259,7 +3261,7 @@ class QC(object):
                             match_reference_implementation=False).fit(
                                 chunk[['emb1', 'emb2']])
 
-                        chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                        chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = (
                             clustering.labels_
                             )
 
@@ -3276,12 +3278,12 @@ class QC(object):
 
                         # PLOT embedding
                         for color_by in [
-                          f'cluster_{self.dimensionEmbedding}d',
+                          f'cluster_{self.dimensionEmbeddingQC}d',
                           'QC_status', 'Reclass', 'Sample']:
 
                             highlight = 'none'
 
-                            if color_by == f'cluster_{self.dimensionEmbedding}d':
+                            if color_by == f'cluster_{self.dimensionEmbeddingQC}d':
 
                                 # build cmap
                                 cmap = categorical_cmap(
@@ -3336,7 +3338,7 @@ class QC(object):
                                     hi_markers = cluster_expression(
                                         df=chunk, markers=abx_channels,
                                         cluster=i, num_proteins=3,
-                                        clus_dim=self.dimensionEmbedding,
+                                        clus_dim=self.dimensionEmbeddingQC,
                                         standardize='within'
                                         )
 
@@ -3619,12 +3621,12 @@ class QC(object):
                                     # expressed markers
                                     chunk_copy.loc[
                                         chunk_copy.index.isin(selector.ind),
-                                        f'cluster_{self.dimensionEmbedding}d'
+                                        f'cluster_{self.dimensionEmbeddingQC}d'
                                         ] = 1000
                                     hi_markers = cluster_expression(
                                         df=chunk_copy, markers=abx_channels,
                                         cluster=1000, num_proteins=3,
-                                        clus_dim=self.dimensionEmbedding,
+                                        clus_dim=self.dimensionEmbeddingQC,
                                         standardize='within'
                                         )
 
@@ -3935,7 +3937,7 @@ class QC(object):
                                 match_reference_implementation=False).fit(
                                     chunk[['emb1', 'emb2']])
 
-                            chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                            chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = (
                                 clustering.labels_
                                 )
 
@@ -3988,7 +3990,7 @@ class QC(object):
                     # (not applicable to first chunk, which gets
                     # clustered during plotting above)
 
-                    if f'cluster_{self.dimensionEmbedding}d' not in chunk.columns:
+                    if f'cluster_{self.dimensionEmbeddingQC}d' not in chunk.columns:
 
                         print()
                         print(
@@ -4011,7 +4013,7 @@ class QC(object):
                             match_reference_implementation=False).fit(
                                 chunk[['emb1', 'emb2']]
                                 )
-                        chunk[f'cluster_{self.dimensionEmbedding}d'] = (
+                        chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = (
                             clustering.labels_
                             )
 
@@ -4058,7 +4060,7 @@ class QC(object):
                     # exit program if all cells are considered ambiguous by the
                     # clustering algorithm (likely too few cells per chunk)
                     if chunk[
-                        f'cluster_{self.dimensionEmbedding}d'].eq(-1).all():
+                        f'cluster_{self.dimensionEmbeddingQC}d'].eq(-1).all():
                         print(
                             f'WARNING: All cells in chunk {chunk_index + 1} ' +
                             'were deemed ambiguous by clustering algorithm ' +
@@ -4067,13 +4069,14 @@ class QC(object):
                         exit()
 
                     clustermap_input = chunk[
-                        chunk[f'cluster_{self.dimensionEmbedding}d'] != -1]
+                        chunk[f'cluster_{self.dimensionEmbeddingQC}d'] != -1]
 
                     cluster_heatmap_input = (
                         clustermap_input[
                             abx_channels +
-                            [f'cluster_{self.dimensionEmbedding}d']]
-                        .groupby(f'cluster_{self.dimensionEmbedding}d').mean()
+                            [f'cluster_{self.dimensionEmbeddingQC}d']]
+                        .groupby(f'cluster_{self.dimensionEmbeddingQC}d')
+                        .mean()
                         )
 
                     sns.set(font_scale=0.8)
