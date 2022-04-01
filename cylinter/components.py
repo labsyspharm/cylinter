@@ -6,6 +6,7 @@ import os
 import re
 import glob
 import yaml
+import csv as csv_module
 import math
 import pickle
 from ast import literal_eval
@@ -39,6 +40,8 @@ import matplotlib.patheffects as path_effects
 from matplotlib.patches import Ellipse
 from matplotlib import animation
 
+from PIL import Image, ImageDraw
+
 import napari
 from tifffile import imread
 from tifffile import TiffFile
@@ -54,13 +57,15 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize as norm
 
 from natsort import natsorted, order_by_index, index_natsorted
-from numcodecs import Blosc
+# from numcodecs import Blosc
 from datetime import datetime
 from joblib import Memory
 from scipy.stats import ttest_ind
 
+from subprocess import run
+
 from .utils import (
-    dataset_files, log_banner, log_multiline,
+    dataset_files, log_banner, log_multiline, reorganize_dfcolumns,
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
     marker_channel_number, categorical_cmap, cluster_expression, clearRAM,
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
@@ -148,10 +153,12 @@ class QC(object):
                  samplesToRemoveClusteringQC=None,
                  fracForEmbeddingQC=None,
                  dimensionEmbeddingQC=None,
+                 topMarkersQC=None,
+                 metricQC=None,
                  perplexityQC=None,
                  earlyExaggerationQC=None,
                  learningRateTSNEQC=None,
-                 metricQC=None,
+
                  randomStateQC=None,
                  nNeighborsQC=None,
                  learningRateUMAPQC=None,
@@ -174,6 +181,7 @@ class QC(object):
                  normalizeTissueCounts=None,
                  fracForEmbedding=None,
                  dimensionEmbedding=None,
+                 topMarkers=None,
                  colormapChannel=None,
                  perplexity=None,
                  earlyExaggeration=None,
@@ -193,7 +201,8 @@ class QC(object):
 
                  # curateThumbnails —
                  numThumbnails=None,
-                 squareWindowDimension=None,
+                 topMarkersThumbnails=None,
+                 windowSize=None,
                  segOutlines=None,
                  ):
 
@@ -229,10 +238,11 @@ class QC(object):
         self.samplesToRemoveClusteringQC = samplesToRemoveClusteringQC
         self.fracForEmbeddingQC = fracForEmbeddingQC
         self.dimensionEmbeddingQC = dimensionEmbeddingQC
+        self.topMarkersQC = topMarkersQC
+        self.metricQC = metricQC
         self.perplexityQC = perplexityQC
         self.earlyExaggerationQC = earlyExaggerationQC
         self.learningRateTSNEQC = learningRateTSNEQC
-        self.metricQC = metricQC
         self.randomStateQC = randomStateQC
         self.nNeighborsQC = nNeighborsQC
         self.learningRateUMAPQC = learningRateUMAPQC
@@ -253,6 +263,7 @@ class QC(object):
         self.normalizeTissueCounts = normalizeTissueCounts
         self.fracForEmbedding = fracForEmbedding
         self.dimensionEmbedding = dimensionEmbedding
+        self.topMarkers = topMarkers
         self.colormapChannel = colormapChannel
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
@@ -270,7 +281,8 @@ class QC(object):
         self.FDRCorrection = FDRCorrection
 
         self.numThumbnails = numThumbnails
-        self.squareWindowDimension = squareWindowDimension
+        self.topMarkersThumbnails = topMarkersThumbnails
+        self.windowSize = windowSize
         self.segOutlines = segOutlines
 
     @module
@@ -293,9 +305,8 @@ class QC(object):
 
                 file_name = file.split('.csv')[0]
 
-                # disregard samples specified in
-                # "samplesToExclude" config parameter
                 sample_name = self.sampleNames[file_name]
+
                 if sample_name not in self.samplesToExclude:
 
                     print(f'IMPORTING sample {sample_name}')
@@ -352,8 +363,6 @@ class QC(object):
 #                          in markers['marker_name']])
 
                     # select boilerplate columns
-                    # and drop mask object columns not specified by
-                    # the "maskObject" parameter in config.yml
                     cols = (
                         ['CellID', 'X_centroid', 'Y_centroid', 'Area',
                          'MajorAxisLength', 'MinorAxisLength',
@@ -363,16 +372,6 @@ class QC(object):
                          )
 
                     csv = csv[cols]
-
-                    # remap mask objects to a common name for convenience
-                    # use with mask object dict above
-                    csv.columns = (
-                        ['CellID', 'X_centroid', 'Y_centroid', 'Area',
-                         'MajorAxisLength', 'MinorAxisLength',
-                         'Eccentricity', 'Solidity', 'Extent',
-                         'Orientation'] +
-                        [i for i in markers['marker_name'] if i in csv.columns]
-                         )
 
                     # add sample column
                     csv['Sample'] = sample_name
@@ -393,19 +392,9 @@ class QC(object):
                     print(f'censoring sample {sample_name}')
 
         print()
-
         # stack dataframes row-wise
         data = pd.concat(df_list, axis=0)
         del df_list
-
-        # organize columns
-        cols = (
-            ['CellID', 'Sample', 'Condition', 'Replicate', 'X_centroid',
-             'Y_centroid', 'Area', 'MajorAxisLength', 'MinorAxisLength',
-             'Eccentricity', 'Solidity', 'Extent', 'Orientation'] +
-            [i for i in markers['marker_name'] if i in data.columns]
-             )
-        data = data[cols]
 
         # ONLY SELECT CHANNELS COMMON TO ALL SAMPLES
         channels_set = list(set.intersection(*channel_setlist))
@@ -426,12 +415,15 @@ class QC(object):
                 )
         data = data[channels_set].copy()
 
-        # perform data subsetting
-        data = data.sample(frac=1.0, random_state=1)
+        # sort by Sample and CellID to be tidy
         data.sort_values(by=['Sample', 'CellID'], inplace=True)
 
         # assign global index
         data.reset_index(drop=True, inplace=True)
+
+        # ensure MCMICRO-generated columns come first and
+        # are in the same order as csv input
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -466,114 +458,103 @@ class QC(object):
         # loop over samples
         for sample_name in self.samplesForROISelection:
 
-            print(f'Working on sample {sample_name}')
+            if sample_name in data['Sample'].unique():
 
-            try:
-                # make a list of exisiting polygon vertices
-                polygon_dict[sample_name]
+                print(f'Working on sample {sample_name}')
 
-                shapes = [polygon_dict[sample_name][i][0] for
-                          i in range(0, len(polygon_dict[sample_name]))]
-                polygons = [polygon_dict[sample_name][i][1] for
-                            i in range(0, len(polygon_dict[sample_name]))]
+                try:
+                    # make a list of exisiting polygon vertices
+                    polygon_dict[sample_name]
 
-            except KeyError:
-                # create empty list to store polygon vertices
-                polygons = []
+                    shapes = [polygon_dict[sample_name][i][0] for
+                              i in range(0, len(polygon_dict[sample_name]))]
+                    polygons = [polygon_dict[sample_name][i][1] for
+                                i in range(0, len(polygon_dict[sample_name]))]
 
-            if self.showAbChannels:
-                for e, ch in enumerate(reversed(abx_channels)):
-                    channel_number = marker_channel_number(markers, ch)
+                except KeyError:
+                    # create empty list to store polygon vertices
+                    polygons = []
 
-                    # read antibody image
-                    for file_path in glob.glob(
-                      f'{self.inDir}/tif/{sample_name}.*tif'):
+                if self.showAbChannels:
+                    for e, ch in enumerate(reversed(abx_channels)):
+                        channel_number = marker_channel_number(markers, ch)
 
-                        img = single_channel_pyramid(
-                            file_path, channel=channel_number.item() - 1)
+                        # read antibody image
+                        for file_path in glob.glob(
+                          f'{self.inDir}/tif/{sample_name}.*tif'):
 
-                    if e == 0:
-                        viewer = napari.view_image(
-                            img, rgb=False, blending='additive',
-                            colormap='green', visible=False,
-                            name=ch
-                            )
+                            img = single_channel_pyramid(
+                                file_path, channel=channel_number.item() - 1
+                                )
 
-                    else:
-                        viewer.add_image(
-                            img, rgb=False, blending='additive',
-                            colormap='green', visible=False,
-                            name=ch
-                            )
+                        if e == 0:
+                            viewer = napari.view_image(
+                                img, rgb=False, blending='additive',
+                                colormap='green', visible=False,
+                                name=ch
+                                )
 
-            # read segmentation outlines
-            file_path = f'{self.inDir}/seg/{sample_name}.*tif'
-            seg = single_channel_pyramid(
-                glob.glob(file_path)[0], channel=0)
+                        else:
+                            viewer.add_image(
+                                img, rgb=False, blending='additive',
+                                colormap='green', visible=False,
+                                name=ch
+                                )
 
-            viewer.add_image(
-                seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='gray', visible=False,
-                name='segmentation')
+                # read segmentation outlines
+                file_path = f'{self.inDir}/seg/{sample_name}.*tif'
+                seg = single_channel_pyramid(
+                    glob.glob(file_path)[0], channel=0)
 
-            # read DNA1 channel
-            for file_path in glob.glob(
-              f'{self.inDir}/tif/{sample_name}.*tif'):
-                dna = single_channel_pyramid(file_path, channel=0)
+                viewer.add_image(
+                    seg, rgb=False, blending='additive',
+                    opacity=0.5, colormap='gray', visible=False,
+                    name='segmentation')
 
-            viewer.add_image(
-                dna, rgb=False, blending='additive',
-                colormap='gray', visible=True,
-                name=f'{dna1}: {sample_name}')
+                # read DNA1 channel
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/{sample_name}.*tif'):
+                    dna = single_channel_pyramid(file_path, channel=0)
 
-            if polygons:
-                selection_layer = viewer.add_shapes(
-                    data=polygons,
-                    shape_type=shapes,
-                    ndim=2,
-                    face_color=[1.0, 1.0, 1.0, 0.2],
-                    edge_color=[0.0, 0.66, 1.0, 1.0],
-                    edge_width=10.0,
-                    name='ROI(s)')
-            else:
-                selection_layer = viewer.add_shapes(
-                    data=None,
-                    shape_type='polygon',
-                    ndim=2,
-                    face_color=[1.0, 1.0, 1.0, 0.2],
-                    edge_color=[0.0, 0.66, 1.0, 1.0],
-                    edge_width=10.0,
-                    name='ROI(s)')
+                viewer.add_image(
+                    dna, rgb=False, blending='additive',
+                    colormap='gray', visible=True,
+                    name=f'{dna1}: {sample_name}')
 
-            # clear polygon vertices from polygons list for re-entry below
-            updated_polygons = []
+                if polygons:
+                    selection_layer = viewer.add_shapes(
+                        data=polygons,
+                        shape_type=shapes,
+                        ndim=2,
+                        face_color=[1.0, 1.0, 1.0, 0.2],
+                        edge_color=[0.0, 0.66, 1.0, 1.0],
+                        edge_width=10.0,
+                        name='ROI(s)')
+                else:
+                    selection_layer = viewer.add_shapes(
+                        data=None,
+                        shape_type='polygon',
+                        ndim=2,
+                        face_color=[1.0, 1.0, 1.0, 0.2],
+                        edge_color=[0.0, 0.66, 1.0, 1.0],
+                        edge_width=10.0,
+                        name='ROI(s)')
 
-            # @viewer.mouse_drag_callbacks.append
-            # def get_cell_indices(viewer, event):
-            #
-            #     # on mouse press
-            #     yield
-            #
-            #     # on mouse move
-            #     while event.type == 'mouse_move':
-            #         yield
-            #
-            #     # on mouse release
-            #     selection_layer = viewer.layers['ROI_1']
-            #     yield
+                # clear polygon vertices from polygons list for re-entry below
+                updated_polygons = []
 
-            napari.run()
+                napari.run()
 
-            # store lists vertices per sample as a dictionary
-            for shape_type, roi in zip(
-              selection_layer.shape_type, selection_layer.data):
-                updated_polygons.append((shape_type, roi))
+                # store lists vertices per sample as a dictionary
+                for shape_type, roi in zip(
+                  selection_layer.shape_type, selection_layer.data):
+                    updated_polygons.append((shape_type, roi))
 
-            polygon_dict[sample_name] = updated_polygons
+                polygon_dict[sample_name] = updated_polygons
 
-            f = open(os.path.join(roi_dir, 'polygon_dict.pkl'), 'wb')
-            pickle.dump(polygon_dict, f)
-            f.close()
+                f = open(os.path.join(roi_dir, 'polygon_dict.pkl'), 'wb')
+                pickle.dump(polygon_dict, f)
+                f.close()
 
         print()
 
@@ -587,6 +568,7 @@ class QC(object):
 
                 # if polygon list is not empty
                 if polygon_dict[sample_name]:
+
                     print(
                         'Generating polygon mask(s) ' +
                         f'for sample: {sample_name}')
@@ -609,16 +591,11 @@ class QC(object):
                         )
                     columns, rows = columns.flatten(), rows.flatten()
                     pixel_coords = np.vstack((rows, columns)).T
-                    cell_coords = set(
-                        [tuple(i) for i in np.array(
-                            sample_data[['Y_centroid', 'X_centroid']])])
 
-                    clearRAM(print_usage=False)
-                    del columns, rows
-                    clearRAM(print_usage=False)
+                    # create pillow image to convert into boolean mask
+                    img = Image.new('L', (dna.shape[0], dna.shape[1]))
 
-                    cell_ids_to_drop = set()
-                    mask_coords = set()
+                    polygons = []
                     for shape_type, verts in polygon_dict[sample_name]:
 
                         selection_verts = np.round(verts).astype(int)
@@ -628,63 +605,56 @@ class QC(object):
                             col_max = selection_verts[1][1]
                             row_min = selection_verts[0][0]
                             row_max = selection_verts[2][0]
-                            col_center = col_min + ((col_max-col_min)/2)
-                            row_center = row_min + ((row_max-row_min)/2)
-                            ellipse = Ellipse(
-                                (row_center, col_center),
-                                width=(row_max-row_min),
-                                height=(col_max-col_min)
+
+                            ellipse = [(col_min, row_min), (col_max, row_max)]
+
+                            # update pillow image with ellipse
+                            ImageDraw.Draw(img).ellipse(
+                                ellipse, outline=1, fill=1
                                 )
-                            grid = ellipse.contains_points(pixel_coords)
-                            mask = grid.reshape(
-                                dna.shape[0], dna.shape[1])
-                            mask_coords.update(
-                                [tuple(i) for i in np.argwhere(mask)]
-                                )
+
                         else:
-                            polygon = Path(selection_verts)
-                            grid = polygon.contains_points(pixel_coords)
-                            mask = grid.reshape(
-                                dna.shape[0], dna.shape[1])
-                            mask_coords.update(
-                                [tuple(i) for i in np.argwhere(mask)]
+                            polygon = list(tuple(
+                                zip(selection_verts[:, 1],
+                                    selection_verts[:, 0])
+                                ))
+
+                            # update pillow image with polygon
+                            ImageDraw.Draw(img).polygon(
+                                polygon, outline=1, fill=1
                                 )
 
-                    clearRAM(print_usage=False)
-                    del grid, mask, dna, pixel_coords
-                    clearRAM(print_usage=False)
+                    # convert pillow image into boolean numpy array
+                    mask = np.array(img, dtype=bool)
 
-                    inter = mask_coords.intersection(cell_coords)
+                    # use numpy fancy indexing to get centroids
+                    # where boolean mask is True
+                    ys, xs = zip(*sample_data['tuple'])
+                    inter = mask[ys, xs]
+
+                    # update sample_data with boolean calls per cell
+                    sample_data['inter'] = inter
 
                     if self.delintMode is True:
-                        cell_ids_to_drop.update(
-                            [i[1]['CellID'] for i in sample_data.iterrows() if
-                             i[1]['tuple'] in inter])
+                        idxs_to_drop[sample_name] = list(
+                            sample_data['CellID'][sample_data['inter']]
+                            )
+
                     else:
-                        cell_ids_to_drop.update(
-                            [i[1]['CellID'] for i in sample_data.iterrows()
-                             if i[1]['tuple'] not in inter])
-                        # if not polygons selected for a sample,
-                        # no cell IDs will be dropped
+                        idxs_to_drop[sample_name] = list(
+                            sample_data['CellID'][~sample_data['inter']]
+                            )
 
-                    idxs_to_drop[sample_name] = list(cell_ids_to_drop)
-
-                    clearRAM(print_usage=False)
-                    del sample_data, inter, cell_coords
-                    clearRAM(print_usage=False)
                 else:
                     print(f'No ROIs selected for sample: {sample_name}')
                     idxs_to_drop[sample_name] = []
+
             except KeyError:
                 print(f'No ROIs selected for sample: {sample_name}')
                 idxs_to_drop[sample_name] = []
 
-        # save updated idxs_to_drop dictionary as a csv
-        dict_to_csv(
-            dict=idxs_to_drop,
-            path=os.path.join(roi_dir, 'idxs_to_drop.csv'))
-
         print()
+
         # drop cells from samples
         for sample_name, cell_ids in idxs_to_drop.items():
             if cell_ids:
@@ -727,6 +697,8 @@ class QC(object):
                 os.path.join(
                     image_dir, f'{sample_name}.png'), dpi=1000)
             plt.close('all')
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -817,16 +789,6 @@ class QC(object):
             print()
             print(f'Sample: {name}')
 
-            # read DNA1 channel
-            for file_path in glob.glob(
-              f'{self.inDir}/tif/{name}.*tif'):
-                # create image pyramid
-                dna = single_channel_pyramid(file_path, channel=0)
-
-            # add DNA image to viewer
-            viewer = napari.view_image(
-                dna, rgb=False, name=f'{dna1}: {name}')
-
             # read segmentation outlines
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
@@ -834,11 +796,23 @@ class QC(object):
             seg = single_channel_pyramid(
                 glob.glob(file_path)[0], channel=0)
 
+            # add DNA image to viewer
+            viewer = napari.view_image(
+                seg, rgb=False, visible=False, colormap='gray',
+                opacity=0.5, name='segmentation'
+                )
+
+            # read DNA1 channel
+            for file_path in glob.glob(
+              f'{self.inDir}/tif/{name}.*tif'):
+                # create image pyramid
+                dna = single_channel_pyramid(file_path, channel=0)
+
             # add segmentation image to viewer
             viewer.add_image(
-                seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='gray', visible=False,
-                name='segmentation')
+                dna, rgb=False, blending='additive',
+                name=f'{dna1}: {name}'
+                )
 
             # generate Qt widget to dock in Napari viewer
             hist_widget = QtWidgets.QWidget()
@@ -1063,6 +1037,8 @@ class QC(object):
         # drop unique ID column
         data.drop(columns='handle', inplace=True)
 
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
         print()
         print()
         return data
@@ -1153,17 +1129,6 @@ class QC(object):
             print()
             print(f'Sample: {name}')
 
-            # read DNA1 channel
-            for file_path in glob.glob(
-              f'{self.inDir}/tif/{name}.*tif'):
-
-                # create image pyramid
-                dna = single_channel_pyramid(file_path, channel=0)
-
-            # add DNA image to viewer
-            viewer = napari.view_image(
-                dna, rgb=False, name=f'{dna1}: {name}')
-
             # read segmentation outlines
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
@@ -1171,11 +1136,23 @@ class QC(object):
             seg = single_channel_pyramid(
                 glob.glob(file_path)[0], channel=0)
 
-            # add segmentation outlines image to viewer
+            # add DNA image to viewer
+            viewer = napari.view_image(
+                seg, rgb=False, visible=False, colormap='gray',
+                opacity=0.5, name='segmentation'
+                )
+
+            # read DNA1 channel
+            for file_path in glob.glob(
+              f'{self.inDir}/tif/{name}.*tif'):
+                # create image pyramid
+                dna = single_channel_pyramid(file_path, channel=0)
+
+            # add segmentation image to viewer
             viewer.add_image(
-                seg, rgb=False, blending='additive',
-                opacity=0.5, colormap='gray', visible=False,
-                name='segmentation')
+                dna, rgb=False, blending='additive',
+                name=f'{dna1}: {name}'
+                )
 
             # generate Qt widget to dock in Napari viewer
             hist_widget = QtWidgets.QWidget()
@@ -1398,6 +1375,8 @@ class QC(object):
 
         # drop unique ID column
         data.drop(columns='handle', inplace=True)
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -1765,7 +1744,10 @@ class QC(object):
             # pick up where samples loop left off
             if os.path.exists(os.path.join(cycles_dir, 'idxs_to_drop.csv')):
 
-                # read stored dict
+                # csv file might contain very huge fields, therefore increase
+                # the field_size_limit, then read stored dict
+                csv_module.field_size_limit(sys.maxsize)
+
                 idxs_to_drop = csv_to_dict(
                     os.path.join(cycles_dir, 'idxs_to_drop.csv'))
 
@@ -1827,6 +1809,19 @@ class QC(object):
                     channel_number = marker_channel_number(
                         markers, cycle_num)
 
+                    # read segmentation outlines
+                    file_path = f'{self.inDir}/seg/{name}.*tif'
+
+                    # create image pyramid
+                    seg = single_channel_pyramid(
+                        glob.glob(file_path)[0], channel=0)
+
+                    # add segmentation outlines image to viewer
+                    viewer = napari.view_image(
+                        seg, rgb=False, blending='additive',
+                        opacity=0.5, colormap='gray', visible=False,
+                        name='segmentation')
+
                     # read last DNA channel
                     for file_path in glob.glob(
                       f'{self.inDir}/tif/{name}.*tif'):
@@ -1834,7 +1829,7 @@ class QC(object):
                             file_path, channel=channel_number.item() - 1)
 
                     # add last DNA image to viewer
-                    viewer = napari.view_image(
+                    viewer.add_image(
                         dna_last, rgb=False,
                         blending='additive',
                         colormap='magenta',
@@ -1853,19 +1848,6 @@ class QC(object):
                         dna_first, rgb=False, blending='additive',
                         colormap='green',
                         name=f'{dna1}')
-
-                    # read segmentation outlines
-                    file_path = f'{self.inDir}/seg/{name}.*tif'
-
-                    # create image pyramid
-                    seg = single_channel_pyramid(
-                        glob.glob(file_path)[0], channel=0)
-
-                    # add segmentation outlines image to viewer
-                    viewer.add_image(
-                        seg, rgb=False, blending='additive',
-                        opacity=0.5, colormap='gray', visible=False,
-                        name='segmentation')
 
                     # generate Qt widget to dock in Napari viewer
                     widget = QtWidgets.QWidget()
@@ -2143,6 +2125,8 @@ class QC(object):
         if os.path.exists(os.path.join(cycles_dir, 'cycle_data.parquet')):
             os.remove(os.path.join(cycles_dir, 'cycle_data.parquet'))
 
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
         print()
         return df
 
@@ -2159,7 +2143,9 @@ class QC(object):
         abx_channels_mod = data[abx_channels].copy()
         abx_channels_mod += 0.00000000001
         abx_channels_mod = np.log10(abx_channels_mod)
-        data.loc[:, abx_channels] == abx_channels_mod
+        data.loc[:, abx_channels] = abx_channels_mod
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -2275,7 +2261,7 @@ class QC(object):
             # use hexbins for plotting
             if self.hexbins:
                 g_raw.map(
-                    plt.hexbins, 'signal', 'Area',
+                    plt.hexbin, 'signal', 'Area',
                     gridsize=self.hexbinGridSize,
                     linewidths=0.02, color='dimgrey')
 
@@ -2436,7 +2422,7 @@ class QC(object):
                 # use hexbins for plotting
                 if self.hexbins:
                     g_pruned.map(
-                        plt.hexbins, 'signal', 'Area',
+                        plt.hexbin, 'signal', 'Area',
                         gridsize=self.hexbinGridSize,
                         linewidths=0.02, color='dimgrey')
 
@@ -2765,7 +2751,7 @@ class QC(object):
         for k, v in pruning_dict.items():
             print(f'Applying percentile cutoffs to the {k} channel.')
 
-            for sample in natsorted(data_copy1['Sample'].unique()):
+            for sample in natsorted(data['Sample'].unique()):
 
                 sample_channel_data = data[data['Sample'] == sample][k]
 
@@ -2800,6 +2786,8 @@ class QC(object):
                     ).rename(columns={0: k})
 
                 data.update(rescaled_data)
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -3135,7 +3123,7 @@ class QC(object):
                       f'cluster_{self.dimensionEmbeddingQC}d'):
                         if name != -1:
                             # if a cluster contains
-                            # >= n% noisy data,
+                            # >= n% clean data,
                             # reclassify all clustering
                             # cells as noisy
                             if (
@@ -3145,7 +3133,7 @@ class QC(object):
                               clean_cutoff):
                                 clean = pd.concat([clean, cluster], axis=0)
                             # elif a cluster contains
-                            # >= n% clean data,
+                            # >= n% noisy data,
                             # reclassify all clustering
                             # cells as clean
                             elif (
@@ -3154,8 +3142,6 @@ class QC(object):
                                / len(cluster)) >=
                               noisy_cutoff):
                                 noisy = pd.concat([noisy, cluster], axis=0)
-                            # else keep respective
-                            # cell statuses
                             else:
                                 noisy = pd.concat(
                                     [noisy,
@@ -3169,13 +3155,13 @@ class QC(object):
                                     )
 
                     # consider -1 cells from clean data
-                    # to be "clean"
+                    # to be "noisy"
                     clean_outliers = chunk[
                         (chunk[f'cluster_{self.dimensionEmbeddingQC}d'] == -1)
                         &
                         (chunk['QC_status'] == 'clean')
                         ].copy()
-                    clean = pd.concat([clean, clean_outliers], axis=0)
+                    noisy = pd.concat([noisy, clean_outliers], axis=0)
 
                     # consider -1 cells from noisy data
                     # to be "noisy"
@@ -3335,11 +3321,11 @@ class QC(object):
                                 for e, i in enumerate(
                                   natsorted(chunk[color_by].unique())):
 
-                                    hi_markers = cluster_expression(
+                                    norm_ax, hi_markers = cluster_expression(
                                         df=chunk, markers=abx_channels,
                                         cluster=i, num_proteins=3,
                                         clus_dim=self.dimensionEmbeddingQC,
-                                        standardize='within'
+                                        norm_ax=self.topMarkersQC
                                         )
 
                                     legend_elements.append(
@@ -3347,7 +3333,7 @@ class QC(object):
                                                color='none',
                                                label=(
                                                 f'Cluster {i}: '
-                                                f'{hi_markers}'),
+                                                f'{hi_markers} {norm_ax}'),
                                                markerfacecolor=(
                                                 cmap.colors[e]),
                                                markeredgecolor='none',
@@ -3614,26 +3600,29 @@ class QC(object):
                                 if value in chunk['Sample'].unique():
 
                                     # show highest expression channels
-                                    chunk_copy = chunk.copy()
+                                    lasso = chunk.loc[
+                                        chunk.index.isin(selector.ind)
+                                        ].copy()
 
                                     # assign lassoed data a dummy
                                     # cluster variable and get highest
-                                    # expressed markers
-                                    chunk_copy.loc[
-                                        chunk_copy.index.isin(selector.ind),
+                                    # expressed markers across channels
+                                    lasso[
                                         f'cluster_{self.dimensionEmbeddingQC}d'
                                         ] = 1000
-                                    hi_markers = cluster_expression(
-                                        df=chunk_copy, markers=abx_channels,
+
+                                    norm_ax, hi_markers = cluster_expression(
+                                        df=lasso, markers=abx_channels,
                                         cluster=1000, num_proteins=3,
                                         clus_dim=self.dimensionEmbeddingQC,
-                                        standardize='within'
+                                        norm_ax='channels'
                                         )
 
                                     print()
                                     print(
-                                        'Top three expressed ' +
-                                        f'markers {hi_markers}')
+                                        'Top three expressed '
+                                        f'markers {hi_markers} channels'
+                                        )
 
                                     # superimpose centroids of lassoed noisy
                                     # cells colored by stage removed over
@@ -3770,7 +3759,7 @@ class QC(object):
                             cleanReclass={
                                 'label': 'Clean Reclass', 'max': 1.0},
                             noisyReclass={
-                                'label': 'Nosiy Reclass', 'max': 1.0},
+                                'label': 'Noisy Reclass', 'max': 1.0},
                             )
                         def reclass_selector(
                             cleanReclass: float = 1.0,
@@ -4098,10 +4087,10 @@ class QC(object):
                     ###########################################################
                     # increment chunk_index
                     chunk_index = chunk_index + 1
-                    chunk_index = str(chunk_index)
+
                     with open(
                       os.path.join(reclass_dir, 'chunk_index.txt'), 'w') as f:
-                        f.write(chunk_index)
+                        f.write(str(chunk_index))
 
                     # remove saved chunk.pkl
                     if os.path.exists(os.path.join(reclass_dir, 'chunk.pkl')):
@@ -4266,6 +4255,8 @@ class QC(object):
         # drop indexing handle from data before returning
         if self.metaQC:
             data.drop('handle', axis=1, inplace=True)
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -4563,6 +4554,8 @@ class QC(object):
                 bbox_inches='tight')
             plt.close('all')
 
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
         print()
         print()
         return data
@@ -4857,11 +4850,11 @@ class QC(object):
                             for e, i in enumerate(
                               natsorted(data[color_by].unique())):
 
-                                hi_markers = cluster_expression(
+                                norm_ax, hi_markers = cluster_expression(
                                     df=data, markers=abx_channels,
                                     cluster=i, num_proteins=3,
                                     clus_dim=self.dimensionEmbedding,
-                                    standardize='within'
+                                    norm_ax=self.topMarkers
                                     )
 
                                 legend_elements.append(
@@ -4869,7 +4862,7 @@ class QC(object):
                                            color='none',
                                            label=(
                                             f'Cluster {i}: '
-                                            f'{hi_markers}'),
+                                            f'{hi_markers} {norm_ax}'),
                                            markerfacecolor=(
                                             cmap.colors[e]),
                                            markeredgecolor='none',
@@ -4894,7 +4887,7 @@ class QC(object):
                             else:
                                 print()
                                 print(
-                                    'Selected channel for colormap' +
+                                    'Selected channel for colormap ' +
                                     'not in markers.csv'
                                     )
                                 sys.exit()
@@ -5067,11 +5060,11 @@ class QC(object):
                             for e, i in enumerate(
                               natsorted(data[color_by].unique())):
 
-                                hi_markers = cluster_expression(
+                                norm_ax, hi_markers = cluster_expression(
                                     df=data, markers=abx_channels,
                                     cluster=i, num_proteins=3,
                                     clus_dim=self.dimensionEmbedding,
-                                    standardize='within'
+                                    norm_ax=self.topMarkers
                                     )
 
                                 legend_elements.append(
@@ -5101,7 +5094,7 @@ class QC(object):
                             else:
                                 print()
                                 print(
-                                    'Selected channel for colormap' +
+                                    'Selected channel for colormap ' +
                                     'not in markers.csv'
                                     )
                                 sys.exit()
@@ -5231,22 +5224,29 @@ class QC(object):
                         if value in data['Sample'].unique():
 
                             # show highest expression channels
-                            data_copy = data.copy()
+                            lasso = data.loc[
+                                data.index.isin(selector.ind)
+                                ].copy()
 
-                            # assign lassoed data a dummy cluster variable
-                            # and get highest expressed markers
-                            data_copy.loc[
-                                data_copy.index.isin(selector.ind),
-                                f'cluster_{self.dimensionEmbedding}d'] = 1000
-                            hi_markers = cluster_expression(
-                                df=data_copy, markers=abx_channels,
+                            # assign lassoed data a dummy
+                            # cluster variable and get highest
+                            # expressed markers across channels
+                            lasso[
+                                f'cluster_{self.dimensionEmbedding}d'
+                                ] = 1000
+
+                            norm_ax, hi_markers = cluster_expression(
+                                df=lasso, markers=abx_channels,
                                 cluster=1000, num_proteins=3,
                                 clus_dim=self.dimensionEmbedding,
-                                standardize='within'
+                                norm_ax='channels'
                                 )
 
                             print()
-                            print(f'Top three expressed markers: {hi_markers}')
+                            print(
+                                'Top three expressed '
+                                f'markers {hi_markers} channels'
+                                )
 
                             # superimpose centroids of lassoed noisy cells
                             # colored by stage removed over channel images
@@ -5486,6 +5486,8 @@ class QC(object):
                 clustering_input)
         data[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
 
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
         print()
         print()
         return data
@@ -5535,6 +5537,8 @@ class QC(object):
             plt.savefig(os.path.join(
                     dim_dir, f'clustermap_norm_{name}.pdf'),
                     bbox_inches='tight')
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -5594,7 +5598,7 @@ class QC(object):
               os.path.join(contrast_dir, 'contrast_limits.yml')):
 
                 print()
-                print('Applying existing channel contrast settings.')
+                print('Reading existing contrast settings.')
 
                 contrast_limits = yaml.safe_load(
                     open(f'{contrast_dir}/contrast_limits.yml'))
@@ -5608,6 +5612,19 @@ class QC(object):
 
                 napari.run()
 
+                # create channel settings configuration file and
+                # update with chosen constrast limits
+                contrast_limits = {}
+                for ch in [dna1] + abx_channels:
+                    if ch == dna1:
+                        contrast_limits[ch] = (
+                            viewer.layers[f'{dna1}: {self.viewSample}']
+                            .contrast_limits)
+                    else:
+                        contrast_limits[ch] = viewer.layers[ch].contrast_limits
+
+                with open(f'{contrast_dir}/contrast_limits.yml', 'w') as file:
+                    yaml.dump(contrast_limits, file)
             else:
                 print()
                 print('Channel contrast settings have not been defined.')
@@ -5628,6 +5645,8 @@ class QC(object):
                 with open(f'{contrast_dir}/contrast_limits.yml', 'w') as file:
                     yaml.dump(contrast_limits, file)
 
+            data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
             print()
             print()
             return data
@@ -5642,6 +5661,13 @@ class QC(object):
 
     @module
     def frequencyStats(data, self, args):
+
+        # read marker metadata
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.inDir, 'markers.csv'),
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
 
         # prepare input data for computing statistics
         stats_input = data[
@@ -5957,6 +5983,8 @@ class QC(object):
                     'No statistics will be computed.')
                 print()
 
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+
         print()
         return data
 
@@ -5975,26 +6003,10 @@ class QC(object):
             i for i in abx_channels
             if i not in self.channelExclusionsClustering]
 
-        # create list of tifs sorted from largest to smallest
-        # (allows for early test of memory limitation)
-        tifs = os.listdir(f'{self.inDir}/tif/')
-        tifs.sort(
-            key=lambda f: os.stat(os.path.join(
-                f'{self.inDir}/tif/', f)).st_size, reverse=True)
-
-        # remove tifs of samples censored from the analysis
-        tifs = [i for i in tifs if i.split('.')[0] in data['Sample'].unique()]
-
-        # get image contrast settings
-        contrast_dir = os.path.join(self.outDir, 'contrast')
-        if os.path.exists(f'{contrast_dir}/contrast_limits.yml'):
-            contrast_limits = yaml.safe_load(
-                open(f'{contrast_dir}/contrast_limits.yml'))
-
         # drop unclustered cells from data
         data = data[data[f'cluster_{self.dimensionEmbedding}d'] != -1]
 
-        # create thumbnails directory if it hasn't already
+        # create thumbnails directory
         thumbnails_dir = os.path.join(
             self.outDir, 'clustering', f'{self.dimensionEmbedding}d',
             'thumbnails'
@@ -6002,13 +6014,16 @@ class QC(object):
         if not os.path.exists(thumbnails_dir):
             os.makedirs(thumbnails_dir)
 
-        # create zarr directory if it hasn't already
-        zarr_dir = os.path.join(
-            self.outDir, 'clustering', f'{self.dimensionEmbedding}d',
-            'thumbnails', 'zarrs'
-            )
+        # create zarr directory
+        zarr_dir = os.path.join(thumbnails_dir, 'zarrs')
         if not os.path.exists(zarr_dir):
             os.makedirs(zarr_dir)
+
+        # read image contrast settings
+        contrast_dir = os.path.join(self.outDir, 'contrast')
+        if os.path.exists(f'{contrast_dir}/contrast_limits.yml'):
+            contrast_limits = yaml.safe_load(
+                open(f'{contrast_dir}/contrast_limits.yml'))
 
         #######################################################################
 
@@ -6021,18 +6036,24 @@ class QC(object):
                thumbnails_dir, 'completed_clusters.txt'), 'r') as f:
                 completed_clusters = f.readlines()
                 completed_clusters = (
-                    completed_clusters[0]
-                    .lstrip('[')
-                    .rstrip(']')
-                    .split(', '))
-                completed_clusters = [int(i) for i in completed_clusters]
+                    completed_clusters[0].lstrip('[').rstrip(']').split(', ')
+                    )
+                completed_clusters = set([int(i) for i in completed_clusters])
 
             total_clusters = set(
                 data[f'cluster_{self.dimensionEmbedding}d'].unique()
                 )
+
             clusters_to_run = natsorted(
-                total_clusters.difference(set(completed_clusters)))
+                total_clusters.difference(completed_clusters)
+                )
+
+            # convert completed_clusters from a set to a list to append
+            # to while looping over clusters
+            completed_clusters = list(completed_clusters)
+
             print(f'Clusters to run: {len(clusters_to_run)}')
+            print()
         else:
             # create a list of clusters to run
             completed_clusters = []
@@ -6040,61 +6061,33 @@ class QC(object):
                 data[f'cluster_{self.dimensionEmbedding}d'].unique()
                 )
             print(f'Clusters to run: {len(clusters_to_run)}')
-
-        # read names of samples that have already been run
-        if os.path.exists(
-          os.path.join(thumbnails_dir, 'completed_zarrs.txt')):
-
-            with open(
-              os.path.join(
-               thumbnails_dir, 'completed_zarrs.txt'), 'r') as f:
-                completed_zarrs = f.readlines()
-                completed_zarrs = (
-                    completed_zarrs[0].lstrip("['").rstrip("]'").split("', '"))
-                completed_zarrs = [i for i in completed_zarrs]
-
-            total_zarrs = [
-                f'c{i}_{j}' for j in tifs
-                for i in natsorted(
-                    data[f'cluster_{self.dimensionEmbedding}d'].unique())
-                    ]
-            zarrs_to_run = [
-                x for x in total_zarrs if x not in completed_zarrs]
-            print(f'Samples to Zarr: {len(zarrs_to_run)}')
             print()
-        else:
-            # create a list of samples to run
-            completed_zarrs = []
-            total_zarrs = [
-                f'c{i}_{j}' for j in tifs
-                for i in natsorted(
-                    data[f'cluster_{self.dimensionEmbedding}d'].unique())
-                    ]
-            zarrs_to_run = total_zarrs
-            print(f'Samples to Zarr: {len(zarrs_to_run)}')
-            print()
+
+        #######################################################################
 
         for cluster in clusters_to_run:
 
-            print(f'Cluster: {cluster}')
-
-            # create dataframe to collect image thumbnails and their metadata
+            # create dataframe to collect thumbnail images and their metadata
             long_table = pd.DataFrame()
 
-            # get cycle 1 dna, plus top three expressed markers
-            markers_to_show = cluster_expression(
+            # identify top expressed markers
+            norm_ax, hi_markers = cluster_expression(
                 df=data, markers=abx_channels,
                 cluster=cluster, num_proteins=3,
                 clus_dim=self.dimensionEmbedding,
-                standardize='within'
+                norm_ax=self.topMarkersThumbnails
                 )
 
-            markers_to_show = [
-                i for i in [dna1] + markers_to_show[1].split(', ')]
-            print(f'Markers to show: {markers_to_show}')
-            print()
+            # combine DNA1 with top expressed markers
+            markers_to_show = [dna1] + hi_markers
 
-            # create marker color dict
+            # get marker channel numbers from markers.csv
+            channel_nums = []
+            for marker in markers_to_show:
+                channel_number = marker_channel_number(markers, marker)
+                channel_nums.append(str(channel_number.item()))
+
+            # create marker LUT
             color_dict = {}
             for i, j in zip(
               markers_to_show,
@@ -6102,351 +6095,220 @@ class QC(object):
                (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)]):
                 color_dict[i] = j
 
-            for sample in tifs:
+            for sample in [i for i in data['Sample'].unique()]:
 
-                print(f"Sample: {sample.split('.')[0]}")
-                print(
-                    f'Collecting cluster {cluster} ' +
-                    f'centroids in {sample}')
+                # isolate data for current cluster and sample
+                cellcutter_input = data[
+                    (data[f'cluster_{self.dimensionEmbedding}d']
+                     == cluster) &
+                    (data['Sample'] == sample)
+                    ]
 
-                # crop out thumbnail images
-                sample_cluster_subset = data[
-                    (data['Sample'] == sample.split('.')[0])
-                    & (data[f'cluster_{self.dimensionEmbedding}d'] == cluster)]
+                # randomly select example cells
+                if len(cellcutter_input) > self.numThumbnails:
 
-                sample_cluster_subset.reset_index(
-                    drop=True, inplace=True)
-
-                if self.numThumbnails > len(sample_cluster_subset):
-
-                    dif = self.numThumbnails - len(sample_cluster_subset)
-
-                    extra_rows = pd.DataFrame(
-                        data=0,
-                        index=list(range(dif)),
-                        columns=sample_cluster_subset.columns)
-                    sample_cluster_subset = pd.concat(
-                        [sample_cluster_subset, extra_rows], axis=0
+                    cellcutter_input = cellcutter_input.sample(
+                        n=self.numThumbnails, random_state=1
                         )
-                    sample_cluster_subset.reset_index(
-                        drop=True, inplace=True)
 
-                else:
-                    sample_cluster_subset = (
-                        sample_cluster_subset.sample(
-                            n=self.numThumbnails, random_state=3))
+                # generate cellcutter zarr file if it doesn't already exist
+                if not os.path.exists(
+                  os.path.join(
+                    zarr_dir, f'clus{cluster}_{sample}'
+                    f'_win{self.windowSize}.zarr'
+                    )
+                  ):
 
-                centroids = sample_cluster_subset[
-                    ['X_centroid', 'Y_centroid']]
-
-                clearRAM(print_usage=False)
-                del sample_cluster_subset
-                clearRAM(print_usage=False)
-
-                # if a persistent image and seg zarrs for current sample
-                # don't already exist, create them
-                z1_path = os.path.join(
-                    zarr_dir, f'c{cluster}_{sample}.zarr')
-
-                z2_path = os.path.join(
-                    zarr_dir, f'c{cluster}_{sample}_seg.zarr')
-
-                if f'c{cluster}_{sample}' in zarrs_to_run:
+                    # write cellcutter_input to disk
+                    cellcutter_input.to_csv(
+                        os.path.join(thumbnails_dir, 'csv_data.csv'),
+                        index=False
+                        )
 
                     print(
-                        'Creating Zarr array for ' +
-                        f'cluster {cluster} cells in {sample}')
+                        f'Cutting cluster {cluster} cells '
+                        f'showing {markers_to_show} '
+                        f'normalized across {norm_ax} '
+                        f'from sample {sample}...'
+                        )
+                    print()
 
-                    # loop over markers to show to create multi-channel image
-                    for e, marker in enumerate(markers_to_show):
+                    # run cellcutter on sample image
+                    run(
+                        ["cut_cells", "--window-size", f"{self.windowSize}",
+                         "--cells-per-chunk", "200", "--cache-size", "57711",
+                         f"{self.inDir}/tif/{sample}.ome.tif",
+                         f"{self.inDir}/mask/{sample}.tif",
+                         f"{thumbnails_dir}/csv_data.csv",
+                         f"{zarr_dir}/clus{cluster}_{sample}"
+                         f"_win{self.windowSize}.zarr",
+                         "--channels"] + channel_nums
+                         )
+                    print()
 
-                        # if DNA1 channel
-                        if e == 0:
+                # read multi-channel zarr file created by cellcutter
+                z_path_img = os.path.join(
+                    zarr_dir, f'clus{cluster}_{sample}'
+                    f'_win{self.windowSize}.zarr'
+                    )
+                z_img = zarr.open(z_path_img, mode='r')
 
-                            print(f'Reading {marker} image')
+                if self.segOutlines:
 
-                            # read cycle1 dna channel, convert to float and rgb
-                            file_path = os.path.join(
-                                f'{self.inDir}/tif/', sample)
-
-                            channel_number = 0
-                            tiff = TiffFile(file_path, is_ome=False)
-                            dna = zarr.open(
-                                tiff.series[0].levels[0][
-                                    channel_number].aszarr())
-
-                            dna = img_as_float(dna)
-
-                            dna = gray2rgb(dna)
-
-                        else:
-                            print(f'Overlaying {marker} image')
-
-                            # read antibody image, convert to float and rgb
-                            file_path = os.path.join(
-                                f'{self.inDir}/tif/', sample)
-
-                            channel_number = marker_channel_number(
-                                markers, marker)
-                            tiff = TiffFile(file_path, is_ome=False)
-                            img = zarr.open(
-                                tiff.series[0].levels[0][
-                                    channel_number.item() - 1].aszarr())
-
-                            img = img_as_float(img)
-
-                            # apply image contrast settings
-                            img -= (contrast_limits[marker][0]/65535)
-                            img /= (
-                                (contrast_limits[marker][1]/65535)
-                                - (contrast_limits[marker][0]/65535))
-
-                            img = np.clip(img, 0, 1)
-
-                            img = gray2rgb(img)
-
-                            img = (img * color_dict[marker])
-
-                            # add antibody image to cycle1 dna images
-                            dna += img
-
-                            clearRAM(print_usage=False)
-                            del img
-                            clearRAM(print_usage=False)
-
-                    print('Overlaying cluster centroids image')
-
-                    # create blank array (zeros) for applying a centroids mask
-                    centroid_img = np.zeros((dna.shape[0], dna.shape[1]))
-
-                    # specify centroid size (in pixels)
-                    centroid_dist = 1
-
-                    # loop over centroids and add them to blank image
-                    for example, centroid in enumerate(centroids.iterrows()):
-
-                        ystart_centroid = int(
-                            centroid[1]['Y_centroid'] - centroid_dist)
-                        ystop_centroid = int(
-                            centroid[1]['Y_centroid'] + centroid_dist)
-
-                        xstart_centroid = int(
-                            centroid[1]['X_centroid'] - centroid_dist)
-                        xstop_centroid = int(
-                            centroid[1]['X_centroid'] + centroid_dist)
-
-                        centroid_img[
-                            ystart_centroid:ystop_centroid,
-                            xstart_centroid:xstop_centroid
-                            ] = 1
-
-                    # convert to rgb and colorize
-                    centroid_img = gray2rgb(centroid_img)
-                    centroid_img = (centroid_img * (1.0, 1.0, 1.0))
-
-                    # add to overlay
-                    dna += centroid_img
-
-                    clearRAM(print_usage=False)
-                    del centroid_img
-                    clearRAM(print_usage=False)
-
-                    print('Reading cell segmentation outlines image')
-
-                    file_path = os.path.join(f'{self.inDir}/seg/', sample)
-
-                    # check for .tif or .ome.tif file extension
-                    # (TMA images are still .tif files in mcmicro)
-                    if os.path.exists(file_path):
-                        seg_img = imread(file_path, key=0)
-                    else:
-                        file_path = os.path.join(
-                            f'{self.inDir}/seg/',
-                            f"{sample.split('.tif')[0]}.*tif")
-                        seg_img = imread(file_path, key=0)
-
-                    seg_img = gray2rgb(seg_img)
-
-                    seg_img = (seg_img * (1.0, 1.0, 1.0))
-
-                    # assign multi-channel array to a persistent zarr array
-                    print('Saving image overlay as Zarr array')
-
-                    z1 = zarr.open(
-                        z1_path, mode='w',
-                        shape=(dna.shape[0], dna.shape[1], dna.shape[2]),
-                        chunks=(2500, 2500), dtype='f8')
-                    z1[:] = dna
-
-                    # assign segmenation outlines to a separate zarr array
-                    print(
-                        'Saving cell segmentation outlines as ' +
-                        'separate Zarr array')
-
-                    z2 = zarr.open(
-                        z2_path, mode='w',
-                        shape=(dna.shape[0], dna.shape[1], dna.shape[2]),
-                        chunks=(2500, 2500), dtype='f8')
-                    z2[:] = seg_img
-
-                    # update completed_zarrs list
-                    completed_zarrs.append(f'c{cluster}_{sample}')
-                    with open(
+                    if not os.path.exists(
                       os.path.join(
-                       thumbnails_dir, 'completed_zarrs.txt'), 'w') as f:
-                        f.write(str(completed_zarrs))
-
-                else:
-                    print(
-                        'Reading Zarr array for ' +
-                        f'cluster {cluster} cells in {sample}')
-                    z1 = zarr.open(z1_path, mode='r')
-
-                # crop thumbnails
-                for example, centroid in enumerate(centroids.iterrows()):
-
-                    if (
-                        (centroid[1]['X_centroid'] == 0.0) &
-                        (centroid[1]['Y_centroid'] == 0.0)
+                        zarr_dir, f'clus{cluster}_{sample}'
+                        f'_win{self.windowSize}_seg.zarr'
+                        )
                       ):
 
-                        blank_img = np.ones(
-                            (self.squareWindowDimension,
-                             self.squareWindowDimension))
-
-                        append_df = pd.DataFrame.from_dict(
-                            {'sample': sample.split('.')[0],
-                             'example': int(example),
-                             'image': blank_img}, orient='index'
-                             ).T
-
-                        long_table = pd.concat(
-                            [long_table, append_df],
-                            axis=0, ignore_index=True
+                        # write cellcutter_input to disk
+                        cellcutter_input.to_csv(
+                            os.path.join(thumbnails_dir, 'csv_data.csv'),
+                            index=False
                             )
 
-                    else:
-                        # specify window x, y ranges
-                        ystart_window = int(
-                            centroid[1]['Y_centroid']
-                            - self.squareWindowDimension)
-                        ystop_window = int(
-                            centroid[1]['Y_centroid']
-                            + self.squareWindowDimension)
+                        # run cellcutter on segmentation outlines image
+                        run(
+                            ["cut_cells", "--window-size",
+                             f"{self.windowSize}",
+                             "--cells-per-chunk", "200",
+                             "--cache-size", "57711",
+                             f"{self.inDir}/seg/{sample}.ome.tif",
+                             f"{self.inDir}/mask/{sample}.tif",
+                             f"{thumbnails_dir}/csv_data.csv",
+                             f"{zarr_dir}/clus{cluster}_{sample}"
+                             f"_win{self.windowSize}_seg.zarr",
+                             "--channels", "1"]
+                             )
+                        print()
 
-                        xstart_window = int(
-                            centroid[1]['X_centroid']
-                            - self.squareWindowDimension)
-                        xstop_window = int(
-                            centroid[1]['X_centroid']
-                            + self.squareWindowDimension)
+                    # read segmentation outlines zarr file
+                    # created by cellcutter
+                    z_path_seg = os.path.join(
+                        zarr_dir, f'clus{cluster}_{sample}'
+                        f'_win{self.windowSize}_seg.zarr'
+                        )
+                    z_seg = zarr.open(z_path_seg, mode='r')
 
-                        # for centroids falling within
-                        # self.squareWindowDimension pixels of the edge of the
-                        # dna image, ensure that the thumbnail image is not
-                        # cropped using negative slicing values, as it will
-                        # return an empty array and lead to a runtime error
-                        # during plotting.
-                        window_list = [
-                            ystart_window, ystop_window,
-                            xstart_window, xstop_window]
-                        (ystart_window,
-                         ystop_window,
-                         xstart_window,
-                         xstop_window) = [
-                            0 if i < 0 else i for i in window_list]
+                if os.path.exists(
+                  os.path.join(thumbnails_dir, 'csv_data.csv')
+                  ):
+                    # remove cellcutter_input file after cells have been cut
+                    os.remove(os.path.join(thumbnails_dir, 'csv_data.csv'))
 
-                        # crop overlay image to window size
-                        thumbnail = z1[
-                            ystart_window:ystop_window,
-                            xstart_window:xstop_window]
+                # create composite thumbnail images
+                for cell in range(z_img.shape[1]):
 
-                        # add egmentation outlines to thumbnail images
-                        if self.segOutlines:
-                            z2 = zarr.open(z2_path, mode='r')
+                    # create blank image with same x, y dimensions as thumbnail
+                    blank_img = np.zeros((z_img.shape[2], z_img.shape[3]))
 
-                            seg_thumbnail = z2[
-                                ystart_window:ystop_window,
-                                xstart_window:xstop_window]
+                    # add centroid point at the center of the image
+                    blank_img[
+                        int(z_img.shape[2]/2):int(z_img.shape[2]/2)+1,
+                        int(z_img.shape[3]/2):int(z_img.shape[3]/2)+1
+                        ] = 1
 
-                            thumbnail += seg_thumbnail
+                    # convert blank image to rgb and colorize
+                    blank_img = gray2rgb(blank_img)
 
-                        append_df = pd.DataFrame.from_dict(
-                            {'sample': sample.split('.')[0],
-                             'example': int(example),
-                             'image': thumbnail}, orient='index'
-                             ).T
+                    # loop over markers to show
+                    for ch, marker in enumerate(markers_to_show):
 
-                        long_table = pd.concat(
-                            [long_table, append_df],
-                            axis=0, ignore_index=True
-                            )
-                print()
+                        # slice marker channel of current thumbnail
+                        slice = img_as_float(z_img[ch, cell, :, :])
 
-            # known pandas foible: integers are stored as floats
-            long_table['example'] = [int(i) for i in long_table['example']]
+                        # apply image contrast settings
+                        slice -= (contrast_limits[marker][0]/65535)
+                        slice /= (
+                            (contrast_limits[marker][1]/65535)
+                            - (contrast_limits[marker][0]/65535))
+                        slice = np.clip(slice, 0, 1)
 
-            # natsort long_table by 'sample' column
-            long_table['sample'] = pd.Categorical(
-                long_table['sample'], ordered=True,
-                categories=natsorted(long_table['sample'].unique()))
-            long_table.sort_values('sample', inplace=True)
-            long_table['sample'] = long_table['sample'].astype(str)
+                        # convert channel slice to RGB, colorize,
+                        # and add to blank image
+                        slice = gray2rgb(slice)
+                        slice = (slice * color_dict[marker])
+                        blank_img += slice
 
-            # plot cluster facet grid
-            fig, ax = plt.subplots()
+                    if self.segOutlines:
 
-            g = sns.FacetGrid(
-                long_table, row='sample', col='example',
-                sharex=False, sharey=False,
-                gridspec_kws={'hspace': 0.0, 'wspace': 0.0})
+                        # get segmentation thumbnails
+                        seg = img_as_float(z_seg[0, cell, :, :])
 
-            g.fig.set_figheight(13)
-            g.fig.set_figwidth(25)
+                        # convert segmentation thumbnail to RGB
+                        # and add to blank image
+                        seg = gray2rgb(seg)
+                        blank_img += seg
 
-            g.map(
-                lambda image, **kwargs: (
-                    plt.imshow(np.clip(image.values[0], 0, 1)),
-                    plt.grid(False)), 'image')
-            # image clipping prevents matplotlib warning
+                    # append merged thumbnail image to long_table
+                    append_df = pd.DataFrame.from_dict(
+                        {'sample': sample,
+                         'example': int(cell+1),
+                         'image': blank_img}, orient='index'
+                         ).T
+                    long_table = pd.concat(
+                        [long_table, append_df], axis=0, ignore_index=True
+                        )
 
-            for ax in g.axes.flatten():
-                ax.get_xaxis().set_ticks([])
-                ax.set_xlabel('')
-                ax.get_yaxis().set_ticks([])
-                ax.set_ylabel('')
+            # plot facet grid of thumbnails for current cluster
+            if not long_table.empty:
+                fig, ax = plt.subplots()
 
-            g.set_titles(
-                col_template="Ex. {col_name}",
-                row_template="Smpl. {row_name}",
-                fontweight='bold', size=7)
+                g = sns.FacetGrid(
+                    long_table, row='sample', col='example',
+                    sharex=False, sharey=False,
+                    gridspec_kws={'hspace': 0.1, 'wspace': 0.1})
 
-            custom_lines = []
-            for k, v in color_dict.items():
-                custom_lines.append(
-                    Line2D([0], [0], color=v, lw=6))
+                g.map(
+                    lambda image, **kwargs: (
+                        plt.imshow(np.clip(image.values[0], 0, 1)),
+                        plt.grid(False)), 'image')
+                # image clipping prevents matplotlib warning
 
-            ax.legend(
-                custom_lines,
-                list(color_dict.keys()), prop={'size': 12},
-                bbox_to_anchor=(
-                    1.05, len(long_table['sample'].unique()) + 0.3),
-                loc='upper left')
+                for ax in g.axes.flatten():
+                    ax.get_xaxis().set_ticks([])
+                    ax.set_xlabel('')
+                    ax.get_yaxis().set_ticks([])
+                    ax.set_ylabel('')
 
-            plt.savefig(
-                os.path.join(
-                    thumbnails_dir,
-                    'cluster' + str(cluster) + '_thumbnails.pdf'),
-                bbox_inches='tight')
-            plt.close('all')
+                g.set_titles(
+                    col_template="Ex. {col_name}",
+                    row_template="Smpl. {row_name}",
+                    fontweight='bold', size=6)
 
+                custom_lines = []
+                for k, v in color_dict.items():
+
+                    custom_lines.append(
+                        Line2D([0], [0], color=v, lw=6))
+
+                ax.legend(
+                    custom_lines,
+                    list(color_dict.keys()), prop={'size': 12},
+                    bbox_to_anchor=(
+                        1.05, len(long_table['sample'].unique()) + 0.3),
+                    loc='upper left')
+
+                plt.savefig(
+                    os.path.join(
+                        thumbnails_dir,
+                        'cluster' + str(cluster) + '_thumbnails.pdf'),
+                    bbox_inches='tight')
+
+                plt.close('all')
+
+            # update completed clusters list
             completed_clusters.append(cluster)
 
+            # overwrite completed_clusters.txt file
             with open(
               os.path.join(
                thumbnails_dir, 'completed_clusters.txt'), 'w') as f:
                 f.write(str(completed_clusters))
             print()
+
+        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         return data

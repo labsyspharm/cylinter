@@ -59,6 +59,10 @@ class Config:
         config.fracForEmbedding = float(data['fracForEmbedding'])
         config.dimensionEmbeddingQC = int(data['dimensionEmbeddingQC'])
         config.dimensionEmbedding = int(data['dimensionEmbedding'])
+        config.topMarkersQC = str(data['topMarkersQC'])
+        config.topMarkers = str(data['topMarkers'])
+        config.dimensionEmbedding = int(data['dimensionEmbedding'])
+
         if (data['colormapChannel']) is None:
             config.colormapChannel = (data['colormapChannel'])
         else:
@@ -93,7 +97,8 @@ class Config:
         config.FDRCorrection = bool(data['FDRCorrection'])
 
         config.numThumbnails = int(data['numThumbnails'])
-        config.squareWindowDimension = int(data['squareWindowDimension'])
+        config.topMarkersThumbnails = str(data['topMarkersThumbnails'])
+        config.windowSize = int(data['windowSize'])
         config.segOutlines = bool(data['segOutlines'])
 
         return config

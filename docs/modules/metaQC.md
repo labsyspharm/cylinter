@@ -17,6 +17,7 @@ parent: Modules
 | `samplesToRemoveClusteringQC` | [ ] | (list of strs) Samples to exclude from clustering. |
 | `fracForEmbeddingQC` | 1.0 | (float) Fraction of cells to be embedded (range: 0.0-1.0). Limits the amount of data passed to downstream modules. |
 | `dimensionEmbeddingQC` | 2 | (int) Dimension of the embedding (fixed to 2 in current version). |
+| `topMarkersQC` | "channels" | (str) Normalization axis ("channels" or "clusters") used to define highest expressed markers per cluster. |
 | `metricQC` | "euclidean" | (str) Distance metric for computing embedding. Choose from valid metrics used by scipy.spatial.distance.pdist: "braycurtis", "canberra", "chebyshev", "cityblock", "correlation", "cosine", "dice", "euclidean", "hamming", "jaccard", "jensenshannon", "kulsinski", "mahalanobis", "matching", "minkowski", "rogerstanimoto", "russellrao", "seuclidean", "sokalmichener", "sokalsneath", "sqeuclidean", "yule". |
 | `perplexityQC` | 50.0 | (float) This is a tSNE-specific configuration (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.htmlRelated) related to the number of nearest neighbors used in other manifold learning algorithms. Larger datasets usually require larger perplexity. Different values can result in significantly different results. |
 | `earlyExaggerationQC` | 12.0 | (float) This is a tSNE-specific configuration (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.htmlRelated). For larger values, the space between natural clusters will be larger in the embedded space. |

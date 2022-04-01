@@ -24,8 +24,8 @@ synapse get -r syn25685780 --downloadLocation C:\Users\<username>\Desktop\cylint
 After downloading, open the [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file) in `~/Desktop/cylinter_demo/config.yml` and update the `in_dir` and `out_dir` parameters with user-specific directory paths. All other settings are pre-configured for use with the exemplar dataset.
 
 ```yaml
-in_dir: /Users/<user>/Desktop/cylinter_demo
-out_dir: /Users/<user>/Desktop/cylinter_demo/output
+in_dir: /Users/<username>/Desktop/cylinter_demo
+out_dir: /Users/<username>/Desktop/cylinter_demo/output
 .
 .
 .

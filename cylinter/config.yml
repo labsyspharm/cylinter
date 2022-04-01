@@ -1,12 +1,12 @@
 # GENERAL PROGRAM CONFIGURATIONS
 
-inDir: /Users/<user>/Desktop/cylinter_demo
+inDir: /Users/<username>/Desktop/cylinter_demo
 # Path to CyLinter input directory containing multi-channel
 # image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF),
-# and corresponding single-cell feature tables (CSV)
+# segmentation masks (TIFF), and corresponding single-cell feature tables (CSV)
 
-outDir: /Users/<user>/Desktop/cylinter_demo/output
-# CyLinter output directory. Path is created if it does not already exist.
+outDir: /Users/<username>/Desktop/cylinter_demo/output
+# CyLinter output directory. Path is created if it does not exist.
 
 sampleMetadata:
   unmicst-1_cellMask: ["1", "Normal kidney cortex", "NKC", "CANCER-FALSE", 1]
@@ -26,12 +26,12 @@ samplesToExclude: []
 # (list of strs) Sample names to exclude from analysis specified
 # according to the first elements of sampleMetadata configuration.
 
-markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD73", "CD107B",
-                   "MART1", "CD56", "CD13", "CD32", "CDKN1C", "PCNA_1", "pAUR",
-                   "CDKN1B_1", "cPARP", "CDKN1B_2", "CCNB1", "CCNE", "PCNA_2",
-                   "CDK2", "CDKN2A"]
+markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
+                   "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2"
+                   ]
 # (list of strs) Immunomarkers to exclude from analysis
-# (does not include nuclear dyes).
+# Does not include nuclear dyes. They are needed for the
+# cycleCorrelation module to remove cell dropout.
 
 ###############################################################################
 # MODULE-SPECIFIC CONFIGURATIONS
@@ -43,7 +43,7 @@ delintMode: True
 
 showAbChannels: True
 # (bool) Whether to show all immunomarker channels (True) when Napari
-# is open (may be memory limiting) or show only cycle 1 DNA (False).
+# is open (may be memory limiting) or show cycle 1 DNA only (False).
 
 samplesForROISelection: ["1", "15", "18", "68"]
 # (list of strs) Sample names for ROI selection specified
@@ -85,6 +85,10 @@ fracForEmbeddingQC: 1.0
 
 dimensionEmbeddingQC: 2
 # (int) Dimension of the embedding (fixed to 2 in current version).
+
+topMarkersQC: "channels"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
 
 metricQC: "euclidean"
 # (str) Distance metric for computing embedding.
@@ -192,7 +196,11 @@ fracForEmbedding: 1.0
 dimensionEmbedding: 2
 # (int) Dimension of the embedding (options: 2 or 3).
 
-colormapChannel: null
+topMarkers: "channels"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
+
+colormapChannel: "pan-CK"
 # (None type or str) Channel to colormap to the embedding.
 
 metric: "euclidean"
@@ -279,9 +287,12 @@ FDRCorrection: False
 numThumbnails: 10
 # (int) Number of examples per cluster to be curated.
 
-squareWindowDimension: 35
-# (int) Number of pixels from the centroid of the reference
-# cell in x and y dimensions.
+topMarkersThumbnails: "channels"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
 
-segOutlines: False
+windowSize: 64
+# (int) Number of pixels in x and y dimensions per thumbnail.
+
+segOutlines: True
 # (bool) Whether to overlay cell segmentation outlines on thumbnail images.

@@ -94,6 +94,8 @@ def run_pipeline(config, start_module_name):
         fracForEmbedding=config.fracForEmbedding,
         dimensionEmbeddingQC=config.dimensionEmbeddingQC,
         dimensionEmbedding=config.dimensionEmbedding,
+        topMarkersQC=config.topMarkersQC,
+        topMarkers=config.topMarkers,
         colormapChannel=config.colormapChannel,
 
         perplexityQC=config.perplexityQC,
@@ -124,7 +126,8 @@ def run_pipeline(config, start_module_name):
         viewSample=config.viewSample,
 
         numThumbnails=config.numThumbnails,
-        squareWindowDimension=config.squareWindowDimension,
+        topMarkersThumbnails=config.topMarkersThumbnails,
+        windowSize=config.windowSize,
         segOutlines=config.segOutlines,
         )
 
