@@ -12,5 +12,6 @@ parent: Modules
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `numThumbnails` | 10 | (int) Number of examples per cluster to be curated. |
+| `topMarkersThumbnails` | "channels" | (str) Normalization axis ("channels" or "clusters") used to define highest expressed markers per cluster. |
 | `squareWindowDimension` | 35 | (int) Number of pixels from the centroid of the reference cell in x and y dimensions. |
 | `segOutlines` | False | (bool) Whether to overlay cell segmentation outlines on thumbnail images. |

@@ -62,6 +62,22 @@ def csv_to_dict(path):
     return dict
 
 
+def reorganize_dfcolumns(data, markers, cluster_dim):
+    cols = (
+        ['CellID'] + [i for i in markers['marker_name'] if
+                      i in data.columns] +
+        ['X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
+         'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent',
+         'Orientation', 'Sample', 'Condition', 'Replicate']
+         )
+
+    if f'cluster_{cluster_dim}d' in data:
+        cols = cols + [f'cluster_{cluster_dim}d']
+
+    data = data[cols]
+    return data
+
+
 def single_channel_pyramid(tiff_path, channel):
 
     target_filepath = tiff_path
@@ -200,6 +216,7 @@ def read_markers(markers_filepath, markers_to_exclude, data):
             i for i in markers['marker_name']
             if i not in markers_to_exclude if i in data.columns
             ]
+
     markers = markers[markers['marker_name'].isin(markers_to_include)]
 
     dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
@@ -273,7 +290,7 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
     return cmap
 
 
-def cluster_expression(df, markers, cluster, num_proteins, clus_dim, standardize='within'):
+def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
 
     if cluster != -1:
 
@@ -284,47 +301,52 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, standardize
             .groupby(f'cluster_{clus_dim}d').mean()
             )
 
-        if standardize == 'across':
+        scaler = MinMaxScaler(feature_range=(0, 1), copy=True)
 
-            cluster_ids_max = [
-                cluster_means[i].idxmax() for i in cluster_means]
-            cluster_vals_max = [cluster_means[i].max() for i in cluster_means]
-            id_val_tuples = list(tuple(zip(cluster_ids_max, cluster_vals_max)))
-            max_dict = dict(zip(markers, id_val_tuples))
-            # isolate maximums for target cluster
-            target_dict = {
-                k: v for k, v in max_dict.items() if v[0] == cluster}
-            # sort target_dict by mean expression values
-            total_markers = [
-                k for k, v in
-                sorted(target_dict.items(), key=lambda item: item[1][1])]
-            # list is descending order (highest to lowest)
-            total_markers.reverse()
-            # cutoff at num_proteins
-            hi_markers = total_markers[:num_proteins]
-            # format hi_markers list
-            hi_markers = ', '. join(hi_markers)
-            hi_markers = f'{standardize}: {hi_markers}'
+        if norm_ax == 'clusters':
 
-            return hi_markers
+            # rescale across clusters
+            vectors = cluster_means.values.T
+            scaled_rows = scaler.fit_transform(vectors.T)
+            scaled_cluster_means = pd.DataFrame(
+                data=scaled_rows, index=cluster_means.index,
+                columns=cluster_means.columns
+                )
 
-        elif standardize == 'within':
+            # isolate markers with highest expression values across clusters
+            hi_markers = (
+                scaled_cluster_means
+                .loc[cluster]
+                .sort_values(ascending=False)[:num_proteins]
+                .index.tolist()
+                )
 
-            # sort cluster means
-            cluster_means_sorted = cluster_means.loc[
-                cluster].sort_values(ascending=False)
-            # cutoff at num_proteins
-            hi_markers = list(cluster_means_sorted.index[:num_proteins])
-            # format hi_markers list
-            hi_markers = ', '. join(hi_markers)
-            hi_markers = (standardize, hi_markers)
+            return norm_ax, hi_markers
 
-            return hi_markers
+        elif norm_ax == 'channels':
+
+            # rescale across channels
+            vectors = cluster_means.values
+            scaled_rows = scaler.fit_transform(vectors.T).T
+            scaled_cluster_means = pd.DataFrame(
+                data=scaled_rows, index=cluster_means.index,
+                columns=cluster_means.columns
+                )
+
+            # isolate markers with highest expression values across channels
+            hi_markers = (
+                scaled_cluster_means
+                .loc[cluster]
+                .sort_values(ascending=False)[:num_proteins]
+                .index.tolist()
+                )
+
+            return norm_ax, hi_markers
 
     else:
         hi_markers = 'unclustered cells'
 
-        return hi_markers
+        return norm_ax, hi_markers
 
 
 def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):

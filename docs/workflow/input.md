@@ -17,7 +17,7 @@ parent: Workflow
 </details>
 
 # Transferring and organizing input
-CyLinter supports analysis of **whole slide image (WSI)** and **tissue microarray (TMA)** data processed by the [MCMICRO](https://mcmicro.org) image-processing pipeline. The program comes with a helper command called `prep` that programmatically transfers and organizes standard MCMICRO output as CyLinter input (currently only available for Mac). However, CyLinter can analyze any multiplex imaging data so long as they conform to the correct file formats: TIFF/OME-TIFF images, TIFF/OME-TIFF cell segmentation outlines, and CSV single-cell feature tables with a cell segmentation area column labeled "Area".
+CyLinter supports analysis of **whole slide image (WSI)** and **tissue microarray (TMA)** data processed by the [MCMICRO](https://mcmicro.org) image-processing pipeline. The program comes with a helper command called `prep` that programmatically transfers and organizes standard MCMICRO output as CyLinter input (currently only available for Mac). However, CyLinter can analyze any multiplex imaging data so long as they conform to the correct file formats: TIFF/OME-TIFF images, TIFF/OME-TIFF cell segmentation masks, TIFF/OME-TIFF cell segmentation outlines, and CSV single-cell feature tables with a cell segmentation area column labeled "Area".
 
 <br/>
 
@@ -56,6 +56,8 @@ CyLinter assumes input files take the standard MCMICRO output format. In the bel
 ├── csv/
 │   └── unmicst-<sample-name>.csv
 ├── markers.csv
+├── mask/
+│   └── <sample-name>.ome.tif (or tif)
 ├── seg/
 │   └── <sample-name>.ome.tif (or tif)
 └── tif/

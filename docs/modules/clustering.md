@@ -17,6 +17,7 @@ parent: Modules
 | `normalizeTissueCounts` | True | (bool) Make the number of cells per tissue for clustering more similar through sample-weighted random sampling. |
 | `fracForEmbedding` | 1.0 | (float) Fraction of cells to be embedded (range: 0.0-1.0). Limits amount of data passed to downstream modules. |
 | `dimensionEmbedding` | 2 | (int) Dimension of the embedding (options: 2 or 3). |
+| `topMarkers` | "channels" | (str) Normalization axis ("channels" or "clusters") used to define highest expressed markers per cluster. |
 | `colormapChannel` | null | (null or str) Channel to colormap to the embedding. |
 | `metricQC` | "euclidean" | (str) Distance metric for computing embedding. Choose from valid metrics used by scipy.spatial.distance.pdist: "braycurtis", "canberra", "chebyshev", "cityblock", "correlation", "cosine", "dice", "euclidean", "hamming", "jaccard", "jensenshannon", "kulsinski", "mahalanobis", "matching", "minkowski", "rogerstanimoto", "russellrao", "seuclidean", "sokalmichener", "sokalsneath", "sqeuclidean", "yule". |
 | `perplexity` | 50.0 | (float) This is a [tSNE-specific configuration](https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html) related to the number of nearest neighbors used in other manifold learning algorithms. Larger datasets usually require larger perplexity. Different values can result in significantly different results. |
