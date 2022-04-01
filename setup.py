@@ -23,7 +23,7 @@ requires = [
     'synapseclient==2.4.0',
     'pyparsing==2.0.3',  # version compatible with hdbscan and matplotlib
     'PyOpenGL-accelerate',  # suppresses "No OpenGL_accelerate..." message
-    'cellcutter @ git+https://github.com/labsyspharm/cellcutter.git#egg=cellcutter',
+    'cellcutter @ git+https://github.com/labsyspharm/cellcutter.git@0.2.4#egg=cellcutter',
 ]
 
 VERSION = '0.0.40'
