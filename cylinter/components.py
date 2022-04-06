@@ -577,8 +577,8 @@ class QC(object):
                         data['Sample'] == sample_name].astype(int)
 
                     sample_data['tuple'] = list(
-                        zip(sample_data['Y_centroid'],
-                            sample_data['X_centroid'])
+                        zip(sample_data['X_centroid'],
+                            sample_data['Y_centroid'])
                         )
 
                     for file_path in glob.glob(
@@ -593,7 +593,7 @@ class QC(object):
                     pixel_coords = np.vstack((rows, columns)).T
 
                     # create pillow image to convert into boolean mask
-                    img = Image.new('L', (dna.shape[0], dna.shape[1]))
+                    img = Image.new('L', (dna.shape[1], dna.shape[0]))
 
                     polygons = []
                     for shape_type, verts in polygon_dict[sample_name]:
@@ -629,7 +629,8 @@ class QC(object):
 
                     # use numpy fancy indexing to get centroids
                     # where boolean mask is True
-                    ys, xs = zip(*sample_data['tuple'])
+                    xs, ys = zip(*sample_data['tuple'])
+
                     inter = mask[ys, xs]
 
                     # update sample_data with boolean calls per cell
