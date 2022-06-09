@@ -13,5 +13,5 @@ RUN sudo apt-get update && \
 RUN python -m pip install "napari[all]"
 
 # Install cylinter
-COPY . /app
-RUN sudo pip install /app
+COPY --chown=gitpod:gitpod . /app
+RUN python -m pip install /app
