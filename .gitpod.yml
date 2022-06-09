@@ -7,7 +7,13 @@ tasks:
   - init: |
       eval $(command gp env -e)
       synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
-        get -r syn25685780 --downloadLocation /workspace/testdata && \
-        cp /workspace/cylinter/cylinter/config.yml /workspace/testdata
-    command: cylinter /workspace/testdata/config.yml
-  
+        get syn27202293 --downloadLocation /workspace/testdata
+      synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
+        get syn27202298 --downloadLocation /workspace/testdata/csv
+      synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
+        get syn28413455 --downloadLocation /workspace/testdata/mask
+      synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
+        get syn27202398 --downloadLocation /workspace/testdata/seg
+      synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
+        get syn27204544 --downloadLocation /workspace/testdata/tif
+      cp /workspace/cylinter/cylinter/config.yml /workspace/testdata
