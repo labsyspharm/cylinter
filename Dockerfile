@@ -10,6 +10,8 @@ RUN sudo apt-get update && \
         qtbase5-dev-tools && \
     sudo rm -rf /var/lib/apt/lists/*
 
+RUN python -m pip install "napari[all]"
+
 # Install cylinter
 COPY . /app
 RUN sudo pip install /app
