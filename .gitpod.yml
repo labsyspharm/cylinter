@@ -6,3 +6,8 @@ ports:
 tasks:
   - init: |
       eval $(command gp env -e)
+      synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
+        get -r syn25685780 --downloadLocation /workspace/testdata && \
+        cp /workspace/cylinter/cylinter/config.yml /workspace/testdata
+      cylinter /workspace/testdata/config.yml
+  
