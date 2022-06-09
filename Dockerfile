@@ -15,3 +15,7 @@ RUN python -m pip install "napari[all]"
 # Install cylinter
 COPY --chown=gitpod:gitpod . /app
 RUN python -m pip install /app
+
+RUN chmod +x /app/cylinter/start.sh
+#CMD [ "/app/cylinter/start.sh" ]
+CMD cylinter
