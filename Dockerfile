@@ -15,6 +15,3 @@ RUN python -m pip install "napari[all]"
 # Install cylinter
 COPY --chown=gitpod:gitpod . /app
 RUN python -m pip install /app
-
-# Client for synapse.org
-RUN python -m pip install synapseclient
