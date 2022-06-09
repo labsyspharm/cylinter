@@ -1,0 +1,8 @@
+image:
+  file: Dockerfile
+ports:
+  - port: 6080
+    onOpen: open-preview
+tasks:
+  - init: |
+      eval $(command gp env -e)
