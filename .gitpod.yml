@@ -4,7 +4,7 @@ ports:
 tasks:
   - init: |
       eval $(command gp env -e)
-      RUN python -m pip install synapseclient
+      pip install synapseclient
       synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
         get syn27202293 --downloadLocation /workspace/testdata
       synapse -u "$SYN_USER" -p "$SYN_TOKEN" \
