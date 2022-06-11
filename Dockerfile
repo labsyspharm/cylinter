@@ -17,5 +17,4 @@ COPY --chown=gitpod:gitpod . /app
 RUN python -m pip install /app
 
 RUN chmod +x /app/cylinter/start.sh
-#CMD [ "/app/cylinter/start.sh" ]
-CMD cylinter
+CMD [ "/bin/bash", "-ci", "/app/cylinter/start.sh" ]
