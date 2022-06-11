@@ -32,7 +32,8 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: ${{steps.rmv.outputs.tag}}
+          tags: labsyspharm/cylinter:test
+#          tags: ${{steps.rmv.outputs.tag}}
       -
         name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
