@@ -4555,7 +4555,7 @@ class QC(object):
                 bbox_inches='tight')
             plt.close('all')
 
-        data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+            data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
         print()
         print()
@@ -5019,20 +5019,23 @@ class QC(object):
                                 )
 
                             # make black the first color to specify
-                            # cluster outliers (i.e. cluster -1 cells)
-                            cmap = ListedColormap(
-                                np.insert(
-                                    arr=cmap.colors, obj=0,
-                                    values=[0.0, 0.0, 0.0], axis=0)
-                                    )
+                            # unclustered cells (cluster -1)
+                            if -1 in data[color_by].unique():
+                                cmap = ListedColormap(
+                                    np.insert(
+                                        arr=cmap.colors, obj=0,
+                                        values=[0.0, 0.0, 0.0], axis=0)
+                                        )
 
-                            # trim qualitative cmap to number of unique samples
-                            trim = (
-                                len(cmap.colors) - len(data[color_by].unique())
-                                )
-                            cmap = ListedColormap(
-                                cmap.colors[:-trim]
-                                )
+                                # trim qualitative cmap to number
+                                # of unique samples
+                                trim = (
+                                    len(cmap.colors) -
+                                    len(data[color_by].unique())
+                                    )
+                                cmap = ListedColormap(
+                                    cmap.colors[:-trim]
+                                    )
 
                             sample_dict = dict(
                                 zip(
