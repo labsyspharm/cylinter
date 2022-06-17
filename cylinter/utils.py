@@ -20,6 +20,7 @@ import psutil
 import zarr
 import dask.array as da
 import tifffile
+from tifffile import imread
 
 SUPPORTED_EXTENSIONS = ['.csv']
 
@@ -80,20 +81,29 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
 
 def single_channel_pyramid(tiff_path, channel):
 
-    target_filepath = tiff_path
-    tiff = tifffile.TiffFile(target_filepath, is_ome=False)
+    # for OME-TIFFs
+    if tiff_path.endswith('.ome.tif'):
 
-    pyramid = [
-        zarr.open(s[channel].aszarr())
-        for s in tiff.series[0].levels
-        ]
+        tiff = tifffile.TiffFile(tiff_path, is_ome=False)
 
-    pyramid = [
-        da.from_zarr(z)
-        for z in pyramid
-        ]
+        pyramid = [
+            zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels
+            ]
 
-    return pyramid
+        pyramid = [da.from_zarr(z) for z in pyramid]
+
+        return pyramid
+
+    # for standard TIFs (create image pyramid on-the-fly)
+    elif tiff_path.endswith('.tif'):
+
+        img = imread(tiff_path, key=channel)
+
+        pyramid = [img[::4**i, ::4**i] for i in range(4)]
+
+        pyramid = [da.from_array(z) for z in pyramid]
+
+        return pyramid
 
 
 def matplotlib_warnings(fig):
