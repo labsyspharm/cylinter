@@ -6138,11 +6138,17 @@ class QC(object):
                     print()
 
                     # run cellcutter on sample image
+                    tif_file_path = glob.glob(
+                        f"{self.inDir}/tif/{sample}.*tif"
+                        )[0]
+                    mask_file_path = glob.glob(
+                        f"{self.inDir}/mask/{sample}.*tif"
+                        )[0]
                     run(
                         ["cut_cells", "--window-size", f"{self.windowSize}",
                          "--cells-per-chunk", "200", "--cache-size", "57711",
-                         f"{self.inDir}/tif/{sample}.ome.tif",
-                         f"{self.inDir}/mask/{sample}.tif",
+                         f"{tif_file_path}",
+                         f"{mask_file_path}",
                          f"{thumbnails_dir}/csv_data.csv",
                          f"{zarr_dir}/clus{cluster}_{sample}"
                          f"_win{self.windowSize}.zarr",
@@ -6173,13 +6179,19 @@ class QC(object):
                             )
 
                         # run cellcutter on segmentation outlines image
+                        seg_file_path = glob.glob(
+                            f"{self.inDir}/seg/{sample}.*tif"
+                            )[0]
+                        mask_file_path = glob.glob(
+                            f"{self.inDir}/mask/{sample}.*tif"
+                            )[0]
                         run(
                             ["cut_cells", "--window-size",
                              f"{self.windowSize}",
                              "--cells-per-chunk", "200",
                              "--cache-size", "57711",
-                             f"{self.inDir}/seg/{sample}.ome.tif",
-                             f"{self.inDir}/mask/{sample}.tif",
+                             f"{seg_file_path}",
+                             f"{mask_file_path}",
                              f"{thumbnails_dir}/csv_data.csv",
                              f"{zarr_dir}/clus{cluster}_{sample}"
                              f"_win{self.windowSize}_seg.zarr",
