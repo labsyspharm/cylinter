@@ -26,7 +26,7 @@ requires = [
     'cellcutter>=0.2.6',
 ]
 
-VERSION = '0.0.43'
+VERSION = '0.0.44'
 DESCRIPTION = 'CyLinter'
 AUTHOR = 'Gregory J. Baker'
 AUTHOR_EMAIL = 'gregory_baker2@hms.harvard.edu'
