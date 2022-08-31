@@ -27,7 +27,10 @@ samplesToExclude: []
 # according to the first elements of sampleMetadata configuration.
 
 markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
-                   "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2"
+                   "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2",
+                   "CD63", "CD32", "CDKN1A", "CCNA2", "CDKN1C", "PCNA_1",
+                   "CDKN1B_1", "CCND1", "cPARP", "pCREB",
+                   "CCNB1", "PCNA_2", "CDK2"
                    ]
 # (list of strs) Immunomarkers to exclude from analysis
 # Does not include nuclear dyes. They are needed for the
@@ -86,7 +89,7 @@ fracForEmbeddingQC: 1.0
 dimensionEmbeddingQC: 2
 # (int) Dimension of the embedding (fixed to 2 in current version).
 
-topMarkersQC: "channels"
+topMarkersQC: "clusters"
 # (str) Normalization axis ("channels" or "clusters") used to define
 # highest expressed markers per cluster.
 
@@ -196,7 +199,7 @@ fracForEmbedding: 1.0
 dimensionEmbedding: 2
 # (int) Dimension of the embedding (options: 2 or 3).
 
-topMarkers: "channels"
+topMarkers: "clusters"
 # (str) Normalization axis ("channels" or "clusters") used to define
 # highest expressed markers per cluster.
 
@@ -284,14 +287,14 @@ FDRCorrection: False
 # q-vals (True) or compute uncorrected p-vals only (False).
 
 # curateThumbnails-------------------------------------------------------------
-numThumbnails: 10
+numThumbnails: 25
 # (int) Number of examples per cluster to be curated.
 
-topMarkersThumbnails: "channels"
+topMarkersThumbnails: "clusters"
 # (str) Normalization axis ("channels" or "clusters") used to define
 # highest expressed markers per cluster.
 
-windowSize: 64
+windowSize: 30
 # (int) Number of pixels in x and y dimensions per thumbnail.
 
 segOutlines: True

@@ -64,7 +64,8 @@ def csv_to_dict(path):
 
 
 def reorganize_dfcolumns(data, markers, cluster_dim):
-    cols = (
+
+    first_cols = (
         ['CellID'] + [i for i in markers['marker_name'] if
                       i in data.columns] +
         ['X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
@@ -72,10 +73,19 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
          'Orientation', 'Sample', 'Condition', 'Replicate']
          )
 
-    if f'cluster_{cluster_dim}d' in data:
-        cols = cols + [f'cluster_{cluster_dim}d']
+    # (for BAF project)
+    # first_cols = (
+    #     ['CellID'] + [i for i in markers['marker_name'] if
+    #                   i in data.columns] +
+    #     ['X_centroid', 'Y_centroid', 'Area', 'CytArea', 'Solidity',
+    #      'AreaSubstruct', 'MeanInsideSubstruct', 'Corenum', 'CoreCoord',
+    #      'CoreFlag', 'Sample', 'Condition', 'Replicate']
+    #      )
 
-    data = data[cols]
+    last_cols = [col for col in data.columns if col not in first_cols]
+
+    data = data[first_cols + last_cols]
+
     return data
 
 
@@ -476,3 +486,84 @@ def open_file(filename):
     else:
         opener = "open" if sys.platform == "darwin" else "xdg-open"
         subprocess.run([opener, filename])
+
+
+def triangulate_ellipse(corners, num_segments=100):
+
+    # from Napari's GitHub page: napari/napari/layers/shapes/_shapes_utils.py
+
+    """Determines the triangulation of a path. The resulting `offsets` can
+    multiplied by a `width` scalar and be added to the resulting `centers`
+    to generate the vertices of the triangles for the triangulation, i.e.
+    `vertices = centers + width*offsets`. Using the `centers` and `offsets`
+    representation thus allows for the computed triangulation to be
+    independent of the line width.
+    Parameters
+    ----------
+    corners : np.ndarray
+        4xD array of four bounding corners of the ellipse. The ellipse will
+        still be computed properly even if the rectangle determined by the
+        corners is not axis aligned
+    num_segments : int
+        Integer determining the number of segments to use when triangulating
+        the ellipse
+    Returns
+    -------
+    vertices : np.ndarray
+        Mx2 array coordinates of vertices for triangulating an ellipse.
+        Includes the center vertex of the ellipse, followed by `num_segments`
+        vertices around the boundary of the ellipse
+    triangles : np.ndarray
+        Px2 array of the indices of the vertices for the triangles of the
+        triangulation. Has length given by `num_segments`
+    """
+    if not corners.shape[0] == 4:
+        raise ValueError(
+            trans._(
+                "Data shape does not match expected `[4, D]` shape"
+                "specifying corners for the ellipse",
+                deferred=True,
+            )
+        )
+
+    center = corners.mean(axis=0)
+    adjusted = corners - center
+
+    vec = adjusted[1] - adjusted[0]
+    len_vec = np.linalg.norm(vec)
+    if len_vec > 0:
+        # rotate to be axis aligned
+        norm_vec = vec / len_vec
+        if corners.shape[1] == 2:
+            transform = np.array(
+                [[norm_vec[0], -norm_vec[1]], [norm_vec[1], norm_vec[0]]]
+            )
+        else:
+            transform = np.array(
+                [
+                    [0, 0],
+                    [norm_vec[0], -norm_vec[1]],
+                    [norm_vec[1], norm_vec[0]],
+                ]
+            )
+        adjusted = np.matmul(adjusted, transform)
+    else:
+        transform = np.eye(corners.shape[1])
+
+    radii = abs(adjusted[0])
+    vertices = np.zeros((num_segments + 1, 2), dtype=np.float32)
+    theta = np.linspace(0, np.deg2rad(360), num_segments)
+    vertices[1:, 0] = radii[0] * np.cos(theta)
+    vertices[1:, 1] = radii[1] * np.sin(theta)
+
+    if len_vec > 0:
+        # rotate back
+        vertices = np.matmul(vertices, transform.T)
+
+    # Shift back to center
+    vertices = vertices + center
+
+    triangles = np.array([[0, i + 1, i + 2] for i in range(num_segments)])
+    triangles[-1, 2] = 1
+
+    return vertices, triangles

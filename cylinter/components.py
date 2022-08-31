@@ -55,6 +55,7 @@ from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize as norm
+from sklearn.metrics import silhouette_samples, silhouette_score
 
 from natsort import natsorted, order_by_index, index_natsorted
 # from numcodecs import Blosc
@@ -69,7 +70,7 @@ from .utils import (
     SelectFromCollection, read_dataframe, save_dataframe, read_markers,
     marker_channel_number, categorical_cmap, cluster_expression, clearRAM,
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
-    fdrcorrection, open_file, dict_to_csv, csv_to_dict
+    fdrcorrection, open_file, dict_to_csv, csv_to_dict, triangulate_ellipse
     )
 
 logger = logging.getLogger(__name__)
@@ -206,7 +207,8 @@ class QC(object):
                  segOutlines=None,
                  ):
 
-        # assert(SOMETHING)  # placeholder
+        assert topMarkers in ['channels', 'clusters'], \
+            'Invalid input for topMarkers configuration parameter.'
 
         self.inDir = inDir
         self.outDir = outDir
@@ -319,49 +321,6 @@ class QC(object):
                         columns=[i for i in self.markersToExclude
                                  if i in csv.columns], axis=1, inplace=True)
 
-                    # select boilerplate columns and use specific
-                    # mask quantifications for different antibodies
-#                     mask_dict = {
-#                         'Hoechst0': 'nucleiRingMask',
-#                         'Hoechst1': 'nucleiRingMask',
-#                         'Hoechst2': 'nucleiRingMask',
-#                         'anti_CD3': 'cytoRingMask',
-#                         'anti_CD45RO': 'cytoRingMask',
-#                         'Hoechst3': 'nucleiRingMask',
-#                         'Keratin_570': 'cellRingMask',
-#                         'aSMA_660': 'cellRingMask',
-#                         'Hoechst4': 'nucleiRingMask',
-#                         'CD4_488': 'cytoRingMask',
-#                         'CD45_PE': 'cytoRingMask',
-#                         'PD1_647': 'cytoRingMask',
-#                         'Hoechst5': 'nucleiRingMask',
-#                         'CD20_488': 'cytoRingMask',
-#                         'CD68_555': 'cellRingMask',
-#                         'CD8a_660': 'cytoRingMask',
-#                         'Hoechst6': 'nucleiRingMask',
-#                         'CD163_488': 'cellRingMask',
-#                         'FOXP3_570': 'nucleiRingMask',
-#                         'PDL1_647': 'cytoRingMask',
-#                         'Hoechst7': 'nucleiRingMask',
-#                         'Ecad_488': 'cellRingMask',
-#                         'Vimentin_555': 'cellRingMask',
-#                         'CDX2_647': 'cellRingMask',
-#                         'Hoechst8': 'nucleiRingMask',
-#                         'LaminABC_488': 'nucleiRingMask',
-#                         'Desmin_555': 'cellRingMask',
-#                         'CD31_647': 'nucleiRingMask',
-#                         'Hoechst9': 'nucleiRingMask',
-#                         'PCNA_488': 'nucleiRingMask',
-#                         'CollagenIV_647': 'cellRingMask'}
-
-#                     mask_object_cols = (
-#                         ['CellID', 'X_centroid', 'Y_centroid', 'Area',
-#                          'MajorAxisLength', 'MinorAxisLength',
-#                          'Eccentricity', 'Solidity', 'Extent',
-#                          'Orientation'] +
-#                         [f'{i}_{mask_dict[i]}' for i
-#                          in markers['marker_name']])
-
                     # select boilerplate columns
                     cols = (
                         ['CellID', 'X_centroid', 'Y_centroid', 'Area',
@@ -371,7 +330,66 @@ class QC(object):
                         [i for i in markers['marker_name'] if i in csv.columns]
                          )
 
+                    # (for BAF project)
+                    # cols = (
+                    #     ['CellID', 'Area', 'Solidity', 'X_centroid', 'Y_centroid',
+                    #      'CytArea', 'CoreCoord', 'AreaSubstruct',
+                    #      'MeanInsideSubstruct', 'CoreFlag', 'Corenum'] +
+                    #     [i for i in markers['marker_name'] if i in csv.columns]
+                    #      )
+
+                    # (for SARDANA)
+                    # select boilerplate columns and use specific
+                    # mask quantifications for different antibodies
+                    # mask_dict = {
+                    #     'Hoechst0': 'nucleiRingMask',
+                    #     'Hoechst1': 'nucleiRingMask',
+                    #     'Hoechst2': 'nucleiRingMask',
+                    #     'anti_CD3': 'cytoRingMask',
+                    #     'anti_CD45RO': 'cytoRingMask',
+                    #     'Hoechst3': 'nucleiRingMask',
+                    #     'Keratin_570': 'cellRingMask',
+                    #     'aSMA_660': 'cellRingMask',
+                    #     'Hoechst4': 'nucleiRingMask',
+                    #     'CD4_488': 'cytoRingMask',
+                    #     'CD45_PE': 'cytoRingMask',
+                    #     'PD1_647': 'cytoRingMask',
+                    #     'Hoechst5': 'nucleiRingMask',
+                    #     'CD20_488': 'cytoRingMask',
+                    #     'CD68_555': 'cellRingMask',
+                    #     'CD8a_660': 'cytoRingMask',
+                    #     'Hoechst6': 'nucleiRingMask',
+                    #     'CD163_488': 'cellRingMask',
+                    #     'FOXP3_570': 'nucleiRingMask',
+                    #     'PDL1_647': 'cytoRingMask',
+                    #     'Hoechst7': 'nucleiRingMask',
+                    #     'Ecad_488': 'cellRingMask',
+                    #     'Vimentin_555': 'cellRingMask',
+                    #     'CDX2_647': 'cellRingMask',
+                    #     'Hoechst8': 'nucleiRingMask',
+                    #     'LaminABC_488': 'nucleiRingMask',
+                    #     'Desmin_555': 'cellRingMask',
+                    #     'CD31_647': 'nucleiRingMask',
+                    #     'Hoechst9': 'nucleiRingMask',
+                    #     'PCNA_488': 'nucleiRingMask',
+                    #     'CollagenIV_647': 'cellRingMask'}
+                    # cols = (
+                    #     ['CellID', 'X_centroid', 'Y_centroid', 'Area',
+                    #      'MajorAxisLength', 'MinorAxisLength',
+                    #      'Eccentricity', 'Solidity', 'Extent',
+                    #      'Orientation'] +
+                    #     [f'{i}_{mask_dict[i]}' for i
+                    #      in markers['marker_name']])
+
                     csv = csv[cols]
+
+                    # (for SARDANA)
+                    # trim mask object names from column headers
+                    # cols_update = [
+                    #     i.rsplit('_', 1)[0] if 'Mask' in i else
+                    #     i for i in csv.columns
+                    #     ]
+                    # csv.columns = cols_update
 
                     # add sample column
                     csv['Sample'] = sample_name
@@ -455,10 +473,14 @@ class QC(object):
 
         napari_warnings()
 
-        # loop over samples
-        for sample_name in self.samplesForROISelection:
+        # check that all samples in samplesForROISelection are in dataframe
+        check = set(self.samplesForROISelection).issubset(
+            data['Sample'].unique()
+            )
+        if check:
 
-            if sample_name in data['Sample'].unique():
+            # loop over samples
+            for sample_name in self.samplesForROISelection:
 
                 print(f'Working on sample {sample_name}')
 
@@ -500,6 +522,18 @@ class QC(object):
                                 colormap='green', visible=False,
                                 name=ch
                                 )
+
+                # read H&E image
+                # import dask.array as da
+                # for file_path in glob.glob(
+                #   f'{self.inDir}/he/{sample_name}.*tif'):
+                #     rgb_pyramid = [
+                #         da.dstack(x) for x in zip(
+                #             *(single_channel_pyramid(file_path, channel=c)
+                #               for c in range(3)))]
+                #     viewer.add_image(
+                #         rgb_pyramid, rgb=True, blending='additive',
+                #         opacity=1.0, visible=False, name='H&E')
 
                 # read segmentation outlines
                 file_path = f'{self.inDir}/seg/{sample_name}.*tif'
@@ -556,6 +590,12 @@ class QC(object):
                 pickle.dump(polygon_dict, f)
                 f.close()
 
+        else:
+            print(
+                'One or more sample names in samplesForROISelection ' +
+                'are not in the dataframe.')
+            sys.exit()
+
         print()
 
         # create txt files per sample with cell IDs to drop
@@ -585,13 +625,6 @@ class QC(object):
                       f'{self.inDir}/tif/{sample_name}.*tif'):
                         dna = imread(file_path, key=0)
 
-                    columns, rows = np.meshgrid(
-                        np.arange(dna.shape[1]),
-                        np.arange(dna.shape[0])
-                        )
-                    columns, rows = columns.flatten(), rows.flatten()
-                    pixel_coords = np.vstack((rows, columns)).T
-
                     # create pillow image to convert into boolean mask
                     img = Image.new('L', (dna.shape[1], dna.shape[0]))
 
@@ -601,27 +634,31 @@ class QC(object):
                         selection_verts = np.round(verts).astype(int)
 
                         if shape_type == 'ellipse':
-                            col_min = selection_verts[0][1]
-                            col_max = selection_verts[1][1]
-                            row_min = selection_verts[0][0]
-                            row_max = selection_verts[2][0]
 
-                            ellipse = [(col_min, row_min), (col_max, row_max)]
+                            vertices, triangles = triangulate_ellipse(
+                                selection_verts
+                                )
 
-                            # update pillow image with ellipse
-                            ImageDraw.Draw(img).ellipse(
-                                ellipse, outline=1, fill=1
+                            # flip 2-tuple coordinates returned by
+                            # triangulate_ellipse() to draw image mask
+                            vertices = [
+                                tuple(reversed(tuple(i))) for i in vertices
+                                ]
+
+                            # update pillow image with polygon
+                            ImageDraw.Draw(img).polygon(
+                                vertices, outline=1, fill=1
                                 )
 
                         else:
-                            polygon = list(tuple(
+                            vertices = list(tuple(
                                 zip(selection_verts[:, 1],
                                     selection_verts[:, 0])
                                 ))
 
                             # update pillow image with polygon
                             ImageDraw.Draw(img).polygon(
-                                polygon, outline=1, fill=1
+                                vertices, outline=1, fill=1
                                 )
 
                     # convert pillow image into boolean numpy array
@@ -982,7 +1019,7 @@ class QC(object):
                 label='after')
             plt.xlabel('mean DNA intensity')
             plt.ylabel('count')
-            plt.title(f'Sample={name} mean DNA intensity)', size=10)
+            plt.title(f'Sample={name} mean DNA intensity', size=10)
 
             legend_elements = []
             legend_elements.append(
@@ -4640,7 +4677,7 @@ class QC(object):
                 clustering_input = data[['emb1', 'emb2', 'emb3']]
 
         else:
-            # exit program is dimensionEmbedding configuration is not 2 or 3
+            # exit program if dimensionEmbedding configuration is not 2 or 3
             if self.dimensionEmbedding not in [2, 3]:
                 print()
                 print('Embedding dimension must be set to 2 or 3.')
@@ -4725,7 +4762,7 @@ class QC(object):
         # interact with plots to identify optimal minimum cluster size
         while not os.path.isfile(os.path.join(dim_dir, 'MCS.txt')):
 
-            # initial Napari viewer without images
+            # initialize Napari viewer without images
             viewer = napari.Viewer()
 
             # generate Qt widget
@@ -4743,9 +4780,10 @@ class QC(object):
             @magicgui(
                 layout='horizontal',
                 call_button='Cluster and Plot',
-                MCS={'label': 'Min Cluster Size (MCS)'},
+                MCS={'label': 'Min Cluster Size (MCS)', 'step': 1,
+                     'adaptive_step': False},
                 )
-            def cluster_and_plot(MCS: int = 200.0):
+            def cluster_and_plot(MCS: int = 200):
 
                 clustering = hdbscan.HDBSCAN(
                     min_cluster_size=MCS,
@@ -4769,6 +4807,177 @@ class QC(object):
                 print(
                     f'min_cluster_size = {MCS}',
                     np.unique(clustering.labels_))
+
+                ###################################################
+                # plot silhouette scores
+
+                silho_input = clustering_input.copy()
+                silho_input[f'cluster_{self.dimensionEmbedding}d'] = (
+                    clustering.labels_
+                    )
+                silho_input = silho_input[
+                    silho_input[f'cluster_{self.dimensionEmbedding}d'] != -1
+                    ]
+
+                # subsample clustered data for silhouette analysis
+                silho_subset = silho_input.head(50000)
+
+                cmap = categorical_cmap(
+                    numUniqueSamples=len(
+                        silho_input[f'cluster_{self.dimensionEmbedding}d']
+                        .unique()),
+                    numCatagories=10, cmap='tab10',
+                    continuous=False)
+
+                cluster_centers = pd.DataFrame(
+                    index=sorted(
+                        silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                        .unique())
+                    )
+                embed_cols = [i for i in silho_subset.columns if 'emb' in i]
+                for clus in sorted(
+                  silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                  .unique()):
+                    group = silho_subset[silho_subset[
+                        f'cluster_{self.dimensionEmbedding}d'] == clus
+                        ]
+                    for emb_dim in embed_cols:
+                        emb_mean = group[emb_dim].mean()
+                        cluster_centers.loc[clus, emb_dim] = emb_mean
+
+                n_clusters = len(cluster_centers.index.unique())
+
+                silhouette_spacer = 1000
+
+                if embedding.shape[1] == 2:
+                    fig_silho, (ax1_silho, ax2_silho) = plt.subplots(1, 2)
+                    fig_silho.set_size_inches(18, 7)
+                elif embedding.shape[1] == 3:
+                    fig_silho = plt.figure(figsize=(18, 7))
+                    gs = plt.GridSpec(1, 2, figure=fig_silho)
+                    ax1_silho = fig_silho.add_subplot(
+                        gs[0, 0], projection=None
+                        )
+                    ax2_silho = fig_silho.add_subplot(
+                        gs[0, 1], projection='3d'
+                        )
+
+                ax1_silho.set_xlim([-1, 1])
+
+                ax1_silho.set_ylim(
+                    [0, len(silho_subset) +
+                     (n_clusters + 1) * silhouette_spacer]
+                    )
+
+                sample_silhouette_values = silhouette_samples(
+                    silho_subset[embed_cols],
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                    )
+
+                y_lower = silhouette_spacer
+                for i in cluster_centers.index.unique():
+
+                    ith_cluster_silhouette_values = (
+                        sample_silhouette_values[silho_subset[
+                            f'cluster_{self.dimensionEmbedding}d'] == i]
+                        )
+                    ith_cluster_silhouette_values.sort()
+
+                    size_cluster_i = ith_cluster_silhouette_values.shape[0]
+                    # print(f'Cluster {i} size = {size_cluster_i}')
+
+                    y_upper = y_lower + size_cluster_i
+
+                    color = cmap.colors[i]
+
+                    ax1_silho.fill_betweenx(
+                        np.arange(y_lower, y_upper),
+                        0, ith_cluster_silhouette_values,
+                        facecolor=color, edgecolor=color, alpha=0.7
+                        )
+
+                    ax1_silho.text(
+                        0.0, y_lower + 0.5 * size_cluster_i, str(i),
+                        fontdict={'size': 20/np.log(n_clusters)}
+                        )
+
+                    # compute the new y_lower for next plot
+                    y_lower = y_upper + silhouette_spacer
+
+                silhouette_avg = silhouette_score(
+                    silho_subset[embed_cols],
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                    )
+
+                ax1_silho.set_title('Silhouette Plot')
+                ax1_silho.set_xlabel('Silhouette Coefficients')
+                ax1_silho.set_ylabel('Cluster label')
+
+                ax1_silho.axvline(
+                    x=silhouette_avg, color='r', lw=0.75, linestyle='--'
+                    )
+
+                ax1_silho.set_yticks([])
+
+                if embedding.shape[1] == 2:
+                    ax2_silho.scatter(
+                        silho_subset['emb1'], silho_subset['emb2'], marker='.',
+                        s=30, edgecolor='k', lw=0, alpha=1.0,
+                        c=[cmap.colors[i] for i in
+                           silho_subset[f'cluster_{self.dimensionEmbedding}d']]
+                        )
+
+                    ax2_silho.scatter(
+                        cluster_centers['emb1'], cluster_centers['emb2'],
+                        marker='o', c='white', alpha=1, s=125, edgecolor='k'
+                        )
+
+                    for i in cluster_centers.iterrows():
+                        ax2_silho.scatter(
+                            i[1]['emb1'], i[1]['emb2'], marker='$%d$' % i[0],
+                            alpha=1, s=40, edgecolor='k'
+                            )
+
+                elif embedding.shape[1] == 3:
+                    ax2_silho.scatter(
+                        silho_subset['emb1'], silho_subset['emb2'],
+                        silho_subset['emb3'], marker='.', s=30, edgecolor='k',
+                        lw=0, alpha=1.0,
+                        c=[cmap.colors[i] for i in
+                           silho_subset[f'cluster_{self.dimensionEmbedding}d']]
+                        )
+
+                    ax2_silho.scatter(
+                        cluster_centers['emb1'], cluster_centers['emb2'],
+                        cluster_centers['emb3'], marker='o', c='white',
+                        alpha=1, s=125, edgecolor='k'
+                        )
+
+                    for i in cluster_centers.iterrows():
+                        ax2_silho.scatter(
+                            i[1]['emb1'], i[1]['emb2'], i[1]['emb3'],
+                            marker='$%d$' % i[0], zorder=100, alpha=1, s=40,
+                            edgecolor='k'
+                            )
+
+                ax2_silho.set_title('Clustering')
+                ax2_silho.set_xlabel('Feature Space 1')
+                ax2_silho.set_ylabel('Feature Space 2')
+
+                total_clusters = len(
+                    silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
+                    )
+
+                fig_silho.suptitle(
+                    ('MCS=%d, average silhouette score for %d/%d clusters '
+                     'in silhouette data subset is %f'
+                     % (MCS, n_clusters, total_clusters, silhouette_avg)),
+                    fontsize=14, fontweight='bold'
+                    )
+
+                # show silhouette plot after cluster widget
+                # is added to Napari window (below)
+                ###################################################
 
                 if embedding.shape[1] == 2:
 
@@ -5180,6 +5389,8 @@ class QC(object):
                     NavigationToolbar(cluster_canvas, cluster_widget))
                 cluster_layout.addWidget(cluster_canvas)
 
+                fig_silho.show()
+
                 if embedding.shape[1] == 2:
                     # must call draw() before creating selector,
                     # or alpha setting doesn't work.
@@ -5189,6 +5400,7 @@ class QC(object):
                         selector.disconnect()
                     selector = SelectFromCollection(
                         ax_cluster, cluster_paths)
+
                 ###############################################################
 
                 ###############################################################
@@ -5354,6 +5566,13 @@ class QC(object):
                             f'{self.embeddingAlgorithm}_'
                             f'{current_MCS}.png'),
                             bbox_inches='tight', dpi=1000)
+
+                        fig_silho.savefig(os.path.join(
+                            dim_dir,
+                            f'{self.embeddingAlgorithm}_'
+                            f'{current_MCS}_silho.png'),
+                            bbox_inches='tight', dpi=1000)
+
                         plt.close('all')
 
                     elif embedding.shape[1] == 3:
@@ -5405,12 +5624,16 @@ class QC(object):
             @magicgui(
                 layout='horizontal',
                 call_button='Sweep Range',
-                lowerMCS={'label': 'Lower MCS'},
-                upperMCS={'label': 'Upper MCS'},
+                lowerMCS={
+                    'label': 'Lower MCS', 'step': 1, 'adaptive_step': False
+                    },
+                upperMCS={
+                    'label': 'Upper MCS', 'step': 1, 'adaptive_step': False
+                    },
                 )
             def sweep_MCS(
-              lowerMCS: int = 200.0,
-              upperMCS: int = 200.0,
+              lowerMCS: int = 200,
+              upperMCS: int = 200,
               ):
 
                 rnge = list(
@@ -5442,6 +5665,45 @@ class QC(object):
                     print(
                         f'min_cluster_size = {i}',
                         np.unique(clustering.labels_))
+
+                    silho_input = clustering_input.copy()
+                    silho_input[f'cluster_{self.dimensionEmbedding}d'] = (
+                        clustering.labels_
+                        )
+                    silho_input = silho_input[
+                        silho_input[
+                            f'cluster_{self.dimensionEmbedding}d'] != -1
+                        ]
+
+                    # subsample clustered data for silhouette analysis
+                    silho_subset = silho_input.head(50000)
+
+                    embed_cols = [
+                        i for i in silho_subset.columns if 'emb' in i
+                        ]
+
+                    silhouette_avg = silhouette_score(
+                        silho_subset[embed_cols],
+                        silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                        )
+
+                    total_clusters = len(
+                        silho_input[f'cluster_{self.dimensionEmbedding}d']
+                        .unique()
+                        )
+
+                    n_clusters = len(
+                        silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                        .unique()
+                        )
+
+                    print(
+                        ('Average silhouette score for %d/%d clusters in '
+                         'silhouette data subset: %f'
+                         % (n_clusters, total_clusters, silhouette_avg))
+                    )
+                    print()
+
             ###################################################################
 
             sweep_MCS.native.setSizePolicy(
@@ -6058,14 +6320,15 @@ class QC(object):
 
             print(f'Clusters to run: {len(clusters_to_run)}')
             print()
+
         else:
             # create a list of clusters to run
             completed_clusters = []
             clusters_to_run = natsorted(
                 data[f'cluster_{self.dimensionEmbedding}d'].unique()
                 )
+
             print(f'Clusters to run: {len(clusters_to_run)}')
-            print()
 
         #######################################################################
 
@@ -6097,6 +6360,7 @@ class QC(object):
               markers_to_show,
               [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0),
                (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)]):
+
                 color_dict[i] = j
 
             for sample in [i for i in data['Sample'].unique()]:
@@ -6107,6 +6371,9 @@ class QC(object):
                      == cluster) &
                     (data['Sample'] == sample)
                     ]
+
+                if len(cellcutter_input) == 0:
+                    continue
 
                 # randomly select example cells
                 if len(cellcutter_input) > self.numThumbnails:
@@ -6119,7 +6386,7 @@ class QC(object):
                 if not os.path.exists(
                   os.path.join(
                     zarr_dir, f'clus{cluster}_{sample}'
-                    f'_win{self.windowSize}.zarr'
+                    f'_win{self.windowSize}.zarr', '0.0.0.0'
                     )
                   ):
 
@@ -6129,13 +6396,14 @@ class QC(object):
                         index=False
                         )
 
+                    print()
                     print(
-                        f'Cutting cluster {cluster} cells '
-                        f'showing {markers_to_show} '
+                        f'Cutting {len(cellcutter_input)} '
+                        f'cluster {cluster} cell(s) '
+                        f'showing {markers_to_show} channels '
                         f'normalized across {norm_ax} '
                         f'from sample {sample}...'
                         )
-                    print()
 
                     # run cellcutter on sample image
                     tif_file_path = glob.glob(
@@ -6145,8 +6413,9 @@ class QC(object):
                         f"{self.inDir}/mask/{sample}.*tif"
                         )[0]
                     run(
-                        ["cut_cells", "--window-size", f"{self.windowSize}",
-                         "--cells-per-chunk", "200", "--cache-size", "57711",
+                        ["cut_cells", "--force", "--window-size",
+                         f"{self.windowSize}", "--cells-per-chunk",
+                         "200", "--cache-size", "57711",
                          f"{tif_file_path}",
                          f"{mask_file_path}",
                          f"{thumbnails_dir}/csv_data.csv",
@@ -6154,7 +6423,6 @@ class QC(object):
                          f"_win{self.windowSize}.zarr",
                          "--channels"] + channel_nums
                          )
-                    print()
 
                 # read multi-channel zarr file created by cellcutter
                 z_path_img = os.path.join(
@@ -6168,7 +6436,7 @@ class QC(object):
                     if not os.path.exists(
                       os.path.join(
                         zarr_dir, f'clus{cluster}_{sample}'
-                        f'_win{self.windowSize}_seg.zarr'
+                        f'_win{self.windowSize}_seg.zarr', '0.0.0.0'
                         )
                       ):
 
@@ -6176,6 +6444,16 @@ class QC(object):
                         cellcutter_input.to_csv(
                             os.path.join(thumbnails_dir, 'csv_data.csv'),
                             index=False
+                            )
+
+                        print()
+                        print(
+                            'Cutting segmentation outlines for '
+                            f'{len(cellcutter_input)} '
+                            f'cluster {cluster} cell(s) '
+                            f'showing {markers_to_show} channels '
+                            f'normalized across {norm_ax} '
+                            f'from sample {sample}...'
                             )
 
                         # run cellcutter on segmentation outlines image
@@ -6186,7 +6464,7 @@ class QC(object):
                             f"{self.inDir}/mask/{sample}.*tif"
                             )[0]
                         run(
-                            ["cut_cells", "--window-size",
+                            ["cut_cells", "--force", "--window-size",
                              f"{self.windowSize}",
                              "--cells-per-chunk", "200",
                              "--cache-size", "57711",
@@ -6197,7 +6475,6 @@ class QC(object):
                              f"_win{self.windowSize}_seg.zarr",
                              "--channels", "1"]
                              )
-                        print()
 
                     # read segmentation outlines zarr file
                     # created by cellcutter
@@ -6239,6 +6516,7 @@ class QC(object):
                         slice /= (
                             (contrast_limits[marker][1]/65535)
                             - (contrast_limits[marker][0]/65535))
+
                         slice = np.clip(slice, 0, 1)
 
                         # convert channel slice to RGB, colorize,
@@ -6252,9 +6530,13 @@ class QC(object):
                         # get segmentation thumbnails
                         seg = img_as_float(z_seg[0, cell, :, :])
 
+                        # ensure segmentation outlines are normalized 0-1
+                        seg = (seg - np.min(seg))/np.ptp(seg)
+
                         # convert segmentation thumbnail to RGB
                         # and add to blank image
-                        seg = gray2rgb(seg)
+                        seg = gray2rgb(seg) * 0.25  # decrease alpha
+
                         blank_img += seg
 
                     # append merged thumbnail image to long_table
