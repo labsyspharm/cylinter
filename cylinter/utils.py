@@ -15,7 +15,6 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from matplotlib import colors
 from sklearn.preprocessing import MinMaxScaler
-from hurry.filesize import size
 import psutil
 import zarr
 import dask.array as da
@@ -477,7 +476,13 @@ def clearRAM(print_usage=False):
     if print_usage:
         process = psutil.Process(os.getpid())
 
-        print(size(process.memory_info().rss))
+        # Only needed for internal debugging. Let's not add this to the full
+        # dependency list.
+        try:
+            from hurry.filesize import size
+            print(size(process.memory_info().rss))
+        except ImportError:
+            print("Please install hurry.filesize for this feature")
 
 
 def open_file(filename):

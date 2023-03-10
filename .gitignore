@@ -1,3 +1,6 @@
+.synapseConfig
+*~
+
 # psilinter-generated directories
 config/
 input/

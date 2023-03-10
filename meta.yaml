@@ -1,0 +1,54 @@
+{% set name = "cylinter" %}
+{% set version = "0.0.44" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: f3e662a5a415f60520e6fc0bd563bc09a4fa92588b18c6b709bcfdf80229b7f6
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
+  entry_points:
+    - cylinter=cylinter.cylinter:main
+  noarch: python
+
+requirements:
+  host:
+    - pip
+    - python
+  run:
+    - python
+    - cellcutter
+    - hdbscan
+    - joblib
+    - magicgui
+    - matplotlib
+    - napari
+    - natsort
+    - numba
+    - pandas
+    - pyarrow
+    - pyyaml
+    - qtpy
+    - scikit-image
+    - scikit-learn
+    - scipy
+    - seaborn
+    - tifffile
+    - umap-learn
+    - zarr
+
+test:
+  imports:
+    - cylinter
+
+about:
+  home: https://labsyspharm.github.io/cylinter/
+  license: MIT
+  license_family: BSD
+  summary: Quality Control Software for Multiplex Microscopy
+
