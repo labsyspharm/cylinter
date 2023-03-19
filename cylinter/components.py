@@ -12,7 +12,7 @@ import pickle
 from ast import literal_eval
 
 import gc
-import hdbscan
+# import hdbscan
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -577,6 +577,9 @@ class QC(object):
                 # clear polygon vertices from polygons list for re-entry below
                 updated_polygons = []
 
+                viewer.scale_bar.visible = True
+                viewer.scale_bar.unit = 'um'
+
                 napari.run()
 
                 # store lists vertices per sample as a dictionary
@@ -883,7 +886,7 @@ class QC(object):
 
             # plot histogram on canvas axis
             n, bins, patches = ax.hist(
-                group[dna1], bins=num_bins,
+                np.log(group[dna1]), bins=num_bins,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
                 range=None, label='before')
@@ -948,15 +951,15 @@ class QC(object):
 
                 # apply lower and upper cutoffs
                 group_update = group[
-                    (group[dna1] > lowerCutoff) &
-                    (group[dna1] < upperCutoff)]
+                    (np.log(group[dna1]) > lowerCutoff) &
+                    (np.log(group[dna1]) < upperCutoff)]
 
                 # isolate x, y coordinates of selected centroids
                 centroids = group_update[['Y_centroid', 'X_centroid']]
 
                 # isolate cycle 1 DNA intensity values and assign
                 # as quantitative point properties
-                dna_intensity = group_update[dna1].values
+                dna_intensity = np.log(group_update[dna1]).values
                 point_properties = {'dna_intensity': dna_intensity}
 
                 # remove existing centroids and
@@ -983,7 +986,9 @@ class QC(object):
                 QtWidgets.QSizePolicy.Preferred,
             )
 
-            # show Napari window
+            viewer.scale_bar.visible = True
+            viewer.scale_bar.unit = 'um'
+
             napari.run()
 
             # get current cutoffs
@@ -992,14 +997,14 @@ class QC(object):
             # plot DNA intensity histogram BEFORE filtering
             fig, ax = plt.subplots()
             plt.hist(
-                group[dna1], bins=bins,
+                np.log(group[dna1]), bins=bins,
                 density=False, color='b', ec='none',
                 alpha=0.5, histtype=histtype,
                 range=None, label='before')
 
             if lowerCutoff == upperCutoff:
-                lowerCutoff = group[dna1].min()
-                upperCutoff = group[dna1].max()
+                lowerCutoff = np.log(group[dna1]).min()
+                upperCutoff = np.log(group[dna1]).max()
                 print('No cutoffs applied, selecting all data points.')
             else:
                 print(
@@ -1009,12 +1014,12 @@ class QC(object):
 
             # apply lower and upper cutoffs
             group_update = group[
-                (group[dna1] > lowerCutoff) &
-                (group[dna1] < upperCutoff)]
+                (np.log(group[dna1]) > lowerCutoff) &
+                (np.log(group[dna1]) < upperCutoff)]
 
             # plot DNA intensity histogram AFTER filtering
             plt.hist(
-                group_update[dna1], bins=bins, color='r', ec='none',
+                np.log(group_update[dna1]), bins=bins, color='r', ec='none',
                 alpha=0.5, histtype=histtype, range=None,
                 label='after')
             plt.xlabel('mean DNA intensity')
@@ -1045,8 +1050,8 @@ class QC(object):
 
             # isolate sample data to drop
             data_to_drop = group.copy()[
-                (group[dna1] < lowerCutoff) |
-                (group[dna1] > upperCutoff)]
+                (np.log(group[dna1]) < lowerCutoff) |
+                (np.log(group[dna1]) > upperCutoff)]
 
             # create unique IDs for cells to drop in current sample
             data_to_drop['handle'] = (
@@ -1224,7 +1229,7 @@ class QC(object):
 
             # plot histogram on canvas axis
             n, bins, patches = ax.hist(
-                group['Area'], bins=num_bins,
+                np.log(group['Area']), bins=num_bins,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
                 range=None, label='before')
@@ -1289,15 +1294,15 @@ class QC(object):
 
                 # apply lower and upper cutoffs
                 group_update = group[
-                    (group['Area'] > lowerCutoff) &
-                    (group['Area'] < upperCutoff)]
+                    (np.log(group['Area']) > lowerCutoff) &
+                    (np.log(group['Area']) < upperCutoff)]
 
                 # isolate x, y coordinates of selected centroids
                 centroids = group_update[['Y_centroid', 'X_centroid']]
 
                 # isolate Area values and assign
                 # as quantitative point properties
-                cell_area = group_update['Area'].values
+                cell_area = np.log(group_update['Area']).values
                 point_properties = {'cell_area': cell_area}
 
                 # remove existing centroids and
@@ -1324,7 +1329,9 @@ class QC(object):
                 QtWidgets.QSizePolicy.Preferred,
             )
 
-            # show Napari window
+            viewer.scale_bar.visible = True
+            viewer.scale_bar.unit = 'um'
+
             napari.run()
 
             # get current cutoffs
@@ -1333,14 +1340,14 @@ class QC(object):
             # plot DNA area histogram BEFORE filtering
             fig, ax = plt.subplots()
             plt.hist(
-                group['Area'], bins=bins,
+                np.log(group['Area']), bins=bins,
                 density=False, color='b', ec='none',
                 alpha=0.5, histtype=histtype,
                 range=None, label='before')
 
             if lowerCutoff == upperCutoff:
-                lowerCutoff = group['Area'].min()
-                upperCutoff = group['Area'].max()
+                lowerCutoff = np.log(group['Area']).min()
+                upperCutoff = np.log(group['Area']).max()
                 print('No cutoffs applied, selecting all data points.')
             else:
                 print(
@@ -1350,12 +1357,12 @@ class QC(object):
 
             # apply lower and upper cutoffs
             group_update = group[
-                (group['Area'] > lowerCutoff) &
-                (group['Area'] < upperCutoff)]
+                (np.log(group['Area']) > lowerCutoff) &
+                (np.log(group['Area']) < upperCutoff)]
 
             # plot DNA area histogram AFTER filtering
             plt.hist(
-                group_update['Area'], bins=bins, color='r', ec='none',
+                np.log(group_update['Area']), bins=bins, color='r', ec='none',
                 alpha=0.5, histtype=histtype, range=None, label='after')
             plt.xlabel('mean DNA area')
             plt.ylabel('count')
@@ -1384,8 +1391,8 @@ class QC(object):
 
             # isolate sample data to drop
             data_to_drop = group.copy()[
-                (group['Area'] < lowerCutoff) |
-                (group['Area'] > upperCutoff)]
+                (np.log(group['Area']) < lowerCutoff) |
+                (np.log(group['Area']) > upperCutoff)]
 
             # create unique IDs for cells to drop in current sample
             data_to_drop['handle'] = (
@@ -2029,7 +2036,9 @@ class QC(object):
                         widget, name=f'first/last DNA histogram',
                         area='right')
 
-                    # show Napari window
+                    viewer.scale_bar.visible = True
+                    viewer.scale_bar.unit = 'um'
+
                     napari.run()
 
                     # get final lower and upper cutoffs
@@ -2638,6 +2647,9 @@ class QC(object):
 
             pruned_dock = viewer.window.add_dock_widget(
                 pruned_widget, name=f'{ab} pruned/rescaled', area='right')
+
+            viewer.scale_bar.visible = True
+            viewer.scale_bar.unit = 'um'
 
             napari.run()
 
@@ -3934,8 +3946,14 @@ class QC(object):
                     @magicgui(
                         layout='horizontal',
                         call_button='Sweep Range',
-                        lowerMCS={'label': 'Lower MCS'},
-                        upperMCS={'label': 'Upper MCS'},
+                        lowerMCS={
+                            'label': 'Lower MCS', 'step': 1,
+                            'adaptive_step': False
+                            },
+                        upperMCS={
+                            'label': 'Upper MCS', 'step': 1,
+                            'adaptive_step': False
+                            },
                         )
                     def sweep_MCS(
                       lowerMCS: int = 200.0,
@@ -3988,6 +4006,9 @@ class QC(object):
 
                     cluster_dock = viewer.window.add_dock_widget(
                         cluster_widget, name='clustering result', area='right')
+
+                    viewer.scale_bar.visible = True
+                    viewer.scale_bar.unit = 'um'
 
                     napari.run()
 
@@ -4303,23 +4324,138 @@ class QC(object):
     @module
     def PCA(data, self, args):
 
+        # read marker metadata
+        markers, dna1, dna_moniker, abx_channels = read_markers(
+            markers_filepath=os.path.join(self.inDir, 'markers.csv'),
+            markers_to_exclude=self.markersToExclude,
+            data=data
+            )
+
+        # drop antibody channel exclusions for PCA
+        abx_channels = [
+            i for i in abx_channels if i not in self.channelExclusionsPCA]
+
+        # create PCA directory if it doesn't already exist
+        pca_dir = os.path.join(self.outDir, f'PCA')
+        if not os.path.exists(pca_dir):
+            os.makedirs(pca_dir)
+
+        #######################################################################
+        # Horn's parallel analysis to determine the number of non-random PCs
+        unshuffled = data[abx_channels]
+
+        unshuffled = unshuffled[
+            ~unshuffled.index.isin(self.samplesToRemovePCA)
+            ]
+
+        evr = pd.DataFrame()
+        print()
+        print("Performing Horn's parallel analysis to "
+              "determine number of non-random PCs...")
+        n_components = 10
+        for l in range(1, 11):
+            print(f'iteration {l}/{10}')
+            shuffled = unshuffled.copy()
+            for e, col in enumerate(shuffled.columns):
+                shuffled[col] = shuffled[col].sample(
+                    frac=1.0, random_state=e+l).values
+
+            # specify PCA parameters
+            pca = PCA(n_components=n_components, random_state=1)
+
+            # mean-center data (axis=0)
+            for c in shuffled.columns:
+                shuffled[c] = shuffled[c]-shuffled[c].mean()
+
+            # fit PCA parameters to data
+            pca.fit_transform(shuffled)
+
+            evr[l] = pca.explained_variance_ratio_
+
+        # used 1-based indexing for PCs
+        evr.index = [i+1 for i in evr.index]
+
+        # specify PCA parameters for unshuffled data
+        pca = PCA(n_components=n_components, random_state=1)
+
+        # mean-center unshuffled data (axis=0)
+        for c in unshuffled.columns:
+            unshuffled[c] = unshuffled[c]-unshuffled[c].mean()
+
+        # apply PCA parameters to unshuffled data
+        projected = pca.fit_transform(unshuffled)
+
+        sns.set_style('whitegrid')
+        fig1, ax1 = plt.subplots()
+
+        x = np.arange(1, n_components+1, step=1)
+        ax1.plot(evr.index, evr.mean(axis=1), color='tab:orange', marker='o')
+        ax1.plot(
+            x, pca.explained_variance_ratio_, color='tab:blue', marker='o'
+            )
+
+        ax1.set_xticks(x)
+
+        ax1.set_xlabel(
+            'PC', fontsize=10, labelpad=7.0)
+        ax1.set_ylabel(
+            'Explained Variance Ratio', fontsize=10, labelpad=4.0)
+
+        legend_handles = []
+        legend_handles.append(
+            Line2D([0], [0], marker=None, color='tab:blue',
+                   label='unshuffled', markeredgewidth=0.7,
+                   markersize=5.0, linewidth=5)
+                   )
+        legend_handles.append(
+            Line2D([0], [0], marker=None, color='tab:orange',
+                   label='average shuffled', markeredgewidth=0.7,
+                   markersize=5.0, linewidth=5)
+                   )
+        ax1.legend(
+            handles=legend_handles,
+            prop={'size': 10.0},
+            bbox_to_anchor=[0.95, 1.0]
+            )
+        fig1.savefig(
+            os.path.join(pca_dir, 'variance.pdf'),
+            bbox_inches='tight'
+            )
+        plt.close(fig1)
+
+        #######################################################################
+        # plot cell distribution across PCs 1 and 2
+
+        # generate dataframe for plot input
+        scatter_input = pd.DataFrame(data=projected, index=unshuffled.index)
+        scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
+
+        fig2, ax2 = plt.subplots()
+        sns.scatterplot(
+            data=scatter_input, x='PC1', y='PC2', color='k', linewidth=0.0,
+            s=30000/len(data), alpha=1.0, legend=False
+            )
+
+        ax2.set_xlabel(
+            f'PC1 ({round((pca.explained_variance_ratio_[0] * 100), 2)}'
+            '% of variance)', fontsize=10, labelpad=7.0)
+        ax2.set_ylabel(
+            f'PC2 ({round((pca.explained_variance_ratio_[1] * 100), 2)}'
+            '% of variance)', fontsize=10, labelpad=4.0)
+        ax2.tick_params(axis='both', which='major', labelsize=7.0)
+
+        fig2.savefig(
+            os.path.join(
+                pca_dir, 'pcaScoresPlotCells.png'), dpi=600,
+            bbox_inches='tight'
+            )
+        plt.close(fig2)
+
+        #######################################################################
+        # compute median channel intensites for samples and
+        # plot their distribution across PCs 1 and 2
+
         if len(data['Sample'].unique()) > 1:
-
-            # read marker metadata
-            markers, dna1, dna_moniker, abx_channels = read_markers(
-                markers_filepath=os.path.join(self.inDir, 'markers.csv'),
-                markers_to_exclude=self.markersToExclude,
-                data=data
-                )
-
-            # drop antibody channel exclusions for PCA
-            abx_channels = [
-                i for i in abx_channels if i not in self.channelExclusionsPCA]
-
-            # create PCA directory if it doesn't already exist
-            pca_dir = os.path.join(self.outDir, f'PCA')
-            if not os.path.exists(pca_dir):
-                os.makedirs(pca_dir)
 
             # compute median antibody expression per sample
             # samples (rows) x features (columns)
@@ -4588,7 +4724,7 @@ class QC(object):
 
             # save figure
             plt.savefig(
-                os.path.join(pca_dir, 'pcaScoresPlot.pdf'),
+                os.path.join(pca_dir, 'pcaScoresPlotSamples.pdf'),
                 bbox_inches='tight')
             plt.close('all')
 
@@ -5720,6 +5856,9 @@ class QC(object):
             cluster_dock = viewer.window.add_dock_widget(
                 cluster_widget, name='clustering result', area='right')
 
+            viewer.scale_bar.visible = True
+            viewer.scale_bar.unit = 'um'
+
             napari.run()
 
         #######################################################################
@@ -5876,6 +6015,9 @@ class QC(object):
                     viewer.layers[ch].contrast_limits = (
                         contrast_limits[ch][0], contrast_limits[ch][1])
 
+                viewer.scale_bar.visible = True
+                viewer.scale_bar.unit = 'um'
+
                 napari.run()
 
                 # create channel settings configuration file and
@@ -5894,6 +6036,9 @@ class QC(object):
             else:
                 print()
                 print('Channel contrast settings have not been defined.')
+
+                viewer.scale_bar.visible = True
+                viewer.scale_bar.unit = 'um'
 
                 napari.run()
 
