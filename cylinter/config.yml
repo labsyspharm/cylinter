@@ -68,7 +68,7 @@ hexbinGridSize: 20
 # Higher values increase bin resolution.
 
 # metaQC (optional)------------------------------------------------------------
-metaQC: True
+metaQC: False
 # (bool) Whether to perform data reclassification based on
 # unsupervised clustering results of combinations of clean and
 # noisy (previously-redacted) data.
