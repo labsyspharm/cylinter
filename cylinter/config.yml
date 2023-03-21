@@ -1,11 +1,11 @@
 # GENERAL PROGRAM CONFIGURATIONS
 
-inDir: /Users/<username>/Desktop/cylinter_demo
+inDir: /data
 # Path to CyLinter input directory containing multi-channel
 # image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF),
 # segmentation masks (TIFF), and corresponding single-cell feature tables (CSV)
 
-outDir: /Users/<username>/Desktop/cylinter_demo/output
+outDir: /data/output
 # CyLinter output directory. Path is created if it does not exist.
 
 sampleMetadata:
