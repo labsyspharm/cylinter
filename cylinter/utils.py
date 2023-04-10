@@ -90,29 +90,31 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
 
 def single_channel_pyramid(tiff_path, channel):
 
-    # for OME-TIFFs
-    if tiff_path.endswith('.ome.tif'):
+    tiff = tifffile.TiffFile(tiff_path)
 
-        tiff = tifffile.TiffFile(tiff_path, is_ome=False)
-
+    if len(tiff.series[0].levels) > 1:
         pyramid = [
             zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels
             ]
 
         pyramid = [da.from_zarr(z) for z in pyramid]
 
-        return pyramid
+        min_val = pyramid[0].min()
+        max_val = pyramid[0].max()
+        vmin, vmax = da.compute(min_val, max_val)
 
-    # for standard TIFs (create image pyramid on-the-fly)
-    elif tiff_path.endswith('.tif'):
-
-        img = imread(tiff_path, key=channel)
+    else:
+        img = tiff.series[0][channel]
 
         pyramid = [img[::4**i, ::4**i] for i in range(4)]
 
         pyramid = [da.from_array(z) for z in pyramid]
 
-        return pyramid
+        min_val = pyramid[0].min()
+        max_val = pyramid[0].max()
+        vmin, vmax = da.compute(min_val, max_val)
+
+    return pyramid, vmin, vmax
 
 
 def matplotlib_warnings(fig):
