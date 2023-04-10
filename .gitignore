@@ -1,7 +1,7 @@
 .synapseConfig
 *~
 
-# psilinter-generated directories
+# CyLinter-generated directories
 config/
 input/
 output/

@@ -12,7 +12,7 @@ import pickle
 from ast import literal_eval
 
 import gc
-# import hdbscan
+import hdbscan
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -451,6 +451,7 @@ class QC(object):
     def selectROIs(data, self, args):
 
         print()
+
         # read marker metadata
         markers, dna1, dna_moniker, abx_channels = read_markers(
             markers_filepath=os.path.join(self.inDir, 'markers.csv'),
@@ -505,22 +506,22 @@ class QC(object):
                         for file_path in glob.glob(
                           f'{self.inDir}/tif/{sample_name}.*tif'):
 
-                            img = single_channel_pyramid(
+                            img, min, max = single_channel_pyramid(
                                 file_path, channel=channel_number.item() - 1
                                 )
 
                         if e == 0:
                             viewer = napari.view_image(
-                                img, rgb=False, blending='additive',
-                                colormap='green', visible=False,
-                                name=ch
+                                img, rgb=False, title='CyLinter',
+                                blending='additive', colormap='green',
+                                visible=False, name=ch,
+                                contrast_limits=(min, max)
                                 )
-
                         else:
                             viewer.add_image(
                                 img, rgb=False, blending='additive',
-                                colormap='green', visible=False,
-                                name=ch
+                                colormap='green', visible=False, name=ch,
+                                contrast_limits=(min, max)
                                 )
 
                 # read H&E image
@@ -537,7 +538,7 @@ class QC(object):
 
                 # read segmentation outlines
                 file_path = f'{self.inDir}/seg/{sample_name}.*tif'
-                seg = single_channel_pyramid(
+                seg, min, max = single_channel_pyramid(
                     glob.glob(file_path)[0], channel=0)
 
                 viewer.add_image(
@@ -548,12 +549,16 @@ class QC(object):
                 # read DNA1 channel
                 for file_path in glob.glob(
                   f'{self.inDir}/tif/{sample_name}.*tif'):
-                    dna = single_channel_pyramid(file_path, channel=0)
+                    dna, min, max = single_channel_pyramid(
+                        file_path, channel=0
+                        )
 
                 viewer.add_image(
                     dna, rgb=False, blending='additive',
                     colormap='gray', visible=True,
-                    name=f'{dna1}: {sample_name}')
+                    name=f'{dna1}: {sample_name}',
+                    contrast_limits=(min, max)
+                    )
 
                 if polygons:
                     selection_layer = viewer.add_shapes(
@@ -706,7 +711,6 @@ class QC(object):
                 data.drop(global_idxs_to_drop, inplace=True)
             else:
                 pass
-        print()
 
         # save images of tissue with selected data points
         image_dir = os.path.join(roi_dir, 'images')
@@ -834,25 +838,26 @@ class QC(object):
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
             # create image pyramid
-            seg = single_channel_pyramid(
+            seg, min, max = single_channel_pyramid(
                 glob.glob(file_path)[0], channel=0)
 
             # add DNA image to viewer
             viewer = napari.view_image(
-                seg, rgb=False, visible=False, colormap='gray',
-                opacity=0.5, name='segmentation'
+                seg, rgb=False, visible=False, title='CyLinter',
+                colormap='gray', opacity=0.5, name='segmentation',
+                contrast_limits=(min, max)
                 )
 
             # read DNA1 channel
             for file_path in glob.glob(
               f'{self.inDir}/tif/{name}.*tif'):
                 # create image pyramid
-                dna = single_channel_pyramid(file_path, channel=0)
+                dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             # add segmentation image to viewer
             viewer.add_image(
                 dna, rgb=False, blending='additive',
-                name=f'{dna1}: {name}'
+                name=f'{dna1}: {name}', contrast_limits=(min, max)
                 )
 
             # generate Qt widget to dock in Napari viewer
@@ -1176,25 +1181,26 @@ class QC(object):
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
             # create image pyramid
-            seg = single_channel_pyramid(
+            seg, min, max = single_channel_pyramid(
                 glob.glob(file_path)[0], channel=0)
 
             # add DNA image to viewer
             viewer = napari.view_image(
-                seg, rgb=False, visible=False, colormap='gray',
-                opacity=0.5, name='segmentation'
+                seg, rgb=False, visible=False, title='CyLinter',
+                colormap='gray', opacity=0.5, name='segmentation',
+                contrast_limits=(min, max)
                 )
 
             # read DNA1 channel
             for file_path in glob.glob(
               f'{self.inDir}/tif/{name}.*tif'):
                 # create image pyramid
-                dna = single_channel_pyramid(file_path, channel=0)
+                dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             # add segmentation image to viewer
             viewer.add_image(
                 dna, rgb=False, blending='additive',
-                name=f'{dna1}: {name}'
+                name=f'{dna1}: {name}', contrast_limits=(min, max)
                 )
 
             # generate Qt widget to dock in Napari viewer
@@ -1827,7 +1833,7 @@ class QC(object):
                 #     cycles_dir, 'cycle_correlation(logRatio).pdf')
                 # open_file(filename)
 
-                for name, group in natsorted(ratios_melt.groupby(['sample'])):
+                for name, group in natsorted(ratios_melt.groupby('sample')):
 
                     print()
                     print(f'Sample: {name}')
@@ -1858,41 +1864,45 @@ class QC(object):
                     file_path = f'{self.inDir}/seg/{name}.*tif'
 
                     # create image pyramid
-                    seg = single_channel_pyramid(
+                    seg, min, max = single_channel_pyramid(
                         glob.glob(file_path)[0], channel=0)
 
                     # add segmentation outlines image to viewer
                     viewer = napari.view_image(
-                        seg, rgb=False, blending='additive',
+                        seg, rgb=False, title='CyLinter', blending='additive',
                         opacity=0.5, colormap='gray', visible=False,
-                        name='segmentation')
+                        name='segmentation', contrast_limits=(min, max)
+                        )
 
                     # read last DNA channel
                     for file_path in glob.glob(
                       f'{self.inDir}/tif/{name}.*tif'):
-                        dna_last = single_channel_pyramid(
-                            file_path, channel=channel_number.item() - 1)
+                        dna_last, min, max = single_channel_pyramid(
+                            file_path, channel=channel_number.item() - 1
+                            )
 
                     # add last DNA image to viewer
                     viewer.add_image(
-                        dna_last, rgb=False,
-                        blending='additive',
-                        colormap='magenta',
-                        name=f'{cycle_num}')
+                        dna_last, rgb=False, blending='additive',
+                        colormap='magenta', name=f'{cycle_num}',
+                        contrast_limits=(min, max)
+                        )
 
                     # read first DNA channel
                     for file_path in glob.glob(
                       f'{self.inDir}/tif/{name}.*tif'):
 
                         # create image pyramid
-                        dna_first = single_channel_pyramid(
-                            file_path, channel=0)
+                        dna_first, min, max = single_channel_pyramid(
+                            file_path, channel=0
+                            )
 
                     # add first DNA image to viewer
                     viewer.add_image(
                         dna_first, rgb=False, blending='additive',
-                        colormap='green',
-                        name=f'{dna1}')
+                        colormap='green', name=f'{dna1}',
+                        contrast_limits=(min, max)
+                        )
 
                     # generate Qt widget to dock in Napari viewer
                     widget = QtWidgets.QWidget()
@@ -2277,7 +2287,7 @@ class QC(object):
 
             # initialize Napari window without an image
             # before first cutoffs are applied
-            viewer = napari.Viewer()
+            viewer = napari.Viewer(title='CyLinter')
 
             hist_facet = (
                 data_copy1[['Sample', 'Condition', 'Area'] + [ab]]
@@ -2303,7 +2313,7 @@ class QC(object):
             # plot raw facets
             g_raw = sns.FacetGrid(
                 hist_facet, col='for_plot', col_wrap=4,
-                height=1, aspect=1.0, sharex=True, sharey=False)
+                height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False)
 
             # use hexbins for plotting
             if self.hexbins:
@@ -2317,10 +2327,6 @@ class QC(object):
                 g_raw.map(
                     plt.scatter, 'signal', 'Area', s=0.05,
                     linewidths=0.0, color='k')
-
-                # suppresses matplotlib tight_layout warning
-                g_raw.fig.set_figheight(2.5)
-                g_raw.fig.set_figwidth(7)
 
             g_raw.set_titles(
                 col_template="{col_name}", fontweight='bold',
@@ -2356,8 +2362,8 @@ class QC(object):
             raw_layout.addWidget(raw_canvas)
 
             plt.subplots_adjust(
-                left=0.03, bottom=0.13, right=0.99,
-                top=0.92, hspace=0.8, wspace=0.3)
+                left=0.08, bottom=0.2, right=0.99,
+                top=0.9, hspace=0.8, wspace=0.3)
 
             plt.savefig(
                 os.path.join(pruning_dir, f'{ab}_raw.png'), dpi=300,
@@ -2464,7 +2470,7 @@ class QC(object):
                 # plot pruned facets
                 g_pruned = sns.FacetGrid(
                     hist_facet, col='for_plot', col_wrap=4,
-                    height=1.0, aspect=1.0, sharex=True, sharey=False)
+                    height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False)
 
                 # use hexbins for plotting
                 if self.hexbins:
@@ -2478,10 +2484,6 @@ class QC(object):
                     g_pruned.map(
                         plt.scatter, 'signal', 'Area', s=0.05,
                         linewidths=0.0, color='k')
-
-                    # suppresses matplotlib tight_layout warning
-                    g_pruned.fig.set_figheight(2.5)
-                    g_pruned.fig.set_figwidth(7)
 
                 g_pruned.set_titles(
                     col_template="{col_name}", fontweight='bold',
@@ -2503,8 +2505,8 @@ class QC(object):
                         ax.spines['bottom'].set_linewidth(0.1)
 
                 plt.subplots_adjust(
-                    left=0.03, bottom=0.13, right=0.99,
-                    top=0.92, hspace=0.8, wspace=0.3)
+                    left=0.08, bottom=0.2, right=0.99,
+                    top=0.9, hspace=0.8, wspace=0.3)
 
                 count = pruned_layout.count()
                 # print('layout count:', count)
@@ -2553,17 +2555,20 @@ class QC(object):
                         # read DNA1 channel
                         for file_path in glob.glob(
                           f'{self.inDir}/tif/{value}.*tif'):
-                            dna = single_channel_pyramid(file_path, channel=0)
+                            dna, dna_min, dna_max = single_channel_pyramid(
+                                file_path, channel=0
+                                )
 
                         # read antibody channel
                         for file_path in glob.glob(
                           f'{self.inDir}/tif/{value}.*tif'):
-                            channel = single_channel_pyramid(
-                                file_path, channel=channel_number.item() - 1)
+                            channel, ch_min, ch_max = single_channel_pyramid(
+                                file_path, channel=channel_number.item() - 1
+                                )
 
                         # read segmentation outlines
                         file_path = f'{self.inDir}/seg/{value}.*tif'
-                        seg = single_channel_pyramid(
+                        seg, seg_min, seg_max = single_channel_pyramid(
                             glob.glob(file_path)[0], channel=0)
 
                         # remove existing layers
@@ -2572,16 +2577,20 @@ class QC(object):
 
                         # decorate Napari viewer
                         viewer.add_image(
-                            dna, rgb=False, opacity=0.5, name=dna1)
+                            dna, rgb=False, opacity=0.5, name=dna1,
+                            contrast_limits=(dna_min, dna_max))
 
                         viewer.add_image(
                             channel, rgb=False, blending='additive',
-                            colormap='green', visible=False, name=ab)
+                            colormap='green', visible=False, name=ab,
+                            contrast_limits=(ch_min, ch_max)
+                            )
 
                         viewer.add_image(
                             seg, rgb=False, blending='additive', opacity=0.5,
                             colormap='gray', visible=False,
-                            name='segmentation'
+                            name='segmentation',
+                            contrast_limits=(seg_min, seg_max)
                             )
 
                         # grab centroids of low signal intensity outliers
@@ -2617,7 +2626,7 @@ class QC(object):
                         pass
 
                 sample_selector.native.setSizePolicy(
-                    QtWidgets.QSizePolicy.Maximum,
+                    QtWidgets.QSizePolicy.Fixed,
                     QtWidgets.QSizePolicy.Maximum,
                 )
 
@@ -2628,17 +2637,17 @@ class QC(object):
                 area='right')
 
             select_parameters.native.setSizePolicy(
-                QtWidgets.QSizePolicy.Minimum,
-                QtWidgets.QSizePolicy.Maximum,
+                QtWidgets.QSizePolicy.Expanding,
+                QtWidgets.QSizePolicy.Fixed,
             )
 
             raw_widget.setSizePolicy(
-                QtWidgets.QSizePolicy.Minimum,
+                QtWidgets.QSizePolicy.Expanding,
                 QtWidgets.QSizePolicy.Fixed,
             )
 
             pruned_widget.setSizePolicy(
-                QtWidgets.QSizePolicy.Minimum,
+                QtWidgets.QSizePolicy.Expanding,
                 QtWidgets.QSizePolicy.Fixed,
             )
 
@@ -2842,6 +2851,9 @@ class QC(object):
         print()
         print()
         return data
+
+    import faulthandler
+    faulthandler.enable()
 
     @module
     def metaQC(data, self, args):
@@ -3236,7 +3248,7 @@ class QC(object):
                 while not os.path.isfile(os.path.join(reclass_dir, 'MCS.txt')):
 
                     # initial Napari viewer without images
-                    viewer = napari.Viewer()
+                    viewer = napari.Viewer(title='CyLinter')
 
                     # generate Qt widget
                     cluster_widget = QtWidgets.QWidget()
@@ -3245,7 +3257,7 @@ class QC(object):
                     cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
 
                     cluster_widget.setSizePolicy(
-                        QtWidgets.QSizePolicy.Minimum,
+                        QtWidgets.QSizePolicy.Fixed,
                         QtWidgets.QSizePolicy.Maximum,
                     )
 
@@ -3253,7 +3265,7 @@ class QC(object):
                     @magicgui(
                         layout='horizontal',
                         call_button='Cluster and Plot',
-                        MCS={'label': 'Min Cluster Size (MCS)'},
+                        MCS={'label': 'Min Cluster Size (MCS)', 'step': 1},
                         )
                     def cluster_and_plot(MCS: int = 200.0):
 
@@ -3262,7 +3274,7 @@ class QC(object):
 
                         sns.set_style('whitegrid')
 
-                        fig = plt.figure(figsize=(8, 7))
+                        fig = plt.figure(figsize=(4, 8))
                         matplotlib_warnings(fig)
 
                         gs = plt.GridSpec(2, 4, figure=fig)
@@ -3361,7 +3373,7 @@ class QC(object):
                                     cmap=cmap, ec='k', linewidth=0.0)
 
                                 ax_cluster.set_title(
-                                    'HDBSCAN (lasso)', fontsize=10)
+                                    'HDBSCAN (lasso)', fontsize=7)
                                 ax_cluster.axis('equal')
                                 ax_cluster.axes.xaxis.set_visible(False)
                                 ax_cluster.axes.yaxis.set_visible(False)
@@ -3383,7 +3395,7 @@ class QC(object):
                                                color='none',
                                                label=(
                                                 f'Cluster {i}: '
-                                                f'{hi_markers} {norm_ax}'),
+                                                f'{hi_markers} by {norm_ax}'),
                                                markerfacecolor=(
                                                 cmap.colors[e]),
                                                markeredgecolor='none',
@@ -3391,7 +3403,7 @@ class QC(object):
 
                                 cluster_lgd = ax_cluster_lbs.legend(
                                     handles=legend_elements,
-                                    prop={'size': 5}, loc='upper left',
+                                    prop={'size': 3}, loc='upper left',
                                     frameon=False)
 
                                 ax_cluster_lbs.axis('off')
@@ -3420,7 +3432,7 @@ class QC(object):
                                     ec='k', linewidth=0.0)
 
                                 ax_status.set_title(
-                                    'QC Status', fontsize=10)
+                                    'QC Status', fontsize=7)
                                 ax_status.axis('equal')
                                 ax_status.axes.xaxis.set_visible(False)
                                 ax_status.axes.yaxis.set_visible(False)
@@ -3483,7 +3495,7 @@ class QC(object):
                                     ec='k', linewidth=0.0)
 
                                 ax_reclass.set_title(
-                                    'Reclassification', fontsize=10)
+                                    'Reclassification', fontsize=7)
                                 ax_reclass.axis('equal')
                                 ax_reclass.axes.xaxis.set_visible(False)
                                 ax_reclass.axes.yaxis.set_visible(False)
@@ -3547,7 +3559,7 @@ class QC(object):
                                     cmap=cmap, alpha=1.0, s=point_size,
                                     ec='k', linewidth=0.0)
 
-                                ax_sample.set_title('Sample', fontsize=10)
+                                ax_sample.set_title('Sample', fontsize=7)
                                 ax_sample.axis('equal')
                                 ax_sample.axes.xaxis.set_visible(False)
                                 ax_sample.axes.yaxis.set_visible(False)
@@ -3580,7 +3592,7 @@ class QC(object):
 
                                 sample_lgd = ax_sample_lbs.legend(
                                     handles=legend_elements,
-                                    prop={'size': 5}, loc='upper left',
+                                    prop={'size': 3}, loc='upper left',
                                     frameon=False)
 
                                 ax_sample_lbs.axis('off')
@@ -3698,7 +3710,7 @@ class QC(object):
                                             for file_path in glob.glob(
                                               f'{self.inDir}/tif/' +
                                               f'{value}.*tif'):
-                                                img = single_channel_pyramid(
+                                                img, min, max = single_channel_pyramid(
                                                     file_path,
                                                     channel=(
                                                         channel_number
@@ -3710,7 +3722,9 @@ class QC(object):
                                                 blending='additive',
                                                 colormap='green',
                                                 visible=False,
-                                                name=ch)
+                                                name=ch,
+                                                contrast_limits=(min, max)
+                                                )
 
                                     # color noisy data points by
                                     # module used to redact them
@@ -3748,14 +3762,15 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/seg/' +
                                       f'{value}.*tif'):
-                                        seg = single_channel_pyramid(
-                                            file_path, channel=0)
+                                        seg, min, max = single_channel_pyramid(
+                                            file_path, channel=0
+                                            )
                                     viewer.add_image(
-                                        seg, rgb=False,
-                                        blending='additive',
-                                        colormap='gray',
-                                        visible=False,
-                                        name='segmentation')
+                                        seg, rgb=False, blending='additive',
+                                        colormap='gray', visible=False,
+                                        name='segmentation',
+                                        contrast_limits=(min, max)
+                                        )
 
                                     # read last DNA, add to Napari
                                     last_dna_cycle = natsorted(
@@ -3766,29 +3781,34 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
                                       f'{value}.*tif'):
-                                        dna_last = single_channel_pyramid(
+                                        dna_last, min, max = single_channel_pyramid(
                                             file_path,
-                                            channel=channel_number.item() - 1)
+                                            channel=channel_number.item() - 1
+                                            )
                                         viewer.add_image(
                                             dna_last, rgb=False,
                                             blending='additive',
                                             opacity=0.5, colormap='gray',
                                             visible=False,
                                             name=f'{last_dna_cycle}: ' +
-                                            f'{value}')
+                                            f'{value}',
+                                            contrast_limits=(min, max)
+                                            )
 
                                     # read first DNA, add to Napari
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
                                       f'{value}.*tif'):
-                                        dna_first = single_channel_pyramid(
-                                            file_path, channel=0)
+                                        dna_first, min, max = single_channel_pyramid(
+                                            file_path, channel=0
+                                            )
                                     viewer.add_image(
                                         dna_first, rgb=False,
                                         blending='additive',
                                         opacity=0.5, colormap='gray',
                                         visible=True, name=f'{dna1}: ' +
-                                        f'{value}')
+                                        f'{value}', contrast_limits=(min, max)
+                                        )
 
                                 else:
                                     print()
@@ -3798,7 +3818,7 @@ class QC(object):
                         #######################################################
 
                         sample_selector.native.setSizePolicy(
-                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Fixed,
                             QtWidgets.QSizePolicy.Maximum,
                         )
 
@@ -3869,7 +3889,7 @@ class QC(object):
                         #######################################################
 
                         reclass_selector.native.setSizePolicy(
-                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Fixed,
                             QtWidgets.QSizePolicy.Maximum,
                         )
 
@@ -3921,7 +3941,7 @@ class QC(object):
                         #######################################################
 
                         save_selector.native.setSizePolicy(
-                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Fixed,
                             QtWidgets.QSizePolicy.Maximum,
                         )
 
@@ -3938,8 +3958,8 @@ class QC(object):
                         #######################################################
 
                     cluster_and_plot.native.setSizePolicy(
-                        QtWidgets.QSizePolicy.Maximum,
-                        QtWidgets.QSizePolicy.Maximum,
+                        QtWidgets.QSizePolicy.Expanding,
+                        QtWidgets.QSizePolicy.Fixed,
                     )
 
                     #######################################################
@@ -3947,12 +3967,10 @@ class QC(object):
                         layout='horizontal',
                         call_button='Sweep Range',
                         lowerMCS={
-                            'label': 'Lower MCS', 'step': 1,
-                            'adaptive_step': False
+                            'label': 'Lower MCS', 'step': 1
                             },
                         upperMCS={
-                            'label': 'Upper MCS', 'step': 1,
-                            'adaptive_step': False
+                            'label': 'Upper MCS', 'step': 1
                             },
                         )
                     def sweep_MCS(
@@ -3992,7 +4010,7 @@ class QC(object):
                     ##########################################################
 
                     sweep_MCS.native.setSizePolicy(
-                        QtWidgets.QSizePolicy.Maximum,
+                        QtWidgets.QSizePolicy.Fixed,
                         QtWidgets.QSizePolicy.Maximum,
                     )
 
@@ -4108,7 +4126,7 @@ class QC(object):
                     # exit program if all cells are considered ambiguous by the
                     # clustering algorithm (likely too few cells per chunk)
                     if chunk[
-                        f'cluster_{self.dimensionEmbeddingQC}d'].eq(-1).all():
+                      f'cluster_{self.dimensionEmbeddingQC}d'].eq(-1).all():
                         print(
                             f'WARNING: All cells in chunk {chunk_index + 1} ' +
                             'were deemed ambiguous by clustering algorithm ' +
@@ -4352,9 +4370,11 @@ class QC(object):
         print()
         print("Performing Horn's parallel analysis to "
               "determine number of non-random PCs...")
-        n_components = 10
-        for l in range(1, 11):
-            print(f'iteration {l}/{10}')
+
+        n_components = min(len(data['Sample'].unique()), len(abx_channels))
+
+        for l in range(1, n_components+1):
+            print(f'iteration {l}/{n_components}')
             shuffled = unshuffled.copy()
             for e, col in enumerate(shuffled.columns):
                 shuffled[col] = shuffled[col].sample(
@@ -4459,7 +4479,10 @@ class QC(object):
 
             # compute median antibody expression per sample
             # samples (rows) x features (columns)
-            medians = data.groupby(['Sample']).median()[abx_channels]
+            medians = (
+                data.groupby(['Sample'])
+                .median(numeric_only=True)[abx_channels]
+                )
 
             # drop sample exclusions for PCA
             medians = medians[~medians.index.isin(self.samplesToRemovePCA)]
@@ -4899,7 +4922,7 @@ class QC(object):
         while not os.path.isfile(os.path.join(dim_dir, 'MCS.txt')):
 
             # initialize Napari viewer without images
-            viewer = napari.Viewer()
+            viewer = napari.Viewer(title='CyLinter')
 
             # generate Qt widget
             cluster_widget = QtWidgets.QWidget()
@@ -4908,7 +4931,7 @@ class QC(object):
             cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
 
             cluster_widget.setSizePolicy(
-                QtWidgets.QSizePolicy.Minimum,
+                QtWidgets.QSizePolicy.Fixed,
                 QtWidgets.QSizePolicy.Maximum,
                 )
 
@@ -4916,8 +4939,7 @@ class QC(object):
             @magicgui(
                 layout='horizontal',
                 call_button='Cluster and Plot',
-                MCS={'label': 'Min Cluster Size (MCS)', 'step': 1,
-                     'adaptive_step': False},
+                MCS={'label': 'Min Cluster Size (MCS)', 'step': 1},
                 )
             def cluster_and_plot(MCS: int = 200):
 
@@ -5122,7 +5144,7 @@ class QC(object):
 
                     sns.set_style('whitegrid')
 
-                    fig = plt.figure(figsize=(8, 7))
+                    fig = plt.figure(figsize=(3, 8))
                     matplotlib_warnings(fig)
 
                     gs = plt.GridSpec(2, 3, figure=fig)
@@ -5186,7 +5208,7 @@ class QC(object):
                                 s=point_size, cmap=cmap, ec='k', linewidth=0.0)
 
                             ax_cluster.set_title(
-                                'HDBSCAN (lasso)', fontsize=10)
+                                'HDBSCAN (lasso)', fontsize=7)
                             ax_cluster.set_aspect('equal')
                             ax_cluster.axes.xaxis.set_visible(False)
                             ax_cluster.axes.yaxis.set_visible(False)
@@ -5208,14 +5230,14 @@ class QC(object):
                                            color='none',
                                            label=(
                                             f'Cluster {i}: '
-                                            f'{hi_markers} {norm_ax}'),
+                                            f'{hi_markers} by {norm_ax}'),
                                            markerfacecolor=(
                                             cmap.colors[e]),
                                            markeredgecolor='none',
                                            lw=0.001, markersize=3))
 
                             cluster_lgd = ax_cluster_lbs.legend(
-                                handles=legend_elements, prop={'size': 5},
+                                handles=legend_elements, prop={'size': 3},
                                 loc='upper left', frameon=False)
 
                             ax_cluster_lbs.axis('off')
@@ -5244,7 +5266,7 @@ class QC(object):
                                 linewidth=0.0
                                 )
 
-                            ax_channel.set_title(title, fontsize=10)
+                            ax_channel.set_title(title, fontsize=7)
                             ax_channel.set_aspect('equal')
                             ax_channel.axes.xaxis.set_visible(False)
                             ax_channel.axes.yaxis.set_visible(False)
@@ -5274,7 +5296,7 @@ class QC(object):
                                 data['emb1'], data['emb2'], c=c, cmap=cmap,
                                 alpha=1.0, s=point_size, ec='k', linewidth=0.0)
 
-                            ax_sample.set_title('Sample', fontsize=10)
+                            ax_sample.set_title('Sample', fontsize=7)
                             ax_sample.set_aspect('equal')
                             ax_sample.axes.xaxis.set_visible(False)
                             ax_sample.axes.yaxis.set_visible(False)
@@ -5301,16 +5323,17 @@ class QC(object):
                                            lw=0.001, markersize=3))
 
                             sample_lgd = ax_sample_lbs.legend(
-                                handles=legend_elements, prop={'size': 5},
+                                handles=legend_elements, prop={'size': 3},
                                 loc='upper left', frameon=False)
 
                             ax_sample_lbs.axis('off')
 
                 elif embedding.shape[1] == 3:
+
                     # initialize figure and add to FigureCanvas
                     # before rendering plot in 3D
                     sns.set_style('whitegrid')
-                    fig = plt.figure(figsize=(7, 7))
+                    fig = plt.figure(figsize=(4, 8))
                     matplotlib_warnings(fig)
 
                 count = cluster_layout.count()
@@ -5343,8 +5366,8 @@ class QC(object):
                     ax_sample_lbs = fig.add_subplot(gs[1, 2])
 
                     plt.subplots_adjust(
-                        left=0.0, right=1.00, bottom=0.0,
-                        top=0.94, wspace=0.0, hspace=0.0)
+                        left=0.0, right=0.99, bottom=0.0,
+                        top=0.9, wspace=0.0, hspace=0.0)
 
                     for color_by in [
                       f'cluster_{self.dimensionEmbedding}d',
@@ -5396,8 +5419,11 @@ class QC(object):
                                 ec='k', linewidth=0.0)
 
                             ax_cluster.set_title(
-                                'HDBSCAN', fontsize=10)
-                            ax_cluster.tick_params(labelsize=5)
+                                'HDBSCAN', fontsize=7)
+                            ax_cluster.set_xticklabels([])
+                            ax_cluster.set_yticklabels([])
+                            ax_cluster.set_zticklabels([])
+                            # ax_cluster.tick_params(labelsize=0)
                             ax_cluster.xaxis._axinfo['grid'].update(
                                 {'linewidth': 0.5})
                             ax_cluster.yaxis._axinfo['grid'].update(
@@ -5421,14 +5447,14 @@ class QC(object):
                                            color='none',
                                            label=(
                                             f'Cluster {i}: '
-                                            f'{hi_markers}'),
+                                            f'{hi_markers} by {norm_ax}'),
                                            markerfacecolor=(
                                             cmap.colors[e]),
                                            markeredgecolor='none',
                                            lw=0.001, markersize=3))
 
                             cluster_lgd = ax_cluster_lbs.legend(
-                                handles=legend_elements, prop={'size': 5},
+                                handles=legend_elements, prop={'size': 3},
                                 loc='upper left', frameon=False)
                             ax_cluster_lbs.axis('off')
 
@@ -5453,8 +5479,12 @@ class QC(object):
                                 cmap='viridis', c=c, alpha=1.0, s=point_size,
                                 ec='k', linewidth=0.0)
 
-                            ax_channel.set_title(title, fontsize=10)
-                            ax_channel.tick_params(labelsize=5)
+                            ax_channel.set_title(title, fontsize=7)
+                            ax_channel.set_xticklabels([])
+                            ax_channel.set_yticklabels([])
+                            ax_channel.set_zticklabels([])
+                            # ax_channel.tick_params(labelsize=0)
+
                             ax_channel.xaxis._axinfo['grid'].update(
                                 {'linewidth': 0.5})
                             ax_channel.yaxis._axinfo['grid'].update(
@@ -5486,8 +5516,11 @@ class QC(object):
                                 ec='k', linewidth=0.0)
 
                             ax_sample.set_title(
-                                'Sample', fontsize=10)
-                            ax_sample.tick_params(labelsize=5)
+                                'Sample', fontsize=7)
+                            ax_sample.set_xticklabels([])
+                            ax_sample.set_yticklabels([])
+                            ax_sample.set_zticklabels([])
+                            # ax_sample.tick_params(labelsize=0)
                             ax_sample.xaxis._axinfo['grid'].update(
                                 {'linewidth': 0.5})
                             ax_sample.yaxis._axinfo['grid'].update(
@@ -5516,7 +5549,7 @@ class QC(object):
                                            lw=0.001, markersize=3))
 
                             sample_lgd = ax_sample_lbs.legend(
-                                handles=legend_elements, prop={'size': 5},
+                                handles=legend_elements, prop={'size': 3},
                                 loc='upper left', frameon=False)
 
                             ax_sample_lbs.axis('off')
@@ -5620,16 +5653,18 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
                                       f'{value}.*tif'):
-                                        img = single_channel_pyramid(
+                                        img, min, max = single_channel_pyramid(
                                             file_path,
-                                            channel=channel_number.item() - 1)
+                                            channel=channel_number.item() - 1
+                                            )
 
                                     viewer.add_image(
                                         img, rgb=False,
                                         blending='additive',
                                         colormap='green',
                                         visible=False,
-                                        name=ch)
+                                        name=ch, contrast_limits=(min, max)
+                                        )
 
                             centroids = data[['Y_centroid', 'X_centroid']][
                                     (data.index.isin(selector.ind))
@@ -5637,30 +5672,32 @@ class QC(object):
 
                             viewer.add_points(
                                 centroids, name='lassoed cells', visible=True,
-                                face_color='lime', edge_width=0.0, size=4.0)
+                                face_color='yellow', edge_width=0.0, size=4.0
+                                )
 
                             # read segmentation outlines, add to Napari
                             for file_path in glob.glob(
                               f'{self.inDir}/seg/{value}.*tif'):
-                                seg = single_channel_pyramid(
-                                    file_path, channel=0)
+                                seg, min, max = single_channel_pyramid(
+                                    file_path, channel=0
+                                    )
                             viewer.add_image(
-                                seg, rgb=False,
-                                blending='additive',
-                                colormap='gray',
-                                visible=False,
-                                name='segmentation')
+                                seg, rgb=False, blending='additive',
+                                colormap='gray', visible=False,
+                                name='segmentation', contrast_limits=(min, max)
+                                )
 
                             # read first DNA, add to Napari
                             for file_path in glob.glob(
                               f'{self.inDir}/tif/{value}.*tif'):
-                                dna_first = single_channel_pyramid(
+                                dna_first, min, max = single_channel_pyramid(
                                     file_path, channel=0)
                                 viewer.add_image(
                                     dna_first, rgb=False, blending='additive',
                                     opacity=0.5, colormap='gray', visible=True,
                                     name=f'{dna1}: ' +
-                                    f'{value}')
+                                    f'{value}', contrast_limits=(min, max)
+                                    )
 
                         else:
                             print()
@@ -5739,7 +5776,7 @@ class QC(object):
                 save_selector.native.setSizePolicy(
                     QtWidgets.QSizePolicy.Maximum,
                     QtWidgets.QSizePolicy.Maximum,
-                )
+                    )
 
                 ###############################################################
                 if self.dimensionEmbedding == 2:
@@ -5752,19 +5789,19 @@ class QC(object):
             ###################################################################
 
             cluster_and_plot.native.setSizePolicy(
+                QtWidgets.QSizePolicy.Fixed,
                 QtWidgets.QSizePolicy.Maximum,
-                QtWidgets.QSizePolicy.Maximum,
-            )
+                )
 
             ###################################################################
             @magicgui(
                 layout='horizontal',
                 call_button='Sweep Range',
                 lowerMCS={
-                    'label': 'Lower MCS', 'step': 1, 'adaptive_step': False
+                    'label': 'Lower MCS', 'step': 1
                     },
                 upperMCS={
-                    'label': 'Upper MCS', 'step': 1, 'adaptive_step': False
+                    'label': 'Upper MCS', 'step': 1
                     },
                 )
             def sweep_MCS(
@@ -5975,28 +6012,34 @@ class QC(object):
                 # read antibody image
                 for file_path in glob.glob(
                   f'{self.inDir}/tif/{self.viewSample}.*tif'):
-                    img = single_channel_pyramid(
-                        file_path, channel=channel_number.item() - 1)
+                    img, min, max = single_channel_pyramid(
+                        file_path, channel=channel_number.item() - 1
+                        )
 
                 # initialize Napari viewer with first channel
                 if e == 0:
                     viewer = napari.view_image(
-                        img, rgb=False, blending='additive',
-                        colormap='green', visible=False, name=ch)
+                        img, rgb=False, blending='additive', title='CyLinter',
+                        colormap='green', visible=False, name=ch,
+                        contrast_limits=(min, max)
+                        )
 
                 else:
                     viewer.add_image(
                         img, rgb=False, blending='additive',
-                        colormap='green', visible=False, name=ch)
+                        colormap='green', visible=False, name=ch,
+                        contrast_limits=(min, max)
+                        )
 
             # read DNA1 channel
             for file_path in glob.glob(
               f'{self.inDir}/tif/{self.viewSample}.*tif'):
-                dna = single_channel_pyramid(file_path, channel=0)
+                dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             viewer.add_image(
                 dna, rgb=False, blending='additive', colormap='gray',
-                name=f'{dna1}: {self.viewSample}')
+                name=f'{dna1}: {self.viewSample}', contrast_limits=(min, max)
+                )
 
             # apply previously defined contrast limits if they exist
             if os.path.exists(
@@ -6047,11 +6090,15 @@ class QC(object):
                 contrast_limits = {}
                 for ch in [dna1] + abx_channels:
                     if ch == dna1:
-                        contrast_limits[ch] = (
-                            viewer.layers[f'{dna1}: {self.viewSample}']
-                            .contrast_limits)
+                        contrast_limits[ch] = [
+                            int(i) for i in viewer.layers[
+                                f'{dna1}: {self.viewSample}']
+                            .contrast_limits
+                            ]
                     else:
-                        contrast_limits[ch] = viewer.layers[ch].contrast_limits
+                        contrast_limits[ch] = [
+                            int(i) for i in viewer.layers[ch].contrast_limits
+                            ]
 
                 with open(f'{contrast_dir}/contrast_limits.yml', 'w') as file:
                     yaml.dump(contrast_limits, file)
