@@ -47,7 +47,7 @@ from tifffile import imread
 from tifffile import TiffFile
 import zarr
 import dask.array as da
-from lazy_ops import DatasetView
+#from lazy_ops import DatasetView
 
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -73,9 +73,6 @@ from .utils import (
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
     fdrcorrection, open_file, dict_to_csv, csv_to_dict, triangulate_ellipse
     )
-
-# import faulthandler
-# faulthandler.enable()
 
 logger = logging.getLogger(__name__)
 
