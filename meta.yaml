@@ -1,5 +1,5 @@
 {% set name = "cylinter" %}
-{% set version = "0.0.44" %}
+{% set version = "0.0.45" %}
 
 package:
   name: "{{ name|lower }}"
@@ -7,7 +7,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: f3e662a5a415f60520e6fc0bd563bc09a4fa92588b18c6b709bcfdf80229b7f6
+  sha256: FIXME
 
 build:
   number: 0
