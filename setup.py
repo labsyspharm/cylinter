@@ -10,7 +10,7 @@ requires = [
     'pandas>=1.1.5',
     'hdbscan==0.8.26',
     'joblib==0.17.0',  # joblib==1.0.0 parallel processing fails on larger datasets
-    'matplotlib==3.3.3',
+    'matplotlib==3.5.3',
     'seaborn==0.11.1',
     'scikit-learn==0.24.2',
     'scikit-image==0.18.1',

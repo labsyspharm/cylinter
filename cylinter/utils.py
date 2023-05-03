@@ -1,25 +1,29 @@
 import os
 import sys
-import subprocess
 import re
 import gc
 import csv
 import glob
-import math
-import yaml
-import zarr
+
 import numpy as np
 import pandas as pd
+import psutil
+import math
+import yaml
+
 import matplotlib.pyplot as plt
 from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from matplotlib import colors
+
 from sklearn.preprocessing import MinMaxScaler
-import psutil
+
 import zarr
 import dask.array as da
 import tifffile
 from tifffile import imread
+
+import subprocess
 
 SUPPORTED_EXTENSIONS = ['.csv']
 
@@ -92,32 +96,62 @@ def single_channel_pyramid(tiff_path, channel):
 
     tiff = tifffile.TiffFile(tiff_path)
 
-    if len(tiff.series[0].levels) > 1:
-        pyramid = [
-            zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels
-            ]
+    if 'Faas' not in tiff.pages[0].software:
 
-        pyramid = [da.from_zarr(z) for z in pyramid]
+        if len(tiff.series[0].levels) > 1:
 
-        min_val = pyramid[0].min()
-        max_val = pyramid[0].max()
-        vmin, vmax = da.compute(min_val, max_val)
+            pyramid = [
+                zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels
+                ]
 
-    else:
-        img = tiff.series[0][channel]
+            pyramid = [da.from_zarr(z) for z in pyramid]
 
-        pyramid = [img[::4**i, ::4**i] for i in range(4)]
+            min_val = pyramid[0].min()
+            max_val = pyramid[0].max()
+            vmin, vmax = da.compute(min_val, max_val)
 
-        pyramid = [da.from_array(z) for z in pyramid]
+        else:
 
-        min_val = pyramid[0].min()
-        max_val = pyramid[0].max()
-        vmin, vmax = da.compute(min_val, max_val)
+            img = tiff.pages[channel].asarray()
 
-    return pyramid, vmin, vmax
+            pyramid = [img[::4**i, ::4**i] for i in range(4)]
+
+            pyramid = [da.from_array(z) for z in pyramid]
+
+            min_val = pyramid[0].min()
+            max_val = pyramid[0].max()
+            vmin, vmax = da.compute(min_val, max_val)
+
+        return pyramid, vmin, vmax
+
+    else:  # support legacy OME-TIFF format
+
+        if len(tiff.series) > 1:
+
+            pyramid = [zarr.open(s[channel].aszarr()) for s in tiff.series]
+
+            pyramid = [da.from_zarr(z) for z in pyramid]
+
+            min_val = pyramid[0].min()
+            max_val = pyramid[0].max()
+            vmin, vmax = da.compute(min_val, max_val)
+
+        else:
+            img = tiff.pages[channel].asarray()
+
+            pyramid = [img[::4**i, ::4**i] for i in range(4)]
+
+            pyramid = [da.from_array(z) for z in pyramid]
+
+            min_val = pyramid[0].min()
+            max_val = pyramid[0].max()
+            vmin, vmax = da.compute(min_val, max_val)
+
+        return pyramid, vmin, vmax
 
 
 def matplotlib_warnings(fig):
+
     # suppress pyplot warning:
     # MatplotlibDeprecationWarning: Toggling axes navigation
     # from the keyboard is deprecated since 3.3 and will be
@@ -133,6 +167,7 @@ def napari_warnings():
     # zero encountered in true_divide
     # zoom = np.min(canvas_size / scale)
     np.seterr(divide='ignore')
+
 
 # scatter point selection tool
 class SelectFromCollection(object):
@@ -407,16 +442,17 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
 
     Notes
     -----
-    If there is prior information on the fraction of true hypothesis, then alpha
-    should be set to ``alpha * m/m_0`` where m is the number of tests,
-    given by the p-values, and m_0 is an estimate of the true hypothesis.
-    (see Benjamini, Krieger and Yekuteli)
+    If there is prior information on the fraction of true hypothesis,
+    then alpha should be set to ``alpha * m/m_0`` where m is the number of
+    tests, given by the p-values, and m_0 is an estimate of the true
+    hypothesis. (see Benjamini, Krieger and Yekuteli)
 
-    The two-step method of Benjamini, Krieger and Yekutiel that estimates the number
-    of false hypotheses will be available (soon).
+    The two-step method of Benjamini, Krieger and Yekutiel that estimates the
+    number of false hypotheses will be available (soon).
 
-    Both methods exposed via this function (Benjamini/Hochberg, Benjamini/Yekutieli)
-    are also available in the function ``multipletests``, as ``method="fdr_bh"`` and
+    Both methods exposed via this function
+    (Benjamini/Hochberg, Benjamini/Yekutieli) are also available in the
+    function ``multipletests``, as ``method="fdr_bh"`` and
     ``method="fdr_by"``, respectively.
 
     See also
@@ -433,7 +469,7 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
         return np.arange(1, nobs + 1)/float(nobs)
 
     pvals = np.asarray(pvals)
-    assert pvals.ndim == 1, "pvals must be 1-dimensional, that is of shape (n,)"
+    assert pvals.ndim == 1, "pvals must be 1-dimensional, of shape (n,)"
 
     if not is_sorted:
         pvals_sortind = np.argsort(pvals)
@@ -444,11 +480,11 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
     if method in ['i', 'indep', 'p', 'poscorr']:
         ecdffactor = _ecdf(pvals_sorted)
     elif method in ['n', 'negcorr']:
-        cm = np.sum(1./np.arange(1, len(pvals_sorted)+1))   #corrected this
+        cm = np.sum(1./np.arange(1, len(pvals_sorted)+1))  # corrected this
         ecdffactor = _ecdf(pvals_sorted) / cm
-##    elif method in ['n', 'negcorr']:
-##        cm = np.sum(np.arange(len(pvals)))
-##        ecdffactor = ecdf(pvals_sorted)/cm
+    # elif method in ['n', 'negcorr']:
+    #     cm = np.sum(np.arange(len(pvals)))
+    #     ecdffactor = ecdf(pvals_sorted)/cm
     else:
         raise ValueError('only indep and negcorr implemented')
     reject = pvals_sorted <= ecdffactor*alpha
@@ -459,7 +495,7 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
     pvals_corrected_raw = pvals_sorted / ecdffactor
     pvals_corrected = np.minimum.accumulate(pvals_corrected_raw[::-1])[::-1]
     del pvals_corrected_raw
-    pvals_corrected[pvals_corrected>1] = 1
+    pvals_corrected[pvals_corrected > 1] = 1
     if not is_sorted:
         pvals_corrected_ = np.empty_like(pvals_corrected)
         pvals_corrected_[pvals_sortind] = pvals_corrected

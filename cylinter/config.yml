@@ -28,7 +28,7 @@ samplesToExclude: []
 
 markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
                    "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2",
-                   "CD63", "CD32", "CDKN1A", "CCNA2", "CDKN1C", "PCNA_1",
+                   "CD63", "CD32", "CCNA2", "CDKN1C", "PCNA_1",
                    "CDKN1B_1", "CCND1", "cPARP", "pCREB",
                    "CCNB1", "PCNA_2", "CDK2"
                    ]

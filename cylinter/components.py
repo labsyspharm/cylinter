@@ -46,6 +46,8 @@ import napari
 from tifffile import imread
 from tifffile import TiffFile
 import zarr
+import dask.array as da
+from lazy_ops import DatasetView
 
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -58,7 +60,6 @@ from sklearn.preprocessing import normalize as norm
 from sklearn.metrics import silhouette_samples, silhouette_score
 
 from natsort import natsorted, order_by_index, index_natsorted
-# from numcodecs import Blosc
 from datetime import datetime
 from joblib import Memory
 from scipy.stats import ttest_ind
@@ -72,6 +73,9 @@ from .utils import (
     single_channel_pyramid, matplotlib_warnings, napari_warnings,
     fdrcorrection, open_file, dict_to_csv, csv_to_dict, triangulate_ellipse
     )
+
+# import faulthandler
+# faulthandler.enable()
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +295,7 @@ class QC(object):
     def aggregateData(data, self, args):
 
         print()
+
         files = natsorted(dataset_files(f'{self.inDir}/csv'))
 
         markers, dna1, dna_moniker, abx_channels = read_markers(
@@ -315,8 +320,7 @@ class QC(object):
 
                     csv = pd.read_csv(os.path.join(f'{self.inDir}/csv', file))
 
-                    # drop markers specified in
-                    # "markersToExclude" config param
+                    # drop markers in markersToExclude config param
                     csv.drop(
                         columns=[i for i in self.markersToExclude
                                  if i in csv.columns], axis=1, inplace=True)
@@ -408,17 +412,17 @@ class QC(object):
                     channel_setlist.append(set(csv.columns))
                 else:
                     print(f'censoring sample {sample_name}')
-
         print()
+
         # stack dataframes row-wise
         data = pd.concat(df_list, axis=0)
         del df_list
 
-        # ONLY SELECT CHANNELS COMMON TO ALL SAMPLES
+        # only select channels shared among all samples
         channels_set = list(set.intersection(*channel_setlist))
 
-        print(f'{len(data.columns)} total features')
-        print(f'{len(channels_set)} features in common between all samples')
+        print(f'{len(data.columns)} total columns')
+        print(f'{len(channels_set)} columns in common between all samples')
 
         before = set(data.columns)
         after = set(channels_set)
@@ -428,7 +432,7 @@ class QC(object):
             markers_to_drop = list(before.difference(after))
             print()
             print(
-                f'Features {markers_to_drop} were not probed in all' +
+                f'Columns {markers_to_drop} were not in all' +
                 ' samples and will be dropped from the analysis.'
                 )
         data = data[channels_set].copy()
@@ -483,6 +487,8 @@ class QC(object):
             # loop over samples
             for sample_name in self.samplesForROISelection:
 
+                viewer = napari.Viewer(title='CyLinter')
+
                 print(f'Working on sample {sample_name}')
 
                 try:
@@ -510,31 +516,51 @@ class QC(object):
                                 file_path, channel=channel_number.item() - 1
                                 )
 
-                        if e == 0:
-                            viewer = napari.view_image(
-                                img, rgb=False, title='CyLinter',
-                                blending='additive', colormap='green',
-                                visible=False, name=ch,
-                                contrast_limits=(min, max)
-                                )
-                        else:
                             viewer.add_image(
                                 img, rgb=False, blending='additive',
                                 colormap='green', visible=False, name=ch,
                                 contrast_limits=(min, max)
                                 )
 
-                # read H&E image
-                # import dask.array as da
+                ###############################################################
+
+                # add H&E image (SINGLE CHANNEL IMAGE)
                 # for file_path in glob.glob(
                 #   f'{self.inDir}/he/{sample_name}.*tif'):
+                #     tiff = TiffFile(file_path, is_ome=False)
                 #     rgb_pyramid = [
-                #         da.dstack(x) for x in zip(
-                #             *(single_channel_pyramid(file_path, channel=c)
-                #               for c in range(3)))]
+                #         zarr.open(tiff.series[0].levels[0].aszarr())[i]
+                #         for i in list(range(len(tiff.series[0].levels)))
+                #         ]
+                #     rgb_pyramid = [
+                #         DatasetView(i).lazy_transpose([1, 2, 0]) for
+                #         i in rgb_pyramid
+                #         ]
+                #     rgb_pyramid = [da.from_zarr(z) for z in rgb_pyramid]
                 #     viewer.add_image(
                 #         rgb_pyramid, rgb=True, blending='additive',
                 #         opacity=1.0, visible=False, name='H&E')
+                # OR...
+
+                # add H&E image (SHOW IMAGE AS SEPARATE RGB CHANNELS)
+                # for file_path in glob.glob(
+                #   f'{self.inDir}/he/{sample_name}.*tif'):
+                #
+                #     for color, channel in zip(
+                #       ['red', 'green', 'blue'], [0, 1, 2]
+                #       ):
+                #
+                #         img, min, max = single_channel_pyramid(
+                #             file_path, channel=channel
+                #             )
+                #
+                #         viewer.add_image(
+                #             img, rgb=False, colormap=color,
+                #             blending='additive', visible=False,
+                #             name=f'H&E_{color}'
+                #             )
+
+                ###############################################################
 
                 # read segmentation outlines
                 file_path = f'{self.inDir}/seg/{sample_name}.*tif'
@@ -733,14 +759,17 @@ class QC(object):
             sp = ax.scatter(
                 coords['X_centroid'], coords['Y_centroid'],
                 s=0.35, lw=0.0,
-                c=coords['Area'], cmap='viridis')
+                c=coords['Area'], cmap='viridis'
+                )
             plt.title(
                 f'Sample {sample_name}. ' +
-                'Selected cells colored by segmentation area')
+                'Selected cells colored by segmentation area'
+                )
             plt.colorbar(sp)
             plt.savefig(
                 os.path.join(
-                    image_dir, f'{sample_name}.png'), dpi=1000)
+                    image_dir, f'{sample_name}.png'), dpi=1000
+                )
             plt.close('all')
 
         data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
@@ -774,11 +803,13 @@ class QC(object):
 
         # pick up where samples-loop left off
         if os.path.exists(
-          os.path.join(intensity_dir, 'idxs_to_drop.csv')):
+          os.path.join(intensity_dir, 'idxs_to_drop.csv')
+          ):
 
             # read stored dict
             idxs_to_drop = csv_to_dict(
-                os.path.join(intensity_dir, 'idxs_to_drop.csv'))
+                os.path.join(intensity_dir, 'idxs_to_drop.csv')
+                )
 
             # dictionary values from strings to lists
             idxs_to_drop = {
@@ -834,6 +865,8 @@ class QC(object):
             print()
             print(f'Sample: {name}')
 
+            group[dna1] = group[dna1] + 0.00000000001  # avoiding log(0) errors
+
             # read segmentation outlines
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
@@ -851,7 +884,6 @@ class QC(object):
             # read DNA1 channel
             for file_path in glob.glob(
               f'{self.inDir}/tif/{name}.*tif'):
-                # create image pyramid
                 dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             # add segmentation image to viewer
@@ -894,7 +926,8 @@ class QC(object):
                 np.log(group[dna1]), bins=num_bins,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
-                range=None, label='before')
+                range=None, label='before'
+                )
 
             # set y-axis label
             ax.set_ylabel('count')
@@ -1005,7 +1038,8 @@ class QC(object):
                 np.log(group[dna1]), bins=bins,
                 density=False, color='b', ec='none',
                 alpha=0.5, histtype=histtype,
-                range=None, label='before')
+                range=None, label='before'
+                )
 
             if lowerCutoff == upperCutoff:
                 lowerCutoff = np.log(group[dna1]).min()
@@ -1025,8 +1059,8 @@ class QC(object):
             # plot DNA intensity histogram AFTER filtering
             plt.hist(
                 np.log(group_update[dna1]), bins=bins, color='r', ec='none',
-                alpha=0.5, histtype=histtype, range=None,
-                label='after')
+                alpha=0.5, histtype=histtype, range=None, label='after'
+                )
             plt.xlabel('mean DNA intensity')
             plt.ylabel('count')
             plt.title(f'Sample={name} mean DNA intensity', size=10)
@@ -1177,6 +1211,10 @@ class QC(object):
             print()
             print(f'Sample: {name}')
 
+            group['Area'] = (
+                group['Area'] + 0.00000000001
+                )  # avoiding log(0) errors
+
             # read segmentation outlines
             file_path = f'{self.inDir}/seg/{name}.*tif'
 
@@ -1238,7 +1276,8 @@ class QC(object):
                 np.log(group['Area']), bins=num_bins,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
-                range=None, label='before')
+                range=None, label='before'
+                )
 
             # set y-axis label
             ax.set_ylabel('count')
@@ -1349,7 +1388,8 @@ class QC(object):
                 np.log(group['Area']), bins=bins,
                 density=False, color='b', ec='none',
                 alpha=0.5, histtype=histtype,
-                range=None, label='before')
+                range=None, label='before'
+                )
 
             if lowerCutoff == upperCutoff:
                 lowerCutoff = np.log(group['Area']).min()
@@ -1454,8 +1494,8 @@ class QC(object):
 
         # compute log(cycle 1/n) ratios
         ratios = pd.DataFrame(
-            [np.log10((data[dna1] + 0.00001) /
-             (data[i] + 0.00001)) for i in dna_cycles]).T
+            [np.log10((data[dna1] + 0.00000000001) /
+             (data[i] + 0.00000000001)) for i in dna_cycles]).T
 
         # computing ratios changes columns headers,
         # create new ratio column headers
@@ -1466,26 +1506,6 @@ class QC(object):
         ratio_columns[dna1] = f'{dna1}/{dna1}'
         ratios.rename(columns=ratio_columns, inplace=True)
         ratios['sample'] = data['Sample']
-
-        # # compute log(cycle n/n+1) ratios
-        # ratios = pd.DataFrame(
-        #     [np.log10((data[i] + 0.00001) /
-        #      (data[dna_moniker +
-        #       str(int([re.findall(r'(\w+?)(\d+)', i)[0]][0][1]) + 1)] +
-        #       0.00001)) for i in natsorted(
-        #         data.columns[
-        #             data.columns.str.contains(dna_moniker)])[0:-1]]).T
-        #
-        # # computing ratios changes columns headers,
-        # # create new ratio column headers
-        # ratio_column_headers1 = [i for i in ratios.columns]
-        # ratio_column_headers2 = [
-        #     f'{dna_moniker}{i}/{dna_moniker}{i+1}'
-        #     for i in range(1, len(ratio_column_headers1)+1)]
-        # ratio_columns = dict(
-        #     zip(ratio_column_headers1, ratio_column_headers2))
-        # ratios.rename(columns=ratio_columns, inplace=True)
-        # ratios['sample'] = data['Sample']
 
         # melt ratios dataframe
         ratios_melt = (
@@ -1520,14 +1540,17 @@ class QC(object):
 
             g = sns.FacetGrid(
                 ratios_melt, row='sample',
-                col='cycle', sharey=False)
+                col='cycle', sharey=False
+                )
 
             g = g.map(
                 plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-                ec='none', range=None, bins=200, density=True)
+                ec='none', range=None, bins=200, density=True
+                )
 
             plt.savefig(
-                os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf'))
+                os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf')
+                )
             plt.close('all')
 
         if self.yAxisGating is True:
@@ -1554,136 +1577,20 @@ class QC(object):
 
                     count_cutoff = float(text)
 
-                    ###########################################################
-                    # visualize log(cycle n/n+1) ratios in Napari
-
-                    # sample_to_inspect = str(text.split(', ')[1])
-                    #
-                    # if sample_to_inspect in data['Sample'].unique():
-                    #     sample_df = data[data['Sample'] == sample_to_inspect]
-                    #     sample_centroids = sample_df[
-                    #         ['Y_centroid', 'X_centroid']]
-                    #
-                    #     with napari.gui_qt():
-                    #
-                    #         # add dna images
-                    #         for e, i in enumerate(sorted(markers.index[
-                    #           markers['marker_name'].str.contains(
-                    #               dna_moniker)], reverse=True)):
-                    #
-                    #             dna = imread(
-                    #                 f'{self.inDir}/tif/' +
-                    #                 f'{sample_to_inspect}.*tif',
-                    #                 key=i
-                    #                 )
-                    #
-                    #             name = markers.loc[i]['marker_name']
-                    #             cycle_num = markers.loc[i]['cycle_number']
-                    #
-                    #             if name == dna1:
-                    #                 visible = True
-                    #             else:
-                    #                 visible = False
-                    #
-                    #             if e == 0:
-                    #                 viewer = napari.view_image(
-                    #                     dna, rgb=False, blending='opaque',
-                    #                     visible=visible,
-                    #                     name=name
-                    #                     )
-                    #             else:
-                    #                 viewer.add_image(
-                    #                     dna, rgb=False, blending='opaque',
-                    #                     visible=visible,
-                    #                     name=name
-                    #                     )
-                    #
-                    #             # log(cycle n/n+1) ratios
-                    #             if cycle_num < markers['cycle_number'].max():
-                    #                 sample_ratios = np.log10(
-                    #                     (sample_df[
-                    #                         f'{name}_{self.maskObject}']
-                    #                         + 0.00001)
-                    #                     /
-                    #                     (sample_df[dna_moniker
-                    #                      + str(int(
-                    #                         [re.findall(
-                    #                             r'(\w+?)(\d+)', name)[0]
-                    #                          ][0][1]
-                    #                         ) + 1) + '_' + self.maskObject]
-                    #                         + 0.00001)
-                    #                     )
-                    #
-                    #             # log(cycle 1/n) ratios
-                    #             # if cycle_num != 1:
-                    #             #     sample_ratios = np.log10(
-                    #             #         (sample_df[
-                    #             #             f'{dna1}_{self.maskObject}']
-                    #             #             + 0.00001)
-                    #             #         /
-                    #             #         (sample_df[
-                    #             #             f'{name}_{self.maskObject}']
-                    #             #             + 0.00001)
-                    #             #         )
-                    #
-                    #                 sample_ratios = np.clip(
-                    #                     sample_ratios,
-                    #                     a_min=np.percentile(
-                    #                         sample_ratios, 1.0),
-                    #                     a_max=np.percentile(
-                    #                         sample_ratios, 99.0)
-                    #                     )
-                    #
-                    #                 point_properties = {
-                    #                     'face_color': sample_ratios
-                    #                     }
-                    #
-                    #                 viewer.add_points(
-                    #                     sample_centroids,
-                    #                     name=f'log({cycle_num}/' +
-                    #                     f'{cycle_num + 1})',
-                    #                     visible=False,
-                    #                     properties=point_properties,
-                    #                     face_color='face_color',
-                    #                     face_colormap='PiYG',
-                    #                     edge_color='k',
-                    #                     edge_width=0.0, size=7.0
-                    #                     )
-                    #
-                    #         # rearrange viwer layers (DNA images first)
-                    #         layer_names = [str(i) for i in viewer.layers]
-                    #
-                    #         current_order = tuple(
-                    #             [layer_names.index(i) for i in layer_names]
-                    #             )
-                    #
-                    #         dna_idxs = [
-                    #             layer_names.index(i) for i in layer_names
-                    #             if dna_moniker in i
-                    #             ]
-                    #         log_idxs = [
-                    #             layer_names.index(i) for i in layer_names
-                    #             if 'log(' in i
-                    #             ]
-                    #
-                    #         target_order = tuple(log_idxs + dna_idxs)
-                    #
-                    #         viewer.layers[current_order] = viewer.layers[
-                    #             target_order
-                    #             ]
-                    ###########################################################
-
                     # render log(cycle 1/n) histograms with y-axis count cutoff
                     sns.set(font_scale=0.5)
                     sns.set_style('whitegrid')
+
                     g = sns.FacetGrid(
                         ratios_melt, row='sample',
-                        col='cycle', sharey=False)
+                        col='cycle', sharey=False
+                        )
+
                     g = g.map(
                         plt.hist, 'log10(ratio)', color='r',
                         histtype='stepfilled', ec='none',
-                        range=None,
-                        bins=200, density=True)
+                        range=None, bins=200, density=True
+                        )
 
                     for ax in g.axes.ravel():
                         ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
@@ -1694,7 +1601,8 @@ class QC(object):
                             )
 
                     filename = os.path.join(
-                        cycles_dir, 'cycle_correlation(logRatio).pdf')
+                        cycles_dir, 'cycle_correlation(logRatio).pdf'
+                        )
                     open_file(filename)
 
                     plt.show(block=False)
@@ -1828,21 +1736,10 @@ class QC(object):
 
             if samples_to_threshold > 0:
 
-                # show plot of all histograms
-                # filename = os.path.join(
-                #     cycles_dir, 'cycle_correlation(logRatio).pdf')
-                # open_file(filename)
-
                 for name, group in natsorted(ratios_melt.groupby('sample')):
 
                     print()
                     print(f'Sample: {name}')
-
-                    # loop over all cycles
-                    # for cycle_ratio in group['cycle'].unique():
-                    #     if not (
-                    #       cycle_ratio.split('/')[0]
-                    #       == cycle_ratio.split('/')[1]):
 
                     # loop over last cycle only
                     cycle_ratio = group['cycle'].unique()[-1]
@@ -1865,7 +1762,8 @@ class QC(object):
 
                     # create image pyramid
                     seg, min, max = single_channel_pyramid(
-                        glob.glob(file_path)[0], channel=0)
+                        glob.glob(file_path)[0], channel=0
+                        )
 
                     # add segmentation outlines image to viewer
                     viewer = napari.view_image(
@@ -1877,6 +1775,7 @@ class QC(object):
                     # read last DNA channel
                     for file_path in glob.glob(
                       f'{self.inDir}/tif/{name}.*tif'):
+
                         dna_last, min, max = single_channel_pyramid(
                             file_path, channel=channel_number.item() - 1
                             )
@@ -2123,16 +2022,19 @@ class QC(object):
 
         # plot dna intensity correlation per cycle
         fig, ax = plt.subplots(figsize=(5, 5))
+
         g = sns.FacetGrid(
             facet_per_cycle_melt, col='cycle', col_wrap=5,
-            sharex=True, sharey=False)
+            sharex=True, sharey=False
+            )
 
         g.map(
             lambda y, color: plt.scatter(
                 facet_per_cycle_melt['value'].loc[
                     facet_per_cycle_melt['cycle']
                     == dna1], y, s=0.05, alpha=0.1, linewidth=None,
-                marker='o', c='r'), 'value')
+                marker='o', c='r'), 'value'
+                )
 
         plt.savefig(
             os.path.join(
@@ -2156,7 +2058,8 @@ class QC(object):
 
         g = sns.FacetGrid(
             facet_per_cycle_melt, col='cycle', hue='Sample',
-            col_wrap=5, sharex=True, sharey=True)
+            col_wrap=5, sharex=True, sharey=True
+            )
 
         g.map(
             lambda sam, y, color, **kwargs: plt.scatter(
@@ -2167,7 +2070,8 @@ class QC(object):
                     'value'], y,
                 c=np.reshape(sample_color_dict[sam.unique()[0]], (-1, 3)),
                 s=0.05, linewidth=None, marker='o', **kwargs),
-            'Sample', 'value')
+            'Sample', 'value'
+            )
 
         plt.legend(markerscale=10, bbox_to_anchor=(1.1, 1.05))
 
@@ -2198,8 +2102,7 @@ class QC(object):
             )
 
         abx_channels_mod = data[abx_channels].copy()
-        abx_channels_mod += 0.00000000001
-        abx_channels_mod = np.log10(abx_channels_mod)
+        abx_channels_mod += np.log10(abx_channels_mod + 0.00000000001)
         data.loc[:, abx_channels] = abx_channels_mod
 
         data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
@@ -2293,7 +2196,8 @@ class QC(object):
                 data_copy1[['Sample', 'Condition', 'Area'] + [ab]]
                 .sample(frac=1.0)
                 .melt(id_vars=['Sample', 'Condition', 'Area'],
-                      var_name='channel', value_name='signal'))
+                      var_name='channel', value_name='signal')
+                      )
 
             # naturally sort hist_facet by sample
             hist_facet['Sample'] = pd.Categorical(
@@ -2313,7 +2217,8 @@ class QC(object):
             # plot raw facets
             g_raw = sns.FacetGrid(
                 hist_facet, col='for_plot', col_wrap=4,
-                height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False)
+                height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False
+                )
 
             # use hexbins for plotting
             if self.hexbins:
@@ -2453,7 +2358,8 @@ class QC(object):
                     data_copy2
                     .sample(frac=1.0)
                     .melt(id_vars=['Sample', 'Condition', 'Area'],
-                          var_name='channel', value_name='signal'))
+                          var_name='channel', value_name='signal')
+                    )
 
                 # naturally sort hist_facet by sample
                 hist_facet['Sample'] = pd.Categorical(
@@ -2470,7 +2376,8 @@ class QC(object):
                 # plot pruned facets
                 g_pruned = sns.FacetGrid(
                     hist_facet, col='for_plot', col_wrap=4,
-                    height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False)
+                    height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False
+                    )
 
                 # use hexbins for plotting
                 if self.hexbins:
@@ -2737,8 +2644,8 @@ class QC(object):
 
             # re-plot pruned facets
             g = sns.FacetGrid(
-                hist_facet, col='for_plot', col_wrap=15,
-                height=3.0, aspect=1.0, sharex=True, sharey=False
+                hist_facet, col='for_plot', col_wrap=4,
+                height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False
                 )
 
             # use hexbins for plotting
@@ -2753,23 +2660,21 @@ class QC(object):
             else:
                 g.map(
                     lambda x, y, color: plt.scatter(
-                        x, y, s=1.0, linewidths=0.0, color='k'),
+                        x, y, s=0.05, linewidths=0.0, color='k'),
                     'signal', 'Area')
 
             g.set_titles(
                 col_template="{col_name}", fontweight='bold',
-                size=9.0, pad=2.0
+                size=5.0, pad=4.0
                 )
-
-            g.fig.suptitle(ab, y=1.1, size=20.0)
 
             for ax in g.axes.flatten():
                 ax.tick_params(
                     axis='both', which='major',
                     labelsize=5.0, pad=-2
                     )
-                ax.xaxis.label.set_size(10.0)
-                ax.yaxis.label.set_size(10.0)
+                ax.xaxis.label.set_size(5.0)
+                ax.yaxis.label.set_size(5.0)
 
                 if self.hexbins:
                     ax.spines['left'].set_visible(False)
@@ -2779,8 +2684,8 @@ class QC(object):
                     ax.spines['bottom'].set_linewidth(0.1)
 
             plt.subplots_adjust(
-                left=0.01, bottom=0.01, right=0.99,
-                top=0.90, hspace=0.4, wspace=0.4
+                left=0.08, bottom=0.2, right=0.99,
+                top=0.9, hspace=0.8, wspace=0.3
                 )
 
             plt.savefig(
@@ -2851,9 +2756,6 @@ class QC(object):
         print()
         print()
         return data
-
-    import faulthandler
-    faulthandler.enable()
 
     @module
     def metaQC(data, self, args):
@@ -3331,7 +3233,10 @@ class QC(object):
 
                             highlight = 'none'
 
-                            if color_by == f'cluster_{self.dimensionEmbeddingQC}d':
+                            if (
+                                color_by ==
+                                f'cluster_{self.dimensionEmbeddingQC}d'
+                              ):
 
                                 # build cmap
                                 cmap = categorical_cmap(
@@ -3710,12 +3615,13 @@ class QC(object):
                                             for file_path in glob.glob(
                                               f'{self.inDir}/tif/' +
                                               f'{value}.*tif'):
-                                                img, min, max = single_channel_pyramid(
-                                                    file_path,
-                                                    channel=(
-                                                        channel_number
-                                                        .item()-1)
-                                                        )
+                                                img, min, max = (
+                                                    single_channel_pyramid(
+                                                        file_path,
+                                                        channel=(
+                                                            channel_number
+                                                            .item()-1))
+                                                    )
 
                                             viewer.add_image(
                                                 img, rgb=False,
@@ -3762,9 +3668,11 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/seg/' +
                                       f'{value}.*tif'):
+
                                         seg, min, max = single_channel_pyramid(
                                             file_path, channel=0
                                             )
+
                                     viewer.add_image(
                                         seg, rgb=False, blending='additive',
                                         colormap='gray', visible=False,
@@ -3781,10 +3689,14 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
                                       f'{value}.*tif'):
-                                        dna_last, min, max = single_channel_pyramid(
-                                            file_path,
-                                            channel=channel_number.item() - 1
+
+                                        dna_last, min, max = (
+                                            single_channel_pyramid(
+                                                file_path,
+                                                channel=channel_number.item()
+                                                - 1)
                                             )
+
                                         viewer.add_image(
                                             dna_last, rgb=False,
                                             blending='additive',
@@ -3799,9 +3711,12 @@ class QC(object):
                                     for file_path in glob.glob(
                                       f'{self.inDir}/tif/' +
                                       f'{value}.*tif'):
-                                        dna_first, min, max = single_channel_pyramid(
-                                            file_path, channel=0
+
+                                        dna_first, min, max = (
+                                            single_channel_pyramid(
+                                                file_path, channel=0)
                                             )
+
                                     viewer.add_image(
                                         dna_first, rgb=False,
                                         blending='additive',
@@ -3934,7 +3849,6 @@ class QC(object):
                                 f'{self.embeddingAlgorithm}_'
                                 f'{current_MCS}.png'),
                                 bbox_inches='tight', dpi=1000)
-                            plt.close('all')
 
                             QTimer().singleShot(0, viewer.close)
 
@@ -4056,7 +3970,10 @@ class QC(object):
                     # (not applicable to first chunk, which gets
                     # clustered during plotting above)
 
-                    if f'cluster_{self.dimensionEmbeddingQC}d' not in chunk.columns:
+                    if (
+                        f'cluster_{self.dimensionEmbeddingQC}d' not in
+                        chunk.columns
+                      ):
 
                         print()
                         print(
@@ -4368,390 +4285,418 @@ class QC(object):
 
         evr = pd.DataFrame()
         print()
-        print("Performing Horn's parallel analysis to "
-              "determine number of non-random PCs...")
 
         n_components = min(len(data['Sample'].unique()), len(abx_channels))
 
-        for l in range(1, n_components+1):
-            print(f'iteration {l}/{n_components}')
-            shuffled = unshuffled.copy()
-            for e, col in enumerate(shuffled.columns):
-                shuffled[col] = shuffled[col].sample(
-                    frac=1.0, random_state=e+l).values
+        if n_components > 1:
+            print("Performing Horn's parallel analysis to "
+                  "determine number of non-random PCs...")
 
-            # specify PCA parameters
+            for l in range(1, n_components+1):
+                print(f'iteration {l}/{n_components}')
+                shuffled = unshuffled.copy()
+                for e, col in enumerate(shuffled.columns):
+                    shuffled[col] = shuffled[col].sample(
+                        frac=1.0, random_state=e+l).values
+
+                # specify PCA parameters
+                pca = PCA(n_components=n_components, random_state=1)
+
+                # mean-center data (axis=0)
+                for c in shuffled.columns:
+                    shuffled[c] = shuffled[c]-shuffled[c].mean()
+
+                # fit PCA parameters to data
+                pca.fit_transform(shuffled)
+
+                evr[l] = pca.explained_variance_ratio_
+
+            # used 1-based indexing for PCs
+            evr.index = [i+1 for i in evr.index]
+
+            # specify PCA parameters for unshuffled data
             pca = PCA(n_components=n_components, random_state=1)
 
-            # mean-center data (axis=0)
-            for c in shuffled.columns:
-                shuffled[c] = shuffled[c]-shuffled[c].mean()
+            # mean-center unshuffled data (axis=0)
+            for c in unshuffled.columns:
+                unshuffled[c] = unshuffled[c]-unshuffled[c].mean()
 
-            # fit PCA parameters to data
-            pca.fit_transform(shuffled)
+            # apply PCA parameters to unshuffled data
+            projected = pca.fit_transform(unshuffled)
 
-            evr[l] = pca.explained_variance_ratio_
+            sns.set_style('whitegrid')
+            fig1, ax1 = plt.subplots()
 
-        # used 1-based indexing for PCs
-        evr.index = [i+1 for i in evr.index]
-
-        # specify PCA parameters for unshuffled data
-        pca = PCA(n_components=n_components, random_state=1)
-
-        # mean-center unshuffled data (axis=0)
-        for c in unshuffled.columns:
-            unshuffled[c] = unshuffled[c]-unshuffled[c].mean()
-
-        # apply PCA parameters to unshuffled data
-        projected = pca.fit_transform(unshuffled)
-
-        sns.set_style('whitegrid')
-        fig1, ax1 = plt.subplots()
-
-        x = np.arange(1, n_components+1, step=1)
-        ax1.plot(evr.index, evr.mean(axis=1), color='tab:orange', marker='o')
-        ax1.plot(
-            x, pca.explained_variance_ratio_, color='tab:blue', marker='o'
-            )
-
-        ax1.set_xticks(x)
-
-        ax1.set_xlabel(
-            'PC', fontsize=10, labelpad=7.0)
-        ax1.set_ylabel(
-            'Explained Variance Ratio', fontsize=10, labelpad=4.0)
-
-        legend_handles = []
-        legend_handles.append(
-            Line2D([0], [0], marker=None, color='tab:blue',
-                   label='unshuffled', markeredgewidth=0.7,
-                   markersize=5.0, linewidth=5)
-                   )
-        legend_handles.append(
-            Line2D([0], [0], marker=None, color='tab:orange',
-                   label='average shuffled', markeredgewidth=0.7,
-                   markersize=5.0, linewidth=5)
-                   )
-        ax1.legend(
-            handles=legend_handles,
-            prop={'size': 10.0},
-            bbox_to_anchor=[0.95, 1.0]
-            )
-        fig1.savefig(
-            os.path.join(pca_dir, 'variance.pdf'),
-            bbox_inches='tight'
-            )
-        plt.close(fig1)
-
-        #######################################################################
-        # plot cell distribution across PCs 1 and 2
-
-        # generate dataframe for plot input
-        scatter_input = pd.DataFrame(data=projected, index=unshuffled.index)
-        scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
-
-        fig2, ax2 = plt.subplots()
-        sns.scatterplot(
-            data=scatter_input, x='PC1', y='PC2', color='k', linewidth=0.0,
-            s=30000/len(data), alpha=1.0, legend=False
-            )
-
-        ax2.set_xlabel(
-            f'PC1 ({round((pca.explained_variance_ratio_[0] * 100), 2)}'
-            '% of variance)', fontsize=10, labelpad=7.0)
-        ax2.set_ylabel(
-            f'PC2 ({round((pca.explained_variance_ratio_[1] * 100), 2)}'
-            '% of variance)', fontsize=10, labelpad=4.0)
-        ax2.tick_params(axis='both', which='major', labelsize=7.0)
-
-        fig2.savefig(
-            os.path.join(
-                pca_dir, 'pcaScoresPlotCells.png'), dpi=600,
-            bbox_inches='tight'
-            )
-        plt.close(fig2)
-
-        #######################################################################
-        # compute median channel intensites for samples and
-        # plot their distribution across PCs 1 and 2
-
-        if len(data['Sample'].unique()) > 1:
-
-            # compute median antibody expression per sample
-            # samples (rows) x features (columns)
-            medians = (
-                data.groupby(['Sample'])
-                .median(numeric_only=True)[abx_channels]
+            x = np.arange(1, n_components+1, step=1)
+            ax1.plot(
+                evr.index, evr.mean(axis=1), color='tab:orange', marker='o'
+                )
+            ax1.plot(
+                x, pca.explained_variance_ratio_, color='tab:blue', marker='o'
                 )
 
-            # drop sample exclusions for PCA
-            medians = medians[~medians.index.isin(self.samplesToRemovePCA)]
+            ax1.set_xticks(x)
 
-            # mean-center data
-            medians = medians-medians.mean(axis=0)
+            ax1.set_xlabel(
+                'PC', fontsize=10, labelpad=7.0)
+            ax1.set_ylabel(
+                'Explained Variance Ratio', fontsize=10, labelpad=4.0)
 
-            # sort medians index (sample names) naturally
-            medians = medians.reindex(natsorted(medians.index))
+            legend_handles = []
+            legend_handles.append(
+                Line2D([0], [0], marker=None, color='tab:blue',
+                       label='unshuffled', markeredgewidth=0.7,
+                       markersize=5.0, linewidth=5)
+                       )
+            legend_handles.append(
+                Line2D([0], [0], marker=None, color='tab:orange',
+                       label='average shuffled', markeredgewidth=0.7,
+                       markersize=5.0, linewidth=5)
+                       )
+            ax1.legend(
+                handles=legend_handles,
+                prop={'size': 10.0},
+                bbox_to_anchor=[0.95, 1.0]
+                )
+            fig1.savefig(
+                os.path.join(pca_dir, 'variance.pdf'),
+                bbox_inches='tight'
+                )
+            plt.close(fig1)
 
-            # initialize PCA
-            pca = PCA(self.dimensionPCA, random_state=1)
+            ###################################################################
+            # plot cell distribution across PCs 1 and 2
 
-            # fit PCA to data
-            projected = pca.fit_transform(medians)
-
-            # generate dataframe of the projection coordinates
-            # to be used as plot input
-            scatter_input = pd.DataFrame(data=projected, index=medians.index)
+            # generate dataframe for plot input
+            scatter_input = pd.DataFrame(
+                data=projected, index=unshuffled.index
+                )
             scatter_input.rename(columns={0: 'PC1', 1: 'PC2'}, inplace=True)
 
-            # assign row index (sample names) as a column
-            scatter_input.reset_index(drop=False, inplace=True)
-
-            # get sample file names (i.e. sampleMetadata keys) from config.yml
-            # based on "Sample" column (first elements of sampleMetadata vals)
-            def get_key(val):
-                for key, value in self.sampleNames.items():
-                    if val == value:
-                        return key
-
-                return "key doesn't exist"
-            file_names = [get_key(i) for i in scatter_input['Sample']]
-
-            # create columns of full and abbreviated condition names
-            scatter_input['condition'] = [
-                self.sampleConditions[i] for i in file_names]
-            scatter_input['condition_abbr'] = [
-                self.sampleConditionAbbrs[i] for i in file_names]
-
-            # set condition abbreviation names as row index
-            scatter_input.set_index('condition_abbr', inplace=True)
-
-            # create a naturally-sorted list of samples that will NOT be grayed
-            ordered_conditions = natsorted(set(scatter_input.index.unique())
-                                           .difference(
-                                            set(self.conditionsToSilhouette)))
-
-            # build cmap for samples to NOT be grayed
-            cmap = categorical_cmap(
-                numUniqueSamples=len(ordered_conditions),
-                numCatagories=10,
-                cmap='tab10',
-                continuous=False)
-            condition_color_dict = dict(zip(ordered_conditions, cmap.colors))
-            # assign conditions for silhouetting the same color (e.g. gray)
-            for s in self.conditionsToSilhouette:
-                silhouette_color = [0.863, 0.863, 0.863]
-                condition_color_dict[s] = silhouette_color
-
-            # plot sample PCA scores
-            sns.set_style('white')
-            for e, (condition_name, sample_scores) in enumerate(
-              scatter_input.iterrows()):
-
-                point = pd.DataFrame(sample_scores).T
-
-                if condition_name in self.conditionsToSilhouette:
-                    edgecolor = silhouette_color
-                    zorder = 2
-                else:
-                    edgecolor = 'k'
-                    zorder = 3
-
-                g = sns.scatterplot(
-                    data=point, x='PC1', y='PC2', hue=point.index,
-                    palette=condition_color_dict, edgecolor=edgecolor,
-                    linewidth=0.2, zorder=zorder, s=self.pointSize,
-                    alpha=1.0, legend=False)
-
-            g.grid(color='gray', linewidth=0.05, linestyle='-', alpha=1.0)
-            plt.setp(g.spines.values(), color='k', lw=0.5)
-
-            # assign row index (condition abbreviations) as column
-            scatter_input = scatter_input.reset_index().rename(
-                columns={'index': 'abbreviation'}
+            fig2, ax2 = plt.subplots()
+            sns.scatterplot(
+                data=scatter_input, x='PC1', y='PC2', color='k', linewidth=0.0,
+                s=30000/len(data), alpha=1.0, legend=False
                 )
 
-            # annotate data points
-            if self.labelPoints is True:
-
-                # generate squareform distance matrix
-                sq = squareform(
-                    pdist(scatter_input[['PC1', 'PC2']], metric='euclidean')
-                    )
-
-                # add numerical row and column indices
-                df = pd.DataFrame(
-                    sq, index=scatter_input.index,
-                    columns=scatter_input.index
-                    )
-
-                # isolate values from upper triangle
-                df1 = df.where(np.triu(np.ones(df.shape)).astype(np.bool))
-
-                # filter upper triangle values according to distance cutoff
-                df2 = df1[df1 < self.distanceCutoff]
-
-                # flatten, set multi-index as columns (sample1, sample2)
-                df3 = (
-                    df2
-                    .stack()
-                    .reset_index()
-                    .rename(columns={'level_0': 'sample_id1',
-                                     'level_1': 'sample_id2',
-                                     0: 'dist'})
-                    )
-
-                # get condition abbreviations for sample pairs
-                df3['sample_id1_cond'] = [
-                    scatter_input.loc[i, 'condition_abbr']
-                    for i in df3['sample_id1']]
-                df3['sample_id2_cond'] = [
-                    scatter_input.loc[i, 'condition_abbr']
-                    for i in df3['sample_id2']]
-
-                # drop diagonal values
-                df4 = df3[df3['dist'] != 0.0].dropna()
-
-                # get proximal sample pairs of the same condition
-                df5 = df4[df4['sample_id1_cond'] == df4['sample_id2_cond']]
-
-                # create a set of proximal sample indices
-                proximal_indices = set(
-                    list(df5['sample_id1']) +
-                    list(df5['sample_id2']))
-
-                # set of conditions
-                unique_conds = set()
-                # set of neighbors
-                neighbors_set = set()
-
-                # loop over scatter_input to annoate plot points
-                for e, (cond, x, y) in enumerate(zip(
-                  scatter_input['condition_abbr'],
-                  scatter_input['PC1'], scatter_input['PC2'])):
-
-                    # if data point e has an associated condition
-                    # which is not to be grayed out
-                    if cond not in self.conditionsToSilhouette:
-                        # if data point e has at least one neighbor
-                        if e in proximal_indices:
-                            # and hasn't already been accounted for as
-                            # another sample's neighbor
-                            if e not in neighbors_set:
-                                # get data for all samples
-                                # neighboring data point e
-                                df6 = (
-                                    df5[(df5['sample_id1'] == e) |
-                                        (df5['sample_id2'] == e)]
-                                    [['sample_id1', 'sample_id2']])
-
-                                # get set of all indices
-                                # neighboring data point e
-                                neighbors = set(
-                                    list(df6['sample_id1']) +
-                                    list(df6['sample_id2']))
-
-                                # add neighboring indices to overall
-                                # neighbors_set
-                                neighbors_set = neighbors_set.union(neighbors)
-
-                                # slice scatter_input to get samples
-                                # proximal to data point e
-
-                                neighbors_df = scatter_input.loc[
-                                    list(neighbors)
-                                    ]
-
-                                # generate centroid between samples
-                                # neighboring data point e
-                                pc1 = neighbors_df['PC1']
-                                pc2 = neighbors_df['PC2']
-                                centroid = (
-                                    sum(pc1) / len(neighbors_df),
-                                    sum(pc2) / len(neighbors_df))
-                                x = centroid[0]
-                                y = centroid[1]
-                            else:
-                                x = None
-                                y = None
-                        else:
-                            pass
-
-                        # if data point e has already been accounted
-                        # for by a neighborhood centroid, do nothing
-                        if x == y is None:
-                            pass
-                        else:
-                            # annotate plot at the centroid between
-                            # neighboring samples of the same condition
-                            # or annotate data point itself
-                            text = plt.annotate(
-                                cond, xy=(x, y),
-                                xytext=(0, 0), size=4.75,
-                                fontweight='bold',
-                                color=condition_color_dict[cond],
-                                textcoords='offset points', ha='center',
-                                va='center',
-                                bbox=dict(boxstyle='round,pad=0.1',
-                                          fc='yellow', alpha=0.0))
-
-                            text.set_path_effects(
-                                [path_effects.Stroke(
-                                    linewidth=0.75, foreground='k'),
-                                 path_effects.Normal()]
-                                )
-
-                            # add condition to set of conditions
-                            unique_conds.add(cond)
-
-            # get n per condition in naturally sorted order
-            lgd_data = scatter_input[
-                ['condition_abbr', 'condition']].value_counts()
-            lgd_data = lgd_data.reindex(index=natsorted(lgd_data.index))
-
-            # loop over legend data to create legend handles
-            legend_handles = []
-            for i in lgd_data.items():
-                abbr = i[0][0]
-                cond = i[0][1]
-                n = i[1]
-
-                if abbr in self.conditionsToSilhouette:
-                    markerfacecolor = 'gainsboro'
-                    markeredgecolor = 'gainsboro'
-                else:
-                    markerfacecolor = condition_color_dict[abbr]
-                    markeredgecolor = 'k'
-
-                legend_handles.append(
-                    Line2D([0], [0], marker='o', color='none',
-                           label=f'{abbr} ({cond}, n={n})',
-                           markerfacecolor=markerfacecolor,
-                           markeredgecolor=markeredgecolor,
-                           markeredgewidth=0.2,
-                           markersize=5.0))
-
-            # add legend to plot
-            g.legend(handles=legend_handles, prop={'size': 5.0}, loc='best')
-
-            # update x and y axis labels
-            plt.xlabel(
+            ax2.set_xlabel(
                 f'PC1 ({round((pca.explained_variance_ratio_[0] * 100), 2)}'
-                '% of variance)', fontsize=10, labelpad=7.0)
-            plt.ylabel(
+                '% of variance)', fontsize=10, labelpad=7.0
+                )
+            ax2.set_ylabel(
                 f'PC2 ({round((pca.explained_variance_ratio_[1] * 100), 2)}'
-                '% of variance)', fontsize=10, labelpad=4.0)
+                '% of variance)', fontsize=10, labelpad=4.0
+                )
+            ax2.tick_params(axis='both', which='major', labelsize=7.0)
 
-            # modify x and y axis ticks
-            plt.tick_params(axis='both', which='major', labelsize=7.0)
+            fig2.savefig(
+                os.path.join(
+                    pca_dir, 'pcaScoresPlotCells.png'), dpi=600,
+                bbox_inches='tight'
+                )
+            plt.close(fig2)
 
-            # save figure
-            plt.savefig(
-                os.path.join(pca_dir, 'pcaScoresPlotSamples.pdf'),
-                bbox_inches='tight')
-            plt.close('all')
+            ###################################################################
+            # compute median channel intensites for samples and
+            # plot their distribution across PCs 1 and 2
 
-            data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+            if len(data['Sample'].unique()) > 1:
+
+                # compute median antibody expression per sample
+                # samples (rows) x features (columns)
+                medians = (
+                    data.groupby(['Sample'])
+                    .median(numeric_only=True)[abx_channels]
+                    )
+
+                # drop sample exclusions for PCA
+                medians = medians[~medians.index.isin(self.samplesToRemovePCA)]
+
+                # mean-center data
+                medians = medians-medians.mean(axis=0)
+
+                # sort medians index (sample names) naturally
+                medians = medians.reindex(natsorted(medians.index))
+
+                # initialize PCA
+                pca = PCA(self.dimensionPCA, random_state=1)
+
+                # fit PCA to data
+                projected = pca.fit_transform(medians)
+
+                # generate dataframe of the projection coordinates
+                # to be used as plot input
+                scatter_input = pd.DataFrame(
+                    data=projected, index=medians.index
+                    )
+                scatter_input.rename(
+                    columns={0: 'PC1', 1: 'PC2'}, inplace=True
+                    )
+
+                # assign row index (sample names) as a column
+                scatter_input.reset_index(drop=False, inplace=True)
+
+                # get sample file names (sampleMetadata keys) from config.yml
+                # based on "Sample" column (element 1 of sampleMetadata vals)
+                def get_key(val):
+                    for key, value in self.sampleNames.items():
+                        if val == value:
+                            return key
+
+                    return "key doesn't exist"
+                file_names = [get_key(i) for i in scatter_input['Sample']]
+
+                # create columns of full and abbreviated condition names
+                scatter_input['condition'] = [
+                    self.sampleConditions[i] for i in file_names]
+                scatter_input['condition_abbr'] = [
+                    self.sampleConditionAbbrs[i] for i in file_names]
+
+                # set condition abbreviation names as row index
+                scatter_input.set_index('condition_abbr', inplace=True)
+
+                # create a naturally-sorted list of samples NOT be grayed
+                ordered_conditions = natsorted(
+                    set(scatter_input.index.unique()).difference(
+                        set(self.conditionsToSilhouette))
+                        )
+
+                # build cmap for samples to NOT be grayed
+                cmap = categorical_cmap(
+                    numUniqueSamples=len(ordered_conditions),
+                    numCatagories=10,
+                    cmap='tab10',
+                    continuous=False)
+                condition_color_dict = dict(
+                    zip(ordered_conditions, cmap.colors)
+                    )
+                # assign conditions for silhouetting the same color (e.g. gray)
+                for s in self.conditionsToSilhouette:
+                    silhouette_color = [0.863, 0.863, 0.863]
+                    condition_color_dict[s] = silhouette_color
+
+                # plot sample PCA scores
+                sns.set_style('white')
+                for e, (condition_name, sample_scores) in enumerate(
+                  scatter_input.iterrows()):
+
+                    point = pd.DataFrame(sample_scores).T
+
+                    if condition_name in self.conditionsToSilhouette:
+                        edgecolor = silhouette_color
+                        zorder = 2
+                    else:
+                        edgecolor = 'k'
+                        zorder = 3
+
+                    g = sns.scatterplot(
+                        data=point, x='PC1', y='PC2', hue=point.index,
+                        palette=condition_color_dict, edgecolor=edgecolor,
+                        linewidth=0.2, zorder=zorder, s=self.pointSize,
+                        alpha=1.0, legend=False)
+
+                g.grid(color='gray', linewidth=0.05, linestyle='-', alpha=1.0)
+                plt.setp(g.spines.values(), color='k', lw=0.5)
+
+                # assign row index (condition abbreviations) as column
+                scatter_input = scatter_input.reset_index().rename(
+                    columns={'index': 'abbreviation'}
+                    )
+
+                # annotate data points
+                if self.labelPoints is True:
+
+                    # generate squareform distance matrix
+                    sq = squareform(
+                        pdist(scatter_input[['PC1', 'PC2']],
+                              metric='euclidean')
+                        )
+
+                    # add numerical row and column indices
+                    df = pd.DataFrame(
+                        sq, index=scatter_input.index,
+                        columns=scatter_input.index
+                        )
+
+                    # isolate values from upper triangle
+                    df1 = df.where(np.triu(np.ones(df.shape)).astype(np.bool))
+
+                    # filter upper triangle values according to distance cutoff
+                    df2 = df1[df1 < self.distanceCutoff]
+
+                    # flatten, set multi-index as columns (sample1, sample2)
+                    df3 = (
+                        df2
+                        .stack()
+                        .reset_index()
+                        .rename(columns={'level_0': 'sample_id1',
+                                         'level_1': 'sample_id2',
+                                         0: 'dist'})
+                        )
+
+                    # get condition abbreviations for sample pairs
+                    df3['sample_id1_cond'] = [
+                        scatter_input.loc[i, 'condition_abbr']
+                        for i in df3['sample_id1']]
+                    df3['sample_id2_cond'] = [
+                        scatter_input.loc[i, 'condition_abbr']
+                        for i in df3['sample_id2']]
+
+                    # drop diagonal values
+                    df4 = df3[df3['dist'] != 0.0].dropna()
+
+                    # get proximal sample pairs of the same condition
+                    df5 = df4[df4['sample_id1_cond'] == df4['sample_id2_cond']]
+
+                    # create a set of proximal sample indices
+                    proximal_indices = set(
+                        list(df5['sample_id1']) +
+                        list(df5['sample_id2']))
+
+                    # set of conditions
+                    unique_conds = set()
+                    # set of neighbors
+                    neighbors_set = set()
+
+                    # loop over scatter_input to annoate plot points
+                    for e, (cond, x, y) in enumerate(zip(
+                      scatter_input['condition_abbr'],
+                      scatter_input['PC1'], scatter_input['PC2'])):
+
+                        # if data point e has an associated condition
+                        # which is not to be grayed out
+                        if cond not in self.conditionsToSilhouette:
+                            # if data point e has at least one neighbor
+                            if e in proximal_indices:
+                                # and hasn't already been accounted for as
+                                # another sample's neighbor
+                                if e not in neighbors_set:
+                                    # get data for all samples
+                                    # neighboring data point e
+                                    df6 = (
+                                        df5[(df5['sample_id1'] == e) |
+                                            (df5['sample_id2'] == e)]
+                                        [['sample_id1', 'sample_id2']])
+
+                                    # get set of all indices
+                                    # neighboring data point e
+                                    neighbors = set(
+                                        list(df6['sample_id1']) +
+                                        list(df6['sample_id2']))
+
+                                    # add neighboring indices to overall
+                                    # neighbors_set
+                                    neighbors_set = neighbors_set.union(
+                                        neighbors
+                                        )
+
+                                    # slice scatter_input to get samples
+                                    # proximal to data point e
+
+                                    neighbors_df = scatter_input.loc[
+                                        list(neighbors)
+                                        ]
+
+                                    # generate centroid between samples
+                                    # neighboring data point e
+                                    pc1 = neighbors_df['PC1']
+                                    pc2 = neighbors_df['PC2']
+                                    centroid = (
+                                        sum(pc1) / len(neighbors_df),
+                                        sum(pc2) / len(neighbors_df))
+                                    x = centroid[0]
+                                    y = centroid[1]
+                                else:
+                                    x = None
+                                    y = None
+                            else:
+                                pass
+
+                            # if data point e has already been accounted
+                            # for by a neighborhood centroid, do nothing
+                            if x == y is None:
+                                pass
+                            else:
+                                # annotate plot at the centroid between
+                                # neighboring samples of the same condition
+                                # or annotate data point itself
+                                text = plt.annotate(
+                                    cond, xy=(x, y),
+                                    xytext=(0, 0), size=4.75,
+                                    fontweight='bold',
+                                    color=condition_color_dict[cond],
+                                    textcoords='offset points', ha='center',
+                                    va='center',
+                                    bbox=dict(boxstyle='round,pad=0.1',
+                                              fc='yellow', alpha=0.0))
+
+                                text.set_path_effects(
+                                    [path_effects.Stroke(
+                                        linewidth=0.75, foreground='k'),
+                                     path_effects.Normal()]
+                                    )
+
+                                # add condition to set of conditions
+                                unique_conds.add(cond)
+
+                # get n per condition in naturally sorted order
+                lgd_data = scatter_input[
+                    ['condition_abbr', 'condition']].value_counts()
+                lgd_data = lgd_data.reindex(index=natsorted(lgd_data.index))
+
+                # loop over legend data to create legend handles
+                legend_handles = []
+                for i in lgd_data.items():
+                    abbr = i[0][0]
+                    cond = i[0][1]
+                    n = i[1]
+
+                    if abbr in self.conditionsToSilhouette:
+                        markerfacecolor = 'gainsboro'
+                        markeredgecolor = 'gainsboro'
+                    else:
+                        markerfacecolor = condition_color_dict[abbr]
+                        markeredgecolor = 'k'
+
+                    legend_handles.append(
+                        Line2D([0], [0], marker='o', color='none',
+                               label=f'{abbr} ({cond}, n={n})',
+                               markerfacecolor=markerfacecolor,
+                               markeredgecolor=markeredgecolor,
+                               markeredgewidth=0.2,
+                               markersize=5.0))
+
+                # add legend to plot
+                g.legend(
+                    handles=legend_handles, prop={'size': 5.0}, loc='best'
+                    )
+
+                # update x and y axis labels
+                plt.xlabel(
+                    'PC1 '
+                    f'({round((pca.explained_variance_ratio_[0] * 100), 2)}'
+                    '% of variance)', fontsize=10, labelpad=7.0)
+                plt.ylabel(
+                    'PC2 '
+                    f'({round((pca.explained_variance_ratio_[1] * 100), 2)}'
+                    '% of variance)', fontsize=10, labelpad=4.0)
+
+                # modify x and y axis ticks
+                plt.tick_params(axis='both', which='major', labelsize=7.0)
+
+                # save figure
+                plt.savefig(
+                    os.path.join(pca_dir, 'pcaScoresPlotSamples.pdf'),
+                    bbox_inches='tight')
+                plt.close('all')
+
+                data = reorganize_dfcolumns(
+                    data, markers, self.dimensionEmbedding
+                    )
+        else:
+            print(
+                "n_components = 1, skipping PCA and Horn's parallel analysis."
+                )
 
         print()
         print()
@@ -5561,6 +5506,7 @@ class QC(object):
                 fig_silho.show()
 
                 if embedding.shape[1] == 2:
+
                     # must call draw() before creating selector,
                     # or alpha setting doesn't work.
                     fig.canvas.draw()
@@ -5746,8 +5692,6 @@ class QC(object):
                             f'{current_MCS}_silho.png'),
                             bbox_inches='tight', dpi=1000)
 
-                        plt.close('all')
-
                     elif embedding.shape[1] == 3:
                         print()
                         print('Saving 3D cluster plot')
@@ -5767,7 +5711,6 @@ class QC(object):
                             f'{current_MCS}.mp4'), dpi=500, fps=30,
                             extra_args=['-vcodec', 'libx264'],
                             savefig_kwargs={'bbox_inches': 'tight'})
-                        plt.close('all')
 
                     QTimer().singleShot(0, viewer.close)
 
@@ -5971,7 +5914,8 @@ class QC(object):
 
             g = sns.clustermap(
                 clustermap_input, cmap='viridis', standard_scale=axis,
-                square=False, yticklabels=1, linewidth=0.1, cbar=True)
+                square=False, yticklabels=1, linewidth=0.1, cbar=True
+                )
 
             g.fig.suptitle(f'Normalized across {name}', y=0.995, fontsize=10)
             g.fig.set_size_inches(6.0, 6.0)
@@ -6003,7 +5947,10 @@ class QC(object):
 
         napari_warnings()
 
+        viewer = napari.Viewer(title='CyLinter')
+
         if self.viewSample in data['Sample'].unique():
+
             # loop over antibody channels and add them to Napari viewer
             for e, ch in enumerate(reversed(abx_channels)):
 
@@ -6012,24 +5959,16 @@ class QC(object):
                 # read antibody image
                 for file_path in glob.glob(
                   f'{self.inDir}/tif/{self.viewSample}.*tif'):
+
                     img, min, max = single_channel_pyramid(
                         file_path, channel=channel_number.item() - 1
                         )
 
-                # initialize Napari viewer with first channel
-                if e == 0:
-                    viewer = napari.view_image(
-                        img, rgb=False, blending='additive', title='CyLinter',
-                        colormap='green', visible=False, name=ch,
-                        contrast_limits=(min, max)
-                        )
-
-                else:
-                    viewer.add_image(
-                        img, rgb=False, blending='additive',
-                        colormap='green', visible=False, name=ch,
-                        contrast_limits=(min, max)
-                        )
+                viewer.add_image(
+                    img, rgb=False, blending='additive',
+                    colormap='green', visible=False, name=ch,
+                    contrast_limits=(min, max)
+                    )
 
             # read DNA1 channel
             for file_path in glob.glob(
@@ -6267,7 +6206,8 @@ class QC(object):
 
                     # compute mean ratio
                     ratio = np.log2(
-                        (cnd1_mean + 0.000001)/(cnd2_mean + 0.000001))
+                        (cnd1_mean + 0.00000000001)/(cnd2_mean + 0.00000000001)
+                        )
 
                     # compute mean difference
                     dif = cnd1_mean-cnd2_mean
@@ -6326,7 +6266,8 @@ class QC(object):
                         xy=(x, y), xytext=(10, 10),
                         textcoords='offset points', ha='right', va='bottom',
                         bbox=dict(boxstyle='round,pad=0.1', fc='yellow',
-                                  alpha=0.0))
+                                  alpha=0.0)
+                        )
 
                 for tick in ax.xaxis.get_major_ticks():
                     tick.label.set_fontsize(5)
@@ -6392,7 +6333,8 @@ class QC(object):
                     col=f'cluster_{self.dimensionEmbedding}d', col_wrap=6,
                     data=catplot_input, kind='bar', palette=sample_color_dict,
                     height=2, aspect=0.8, sharex=True, sharey=False,
-                    edgecolor='k', linewidth=0.1, legend=False)
+                    edgecolor='k', linewidth=0.1, legend=False
+                    )
 
                 g.set(ylim=(0.0, None))
 
