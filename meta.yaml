@@ -26,7 +26,7 @@ requirements:
     - hdbscan
     - joblib
     - magicgui
-    - matplotlib
+    - matplotlib=3.5
     - napari
     - natsort
     - numba
