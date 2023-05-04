@@ -3790,7 +3790,7 @@ class QC(object):
                                 ec='k', linewidth=0.0)
 
                             ax_reclass.set_title(
-                                'Reclassification', fontsize=10)
+                                'Reclassification', fontsize=7)
                             ax_reclass.axis('equal')
                             ax_reclass.axes.xaxis.set_visible(False)
                             ax_reclass.axes.yaxis.set_visible(False)
