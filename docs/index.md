@@ -6,7 +6,7 @@ description: ""
 hero_heading: "Quality Control Software for Multiplex Microscopy."
 hero_body: "CyLinter is used to identify and remove noisy single-cell instances in multiplex images of tissue."
 hero_ctas:
-  - label: "pip install"
+  - label: "mamba install"
     link: "installation/"
   - label: "GitHub Repo"
     link: "https://github.com/labsyspharm/cylinter"

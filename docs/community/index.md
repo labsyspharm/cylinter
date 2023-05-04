@@ -32,6 +32,8 @@ CyLinter development is led by [Greg Baker](https://scholar.harvard.edu/gregoryj
 * [Jackson Appelt](https://www.linkedin.com/in/jackson-appelt-311405142)
 * [Ana Verma](https://www.linkedin.com/in/anaverma)
 * [Sheheryar Kabraji](https://www.dana-farber.org/find-a-doctor/sheheryar-k-kabraji/)
+* [Claire Ritch](https://www.linkedin.com/in/cecily-claire-ritch-651795b7/)
+* [Shannon Coy](https://connects.catalyst.harvard.edu/Profiles/display/Person/140806)
 
 # Suggest a module
 
