@@ -1,17 +1,17 @@
 ---
 layout: default-cylinter
 title: Running CyLinter
-nav_order: 4
+nav_order: 3
 has_children: false
 ---
 
 # Running CyLinter
 
 ## Step 1:
-Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file). A copy of this file can be found in the Mamba environment into which CyLinter was installed (`.../mambaforge/envs/cylinter/config.yml`)
+Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file). A copy of this file can be found in the virtual environment into which CyLinter was installed (`.../mambaforge/envs/cylinter/config.yml`)
 
 ## Step 2:
-Activate the Mamba environment:
+Activate the CyLinter virtual environment:
 
 ``` bash
 mamba activate cylinter
