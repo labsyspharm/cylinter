@@ -15,6 +15,9 @@ Access to the demonstration dataset requires free registration at the Sage Synap
 # Activate the CyLinter virtual environment.
 mamba activate cylinter
 
+# Install Synapse client.
+mamba install -c bioconda synapseclient
+
 # Mac users can download the demo dataset using the 'prep' command.
 prep cylinter_demo ~/Desktop/cylinter_demo  # Enter Synapse ID and password when prompted.
 
