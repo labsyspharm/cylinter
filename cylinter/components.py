@@ -139,6 +139,12 @@ class QC(object):
                  showAbChannels=None,
                  samplesForROISelection=None,
 
+                 # intensityFilter -
+                 numBinsIntensity=None,
+
+                 # intensityArea -
+                 numBinsArea=None,
+
                  # crossCycleCorrelation -
                  yAxisGating=None,
 
@@ -227,6 +233,10 @@ class QC(object):
         self.delintMode = delintMode
         self.showAbChannels = showAbChannels
         self.samplesForROISelection = samplesForROISelection
+
+        self.numBinsIntensity = numBinsIntensity
+
+        self.numBinsArea = numBinsArea
 
         self.yAxisGating = yAxisGating
 
@@ -605,6 +615,24 @@ class QC(object):
                 # clear polygon vertices from polygons list for re-entry below
                 updated_polygons = []
 
+                # apply previously defined contrast limits if they exist
+                if os.path.exists(
+                  os.path.join(f'{self.outDir}/contrast/contrast_limits.yml')):
+
+                    print()
+                    print('Reading existing contrast settings.')
+
+                    contrast_limits = yaml.safe_load(
+                        open(f'{self.outDir}/contrast/contrast_limits.yml'))
+
+                    viewer.layers[
+                        f'{dna1}: {self.viewSample}'].contrast_limits = (
+                        contrast_limits[dna1][0], contrast_limits[dna1][1])
+
+                    for ch in reversed(abx_channels):
+                        viewer.layers[ch].contrast_limits = (
+                            contrast_limits[ch][0], contrast_limits[ch][1])
+
                 viewer.scale_bar.visible = True
                 viewer.scale_bar.unit = 'um'
 
@@ -722,8 +750,6 @@ class QC(object):
                 print(f'No ROIs selected for sample: {sample_name}')
                 idxs_to_drop[sample_name] = []
 
-        print()
-
         # drop cells from samples
         for sample_name, cell_ids in idxs_to_drop.items():
             if cell_ids:
@@ -734,6 +760,7 @@ class QC(object):
                 data.drop(global_idxs_to_drop, inplace=True)
             else:
                 pass
+        print()
 
         # save images of tissue with selected data points
         image_dir = os.path.join(roi_dir, 'images')
@@ -791,9 +818,6 @@ class QC(object):
         intensity_dir = os.path.join(self.outDir, 'intensity')
         if not os.path.exists(intensity_dir):
             os.makedirs(intensity_dir)
-
-        # set histogram bin size
-        num_bins = 125
 
         # set histogram type
         histtype = 'stepfilled'
@@ -920,7 +944,7 @@ class QC(object):
 
             # plot histogram on canvas axis
             n, bins, patches = ax.hist(
-                np.log(group[dna1]), bins=num_bins,
+                np.log(group[dna1]), bins=self.numBinsIntensity,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
                 range=None, label='before'
@@ -1139,9 +1163,6 @@ class QC(object):
         if not os.path.exists(area_dir):
             os.makedirs(area_dir)
 
-        # set histogram bin size
-        num_bins = 90
-
         # set histogram type
         histtype = 'stepfilled'
 
@@ -1270,7 +1291,7 @@ class QC(object):
 
             # plot histogram on canvas axis
             n, bins, patches = ax.hist(
-                np.log(group['Area']), bins=num_bins,
+                np.log(group['Area']), bins=self.numBinsArea,
                 density=False, color='grey', ec='none',
                 alpha=0.75, histtype=histtype,
                 range=None, label='before'
@@ -2212,8 +2233,9 @@ class QC(object):
             sns.set_style('white')
 
             # plot raw facets
+            col_wrap = 5
             g_raw = sns.FacetGrid(
-                hist_facet, col='for_plot', col_wrap=4,
+                hist_facet, col='for_plot', col_wrap=col_wrap,
                 height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False
                 )
 
@@ -2232,15 +2254,21 @@ class QC(object):
 
             g_raw.set_titles(
                 col_template="{col_name}", fontweight='bold',
-                size=5.0, pad=4.0)
+                size=np.log(650/len(g_raw.axes.flatten())), pad=0.0)
 
             for ax in g_raw.axes.flatten():
                 ax.tick_params(
                     axis='both', which='major',
                     labelsize=5.0, pad=-2)
 
-                ax.xaxis.label.set_size(5.0)
-                ax.yaxis.label.set_size(5.0)
+                ax.set_xticks([])
+                ax.set_yticks([])
+
+                ax.xaxis.label.set_size(np.log(750/len(g_raw.axes.flatten())))
+                ax.yaxis.label.set_size(np.log(750/len(g_raw.axes.flatten())))
+
+                ax.xaxis.labelpad = 1.0
+                ax.yaxis.labelpad = 1.0
 
                 if self.hexbins:
                     ax.spines['left'].set_visible(False)
@@ -2248,6 +2276,16 @@ class QC(object):
                 else:
                     ax.spines['left'].set_linewidth(0.1)
                     ax.spines['bottom'].set_linewidth(0.1)
+
+            # linear interpol. (between 1 and 30 rows at 5 plots/row)
+            # for top/bottom subplot adjustment
+            pad = (
+                1 + (math.ceil(len(g_raw.axes.flatten())/col_wrap) - 1) *
+                (10 - 1) / (30 - 1)
+                )
+
+            plt.tight_layout(pad=pad)
+            plt.subplots_adjust(left=0.04, right=0.98, hspace=0.8, wspace=0.3)
 
             # generate Qt widget
             raw_widget = QtWidgets.QWidget()
@@ -2263,19 +2301,23 @@ class QC(object):
             raw_layout.addWidget(NavigationToolbar(raw_canvas, raw_widget))
             raw_layout.addWidget(raw_canvas)
 
-            plt.subplots_adjust(
-                left=0.08, bottom=0.2, right=0.99,
-                top=0.9, hspace=0.8, wspace=0.3)
-
             plt.savefig(
                 os.path.join(pruning_dir, f'{ab}_raw.png'), dpi=300,
                 bbox_inches='tight')
 
-            # generate Qt widget
-            pruned_widget = QtWidgets.QWidget()
+            ###############################################################
+            @magicgui(
+                layout='horizontal',
+                call_button='View Outliers',
+                sample_name={'label': 'Sample Name'},
+                )
+            def sample_selector(
+              sample_name: str,
+              ):
 
-            # construct vertical box layout object
-            pruned_layout = QtWidgets.QVBoxLayout(pruned_widget)
+                return sample_name
+
+            ###############################################################
 
             @magicgui(
                 layout='vertical',
@@ -2290,7 +2332,7 @@ class QC(object):
               upper_cutoff: float = 100.0,
             ):
                 # close exisiting plots
-                plt.close('all')
+                # plt.close('all')
 
                 # add entered cutoffs to pruning_dict
                 pruning_dict[ab] = (
@@ -2391,15 +2433,25 @@ class QC(object):
 
                 g_pruned.set_titles(
                     col_template="{col_name}", fontweight='bold',
-                    size=5.0, pad=4.0)
+                    size=np.log(650/len(g_pruned.axes.flatten())), pad=2.0)
 
                 for ax in g_pruned.axes.flatten():
                     ax.tick_params(
                         axis='both', which='major',
                         labelsize=5.0, pad=-2)
 
-                    ax.xaxis.label.set_size(5.0)
-                    ax.yaxis.label.set_size(5.0)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+                    ax.xaxis.label.set_size(
+                        np.log(750/len(g_pruned.axes.flatten()))
+                        )
+                    ax.yaxis.label.set_size(
+                        np.log(750/len(g_pruned.axes.flatten()))
+                        )
+
+                    ax.xaxis.labelpad = 1.0
+                    ax.yaxis.labelpad = 1.0
 
                     if self.hexbins:
                         ax.spines['left'].set_visible(False)
@@ -2408,17 +2460,26 @@ class QC(object):
                         ax.spines['left'].set_linewidth(0.1)
                         ax.spines['bottom'].set_linewidth(0.1)
 
-                plt.subplots_adjust(
-                    left=0.08, bottom=0.2, right=0.99,
-                    top=0.9, hspace=0.8, wspace=0.3)
+                    # linear interpol. (between 1 and 30 rows at 5 plots/row)
+                    # for top/bottom subplot adjustment
+                    pad = (
+                        1 + (
+                            math.ceil(len(g_raw.axes.flatten())/col_wrap) - 1)
+                        * (10 - 1) / (30 - 1)
+                        )
 
-                count = pruned_layout.count()
+                    plt.tight_layout(pad=pad)
+                    plt.subplots_adjust(
+                        left=0.04, right=0.98, hspace=0.8, wspace=0.3
+                        )
+
+                count = raw_layout.count()
                 # print('layout count:', count)
                 # print('widget children:', pruned_widget.children())
 
                 # remove old widgets from widget layout
                 for i in range(count - 1, -1, -1):
-                    item = pruned_layout.itemAt(i)
+                    item = raw_layout.itemAt(i)
                     widget = item.widget()
                     # print('    item:', item)
                     # print('        widget:', widget)
@@ -2427,23 +2488,10 @@ class QC(object):
 
                 # add updated widgets to widget layout
                 pruned_canvas = FigureCanvas(g_pruned.fig)
-                pruned_layout.addWidget(
-                    NavigationToolbar(pruned_canvas, pruned_widget))
-                pruned_layout.addWidget(pruned_canvas)
 
-                ###############################################################
-                @magicgui(
-                    layout='horizontal',
-                    call_button='View Outliers',
-                    sample_name={'label': 'Sample Name'},
-                    )
-                def sample_selector(
-                  sample_name: str,
-                  ):
+                raw_layout.addWidget(pruned_canvas)
 
-                    return sample_name
-
-                ###############################################################
+                raw_layout.addWidget(sample_selector.native)
 
                 ###############################################################
                 @sample_selector.called.connect
@@ -2529,13 +2577,6 @@ class QC(object):
                         print('Invalid sample name entered.')
                         pass
 
-                sample_selector.native.setSizePolicy(
-                    QtWidgets.QSizePolicy.Fixed,
-                    QtWidgets.QSizePolicy.Maximum,
-                )
-
-                pruned_layout.addWidget(sample_selector.native)
-
             viewer.window.add_dock_widget(
                 select_parameters, name='select percentile cutoffs',
                 area='right')
@@ -2547,19 +2588,16 @@ class QC(object):
 
             raw_widget.setSizePolicy(
                 QtWidgets.QSizePolicy.Expanding,
-                QtWidgets.QSizePolicy.Fixed,
+                QtWidgets.QSizePolicy.Maximum,
             )
 
-            pruned_widget.setSizePolicy(
-                QtWidgets.QSizePolicy.Expanding,
+            sample_selector.native.setSizePolicy(
                 QtWidgets.QSizePolicy.Fixed,
+                QtWidgets.QSizePolicy.Maximum,
             )
 
             raw_dock = viewer.window.add_dock_widget(
-                raw_widget, name=f'{ab} raw', area='right')
-
-            pruned_dock = viewer.window.add_dock_widget(
-                pruned_widget, name=f'{ab} pruned/rescaled', area='right')
+                raw_widget, name=ab, area='right')
 
             viewer.scale_bar.visible = True
             viewer.scale_bar.unit = 'um'
@@ -4516,7 +4554,7 @@ class QC(object):
                         )
 
                     # isolate values from upper triangle
-                    df1 = df.where(np.triu(np.ones(df.shape)).astype(np.bool))
+                    df1 = df.where(np.triu(np.ones(df.shape)).astype('bool'))
 
                     # filter upper triangle values according to distance cutoff
                     df2 = df1[df1 < self.distanceCutoff]
@@ -4665,7 +4703,8 @@ class QC(object):
 
                 # add legend to plot
                 g.legend(
-                    handles=legend_handles, prop={'size': 5.0}, loc='best'
+                    handles=legend_handles, prop={'size': 5.0},
+                    loc='upper left', bbox_to_anchor=[1.01, 1.0]
                     )
 
                 # update x and y axis labels

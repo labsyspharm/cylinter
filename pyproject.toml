@@ -1,0 +1,48 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "CyLinter"
+version = "0.0.46"
+description = "CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy"
+readme = "README.md"
+license = "MIT"
+keywords =['CyLinter multiplex microscopy quality control']
+classifiers=[
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: End Users/Desktop',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: MIT License',
+    'Natural Language :: English',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3',
+    'Topic :: Scientific/Engineering :: Visualization'
+]
+authors = ["Gregory J. Baker <gregory_baker2@hms.harvard.edu>"]
+homepage = "https://github.com/labsyspharm/cylinter"
+
+[tool.poetry.dependencies]
+cellcutter = "*"
+hdbscan = "*"
+joblib = "*"
+magicgui = "*"
+matplotlib = "*"
+napari = { version = "*", extras = ["all"] }
+natsort = "*"
+numba = "*"
+pandas = "*"
+pyarrow = "*"
+pyyaml = "*"
+qtpy = "*"
+scikit-image = "*"
+scikit-learn = "*"
+scipy = "*"
+seaborn = "*"
+tifffile = "*"
+umap-learn = "*"
+zarr = "*"
+
+[tool.poetry.scripts]
+cylinter = "cylinter.cylinter:main"
+prep = "cylinter.prep:main"

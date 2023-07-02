@@ -52,6 +52,14 @@ samplesForROISelection: ["1", "15", "18", "68"]
 # (list of strs) Sample names for ROI selection specified
 # according to the first elements of sampleMetadata configuration.
 
+# IntensityFilter-------------------------------------------------------------
+numBinsIntensity: 50
+# (int) Number of bins for DNA intensity histograms.
+
+# IntensityArea-------------------------------------------------------------
+numBinsArea: 50
+# (int) Number of bins for DNA area histograms.
+
 # cycleCorrelation-------------------------------------------------------------
 yAxisGating: False
 # (bool) Whether to apply a single y-axis counts cutoff (True) or lower

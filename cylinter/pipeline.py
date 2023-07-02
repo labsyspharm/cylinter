@@ -70,6 +70,10 @@ def run_pipeline(config, start_module_name):
 
         yAxisGating=config.yAxisGating,
 
+        numBinsIntensity=config.numBinsIntensity,
+
+        numBinsArea=config.numBinsArea,
+
         hexbins=config.hexbins,
         hexbinGridSize=config.hexbinGridSize,
 
