@@ -25,6 +25,9 @@ class Config:
         config.showAbChannels = bool(data['showAbChannels'])
         config.samplesForROISelection = list(data['samplesForROISelection'])
 
+        config.numBinsIntensity = int(data['numBinsIntensity'])
+        config.numBinsArea = int(data['numBinsArea'])
+
         config.yAxisGating = bool(data['yAxisGating'])
 
         config.hexbins = bool(data['hexbins'])
