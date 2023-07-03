@@ -749,6 +749,7 @@ class QC(object):
             except KeyError:
                 print(f'No ROIs selected for sample: {sample_name}')
                 idxs_to_drop[sample_name] = []
+        print()
 
         # drop cells from samples
         for sample_name, cell_ids in idxs_to_drop.items():
