@@ -10,6 +10,7 @@ import csv as csv_module
 import math
 import pickle
 from ast import literal_eval
+from itertools import product
 
 import gc
 import hdbscan
@@ -35,6 +36,7 @@ from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider, Button
 from matplotlib.widgets import TextBox
 from matplotlib.colors import ListedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.path import Path
 import matplotlib.patheffects as path_effects
 from matplotlib.patches import Ellipse
@@ -2121,7 +2123,7 @@ class QC(object):
             )
 
         abx_channels_mod = data[abx_channels].copy()
-        abx_channels_mod += np.log10(abx_channels_mod + 0.00000000001)
+        abx_channels_mod = np.log10(abx_channels_mod + 0.00000000001)
         data.loc[:, abx_channels] = abx_channels_mod
 
         data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
@@ -2332,8 +2334,6 @@ class QC(object):
               lower_cutoff: float = 0.0,
               upper_cutoff: float = 100.0,
             ):
-                # close exisiting plots
-                # plt.close('all')
 
                 # add entered cutoffs to pruning_dict
                 pruning_dict[ab] = (
@@ -2415,7 +2415,7 @@ class QC(object):
 
                 # plot pruned facets
                 g_pruned = sns.FacetGrid(
-                    hist_facet, col='for_plot', col_wrap=4,
+                    hist_facet, col='for_plot', col_wrap=col_wrap,
                     height=1.27, aspect=(1.27/1.27), sharex=True, sharey=False
                     )
 
@@ -4311,7 +4311,62 @@ class QC(object):
         if not os.path.exists(pca_dir):
             os.makedirs(pca_dir)
 
+        ######################################################################
+
+        gs = plt.GridSpec(len(abx_channels), 1)
+        fig = plt.figure(figsize=(2, 7))
+
+        ax_objs = []
+        for i, channel in enumerate(abx_channels):
+
+            # creating new axes object
+            ax_objs.append(fig.add_subplot(gs[i:i+1, 0:]))
+
+            # plotting the distribution
+            n, bins, patches = ax_objs[-1].hist(
+                data[channel], bins=700, density=True, histtype='stepfilled',
+                linewidth=2.0, ec='k', alpha=1.0, color='k')
+
+            # setting uniform x and y lims
+            ax_objs[-1].set_xlim(0, 1)
+            ax_objs[-1].set_ylim(0, math.ceil(n.max())+1)
+
+            # make background transparent
+            rect = ax_objs[-1].patch
+            rect.set_alpha(0)
+
+            # remove borders, axis ticks, and labels
+            ax_objs[-1].set_yticklabels([])
+
+            if i == len(abx_channels)-1:
+                ax_objs[-1].set_xlabel(
+                    'Intensity', fontsize=11, fontweight='normal', labelpad=10
+                    )
+            else:
+                ax_objs[-1].set_xticks([])
+                ax_objs[-1].set_xticklabels([])
+
+            ax_objs[-1].set_yticks([])
+
+            spines = ['top', 'right', 'left']
+            for s in spines:
+                ax_objs[-1].spines[s].set_visible(False)
+
+            ax_objs[-1].tick_params(axis='x', width=2)
+
+            ax_objs[-1].text(
+                -0.02, 0, channel, fontweight='normal',
+                fontsize=8, ha='right'
+                )
+
+        gs.update(hspace=0.3)
+        plt.subplots_adjust(left=0.3, bottom=0.1, right=0.9, top=0.95)
+        plt.tight_layout()
+        plt.savefig(os.path.join(pca_dir, 'ridgeplots.pdf'))
+        plt.close('all')
+
         #######################################################################
+
         # Horn's parallel analysis to determine the number of non-random PCs
         unshuffled = data[abx_channels]
 
@@ -4894,6 +4949,43 @@ class QC(object):
                 data['emb2'] = embedding[:, 1]
                 data['emb3'] = embedding[:, 2]
                 clustering_input = data[['emb1', 'emb2', 'emb3']]
+
+            # show abx intensity for each marker on UMAP embedding
+            print('Coloring embedding by channel.')
+
+            ncols = 5
+            nrows = math.ceil(len(abx_channels)/5)
+
+            fig = plt.figure(figsize=(9.5, 6.0))
+
+            # grid specifications
+            gs = plt.GridSpec(nrows=nrows, ncols=ncols, figure=fig)
+
+            for e, ax in enumerate(product(range(nrows), range(ncols))):
+
+                ch = abx_channels[e]
+                ax = fig.add_subplot(gs[ax[0], ax[1]])
+
+                plot = ax.scatter(
+                    data['emb1'], data['emb2'], c=data[ch],
+                    s=20000/len(data), lw=0.0, alpha=1.0, cmap='magma'
+                    )
+
+                ax.set_title(ch, fontdict={'fontsize': 9})
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes(
+                    'right', size='5%', pad=0.05
+                    )
+                cax.tick_params(labelsize=6)
+                cbar = fig.colorbar(plot, cax=cax)
+                cbar.outline.set_edgecolor('k')
+                cbar.outline.set_linewidth(0.2)
+                cbar.ax.tick_params(width=0.2)
+                ax.axis('off')
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(dim_dir, 'emb_channels.png'), dpi=800)
+            plt.close('all')
 
         #######################################################################
 
@@ -5936,6 +6028,61 @@ class QC(object):
             i for i in abx_channels
             if i not in self.channelExclusionsClustering]
 
+        ######################################################################
+        gs = plt.GridSpec(len(abx_channels), 1)
+        fig = plt.figure(figsize=(2, 7))
+
+        ax_objs = []
+        for i, channel in enumerate(abx_channels):
+
+            # creating new axes object
+            ax_objs.append(fig.add_subplot(gs[i:i+1, 0:]))
+
+            # plotting the distribution
+            n, bins, patches = ax_objs[-1].hist(
+                data[channel], bins=700, density=True, histtype='stepfilled',
+                linewidth=2.0, ec='k', alpha=1.0, color='k')
+
+            # setting uniform x and y lims
+            ax_objs[-1].set_xlim(0, 1)
+            ax_objs[-1].set_ylim(0, math.ceil(n.max())+1)
+
+            # make background transparent
+            rect = ax_objs[-1].patch
+            rect.set_alpha(0)
+
+            # remove borders, axis ticks, and labels
+            ax_objs[-1].set_yticklabels([])
+
+            if i == len(abx_channels)-1:
+                ax_objs[-1].set_xlabel(
+                    'Intensity', fontsize=11, fontweight='normal', labelpad=10
+                    )
+            else:
+                ax_objs[-1].set_xticks([])
+                ax_objs[-1].set_xticklabels([])
+
+            ax_objs[-1].set_yticks([])
+
+            spines = ['top', 'right', 'left']
+            for s in spines:
+                ax_objs[-1].spines[s].set_visible(False)
+
+            ax_objs[-1].tick_params(axis='x', width=2)
+
+            ax_objs[-1].text(
+                -0.02, 0, channel, fontweight='normal',
+                fontsize=8, ha='right'
+                )
+
+        gs.update(hspace=0.3)
+        plt.subplots_adjust(left=0.3, bottom=0.1, right=0.9, top=0.95)
+        plt.tight_layout()
+        plt.savefig(os.path.join(dim_dir, 'ridgeplots.pdf'))
+        plt.close('all')
+
+        #######################################################################
+
         # drop unclustered cells before plotting clustermap
         clustermap_input = data[
             data[f'cluster_{self.dimensionEmbedding}d'] != -1]
@@ -5956,6 +6103,9 @@ class QC(object):
 
             g.fig.suptitle(f'Normalized across {name}', y=0.995, fontsize=10)
             g.fig.set_size_inches(6.0, 6.0)
+            g.ax_heatmap.set_yticklabels(
+                g.ax_heatmap.get_yticklabels(), rotation=0
+                )
 
             plt.savefig(os.path.join(
                     dim_dir, f'clustermap_norm_{name}.pdf'),
