@@ -49,7 +49,6 @@ from tifffile import imread
 from tifffile import TiffFile
 import zarr
 import dask.array as da
-#from lazy_ops import DatasetView
 
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -4313,6 +4312,7 @@ class QC(object):
 
         ######################################################################
 
+        sns.set_style("whitegrid", {'axes.grid': False})
         gs = plt.GridSpec(len(abx_channels), 1)
         fig = plt.figure(figsize=(2, 7))
 
@@ -4962,26 +4962,26 @@ class QC(object):
             gs = plt.GridSpec(nrows=nrows, ncols=ncols, figure=fig)
 
             for e, ax in enumerate(product(range(nrows), range(ncols))):
+                if e < len(abx_channels):
+                    ch = abx_channels[e]
+                    ax = fig.add_subplot(gs[ax[0], ax[1]])
 
-                ch = abx_channels[e]
-                ax = fig.add_subplot(gs[ax[0], ax[1]])
+                    plot = ax.scatter(
+                        data['emb1'], data['emb2'], c=data[ch],
+                        s=20000/len(data), lw=0.0, alpha=1.0, cmap='magma'
+                        )
 
-                plot = ax.scatter(
-                    data['emb1'], data['emb2'], c=data[ch],
-                    s=20000/len(data), lw=0.0, alpha=1.0, cmap='magma'
-                    )
-
-                ax.set_title(ch, fontdict={'fontsize': 9})
-                divider = make_axes_locatable(ax)
-                cax = divider.append_axes(
-                    'right', size='5%', pad=0.05
-                    )
-                cax.tick_params(labelsize=6)
-                cbar = fig.colorbar(plot, cax=cax)
-                cbar.outline.set_edgecolor('k')
-                cbar.outline.set_linewidth(0.2)
-                cbar.ax.tick_params(width=0.2)
-                ax.axis('off')
+                    ax.set_title(ch, fontdict={'fontsize': 9})
+                    divider = make_axes_locatable(ax)
+                    cax = divider.append_axes(
+                        'right', size='5%', pad=0.05
+                        )
+                    cax.tick_params(labelsize=6)
+                    cbar = fig.colorbar(plot, cax=cax)
+                    cbar.outline.set_edgecolor('k')
+                    cbar.outline.set_linewidth(0.2)
+                    cbar.ax.tick_params(width=0.2)
+                    ax.axis('off')
 
             plt.tight_layout()
             plt.savefig(os.path.join(dim_dir, 'emb_channels.png'), dpi=800)
@@ -6029,6 +6029,8 @@ class QC(object):
             if i not in self.channelExclusionsClustering]
 
         ######################################################################
+
+        sns.set_style("whitegrid", {'axes.grid': False})
         gs = plt.GridSpec(len(abx_channels), 1)
         fig = plt.figure(figsize=(2, 7))
 
