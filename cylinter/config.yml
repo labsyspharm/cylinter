@@ -216,7 +216,7 @@ topMarkers: "clusters"
 colormapChannel: "pan-CK"
 # (None type or str) Channel to colormap to the embedding.
 
-colormapAnnotationClustering: "Condition"
+colormapAnnotationClustering: "Sample"
 # (str) Metadata annotation to colormap the embedding: Sample or Condition.
 
 metric: "euclidean"

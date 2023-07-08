@@ -4815,6 +4815,7 @@ class QC(object):
                 data['emb2'] = embedding[:, 1]
                 data['emb3'] = embedding[:, 2]
                 clustering_input = data[['emb1', 'emb2', 'emb3']]
+            print()
 
             # show abx intensity for each marker on UMAP embedding
             print('Coloring embedding by channel.')

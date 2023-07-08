@@ -30,7 +30,7 @@ requirements:
     - joblib
     - magicgui
     - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
-    - napari <0.4.17  # polygon rotation broke in current version
+    - napari
     - numpy <1.24 # avoids runtime errors in napari when empty polygon layer is added to viewer
     - natsort
     - numba
