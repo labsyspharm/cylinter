@@ -68,11 +68,11 @@ def run_pipeline(config, start_module_name):
         showAbChannels=config.showAbChannels,
         samplesForROISelection=config.samplesForROISelection,
 
-        yAxisGating=config.yAxisGating,
-
         numBinsIntensity=config.numBinsIntensity,
 
         numBinsArea=config.numBinsArea,
+
+        numBinsCorrelation=config.numBinsCorrelation,
 
         hexbins=config.hexbins,
         hexbinGridSize=config.hexbinGridSize,
@@ -100,6 +100,8 @@ def run_pipeline(config, start_module_name):
         dimensionEmbedding=config.dimensionEmbedding,
         topMarkersQC=config.topMarkersQC,
         topMarkers=config.topMarkers,
+        colormapAnnotationQC=config.colormapAnnotationQC,
+        colormapAnnotationClustering=config.colormapAnnotationClustering,
         colormapChannel=config.colormapChannel,
 
         perplexityQC=config.perplexityQC,
