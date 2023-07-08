@@ -52,18 +52,17 @@ samplesForROISelection: ["1", "15", "18", "68"]
 # (list of strs) Sample names for ROI selection specified
 # according to the first elements of sampleMetadata configuration.
 
-# IntensityFilter-------------------------------------------------------------
+# intensityFilter-------------------------------------------------------------
 numBinsIntensity: 50
 # (int) Number of bins for DNA intensity histograms.
 
-# IntensityArea-------------------------------------------------------------
+# areaFilter-------------------------------------------------------------
 numBinsArea: 50
 # (int) Number of bins for DNA area histograms.
 
 # cycleCorrelation-------------------------------------------------------------
-yAxisGating: False
-# (bool) Whether to apply a single y-axis counts cutoff (True) or lower
-# and upper bins cutoffs of log10(cycle1/cycleN) histograms of cells per tissue.
+numBinsCorrelation: 50
+# (int) Number of bins for DNA1/DNAn histograms.
 
 # pruneOutliers----------------------------------------------------------------
 hexbins: False
@@ -100,6 +99,9 @@ dimensionEmbeddingQC: 2
 topMarkersQC: "clusters"
 # (str) Normalization axis ("channels" or "clusters") used to define
 # highest expressed markers per cluster.
+
+colormapAnnotationQC: "Sample"
+# (str) Metadata annotation to colormap the embedding: Sample or Condition.
 
 metricQC: "euclidean"
 # (str) Distance metric for computing embedding.
@@ -213,6 +215,9 @@ topMarkers: "clusters"
 
 colormapChannel: "pan-CK"
 # (None type or str) Channel to colormap to the embedding.
+
+colormapAnnotationClustering: "Condition"
+# (str) Metadata annotation to colormap the embedding: Sample or Condition.
 
 metric: "euclidean"
 # (str) Distance metric for computing embedding.

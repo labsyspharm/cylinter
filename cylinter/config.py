@@ -26,9 +26,10 @@ class Config:
         config.samplesForROISelection = list(data['samplesForROISelection'])
 
         config.numBinsIntensity = int(data['numBinsIntensity'])
+
         config.numBinsArea = int(data['numBinsArea'])
 
-        config.yAxisGating = bool(data['yAxisGating'])
+        config.numBinsCorrelation = int(data['numBinsCorrelation'])
 
         config.hexbins = bool(data['hexbins'])
         config.hexbinGridSize = int(data['hexbinGridSize'])
@@ -64,7 +65,10 @@ class Config:
         config.dimensionEmbedding = int(data['dimensionEmbedding'])
         config.topMarkersQC = str(data['topMarkersQC'])
         config.topMarkers = str(data['topMarkers'])
-        config.dimensionEmbedding = int(data['dimensionEmbedding'])
+        config.colormapAnnotationQC = str(
+            data['colormapAnnotationQC'])
+        config.colormapAnnotationClustering = str(
+            data['colormapAnnotationClustering'])
 
         if (data['colormapChannel']) is None:
             config.colormapChannel = (data['colormapChannel'])

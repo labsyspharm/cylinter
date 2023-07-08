@@ -146,8 +146,8 @@ class QC(object):
                  # intensityArea -
                  numBinsArea=None,
 
-                 # crossCycleCorrelation -
-                 yAxisGating=None,
+                 # cycleCorrelation -
+                 numBinsCorrelation=None,
 
                  # pruneOutliers -
                  hexbins=None,
@@ -163,6 +163,7 @@ class QC(object):
                  fracForEmbeddingQC=None,
                  dimensionEmbeddingQC=None,
                  topMarkersQC=None,
+                 colormapAnnotationQC=None,
                  metricQC=None,
                  perplexityQC=None,
                  earlyExaggerationQC=None,
@@ -191,7 +192,9 @@ class QC(object):
                  fracForEmbedding=None,
                  dimensionEmbedding=None,
                  topMarkers=None,
+                 colormapAnnotationClustering=None,
                  colormapChannel=None,
+                 colormapAnnotation=None,
                  perplexity=None,
                  earlyExaggeration=None,
                  learningRateTSNE=None,
@@ -239,7 +242,7 @@ class QC(object):
 
         self.numBinsArea = numBinsArea
 
-        self.yAxisGating = yAxisGating
+        self.numBinsCorrelation = numBinsCorrelation
 
         self.hexbins = hexbins
         self.hexbinGridSize = hexbinGridSize
@@ -253,6 +256,7 @@ class QC(object):
         self.fracForEmbeddingQC = fracForEmbeddingQC
         self.dimensionEmbeddingQC = dimensionEmbeddingQC
         self.topMarkersQC = topMarkersQC
+        self.colormapAnnotationQC = colormapAnnotationQC
         self.metricQC = metricQC
         self.perplexityQC = perplexityQC
         self.earlyExaggerationQC = earlyExaggerationQC
@@ -279,6 +283,7 @@ class QC(object):
         self.dimensionEmbedding = dimensionEmbedding
         self.topMarkers = topMarkers
         self.colormapChannel = colormapChannel
+        self.colormapAnnotationClustering = colormapAnnotationClustering
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
         self.learningRateTSNE = learningRateTSNE
@@ -1550,469 +1555,300 @@ class QC(object):
         ratios_melt['sample'] = ratios_melt['sample'].astype('str')
         ratios_melt['cycle'] = ratios_melt['cycle'].astype('str')
 
-        # plot log(cycle 1/n) ratio histograms for all samples for evaluation
-        # if cycle_correlation(logRatio).png doesn't already exist
-        if not os.path.exists(
-          os.path.join(cycles_dir, 'cycle_correlation(logRatio).png')):
+        napari_warnings()
 
-            sns.set(font_scale=0.5)
-            sns.set_style('whitegrid')
+        # pick up where samples loop left off
+        if os.path.exists(os.path.join(cycles_dir, 'idxs_to_drop.csv')):
 
-            g = sns.FacetGrid(
-                ratios_melt, row='sample',
-                col='cycle', sharey=False
-                )
+            # csv file might contain very huge fields, therefore increase
+            # the field_size_limit, then read stored dict
+            csv_module.field_size_limit(sys.maxsize)
 
-            g = g.map(
-                plt.hist, 'log10(ratio)', color='r', histtype='stepfilled',
-                ec='none', range=None, bins=200, density=True
-                )
+            idxs_to_drop = csv_to_dict(
+                os.path.join(cycles_dir, 'idxs_to_drop.csv'))
 
-            plt.savefig(
-                os.path.join(cycles_dir, 'cycle_correlation(logRatio).pdf')
-                )
-            plt.close('all')
+            # dictionary values from strings to lists
+            idxs_to_drop = {
+                k: literal_eval(v) for k, v in idxs_to_drop.items()}
 
-        if self.yAxisGating is True:
+            samples_to_threshold = (
+                len(data['Sample'].unique())
+                - len(idxs_to_drop.keys()))
 
-            # grab selected y-axis count cutoff if one was entered
-            if os.path.exists(os.path.join(cycles_dir, 'count_cutoff.txt')):
-
-                with open(
-                  os.path.join(cycles_dir, 'count_cutoff.txt'), 'r') as f:
-                    count_cutoff = f.readlines()
-                    count_cutoff = float(count_cutoff[0])
-
-            else:
-                filename = os.path.join(
-                    cycles_dir, 'cycle_correlation(logRatio).pdf')
-                open_file(filename)
-
-                def submit(text):
-
-                    # save selected y-axis count cutoff as pickle
-                    with open(
-                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'w') as f:
-                        f.write(text)
-
-                    count_cutoff = float(text)
-
-                    # render log(cycle 1/n) histograms with y-axis count cutoff
-                    sns.set(font_scale=0.5)
-                    sns.set_style('whitegrid')
-
-                    g = sns.FacetGrid(
-                        ratios_melt, row='sample',
-                        col='cycle', sharey=False
-                        )
-
-                    g = g.map(
-                        plt.hist, 'log10(ratio)', color='r',
-                        histtype='stepfilled', ec='none',
-                        range=None, bins=200, density=True
-                        )
-
-                    for ax in g.axes.ravel():
-                        ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
-
-                    plt.savefig(
-                        os.path.join(
-                            cycles_dir, 'cycle_correlation(logRatio).pdf')
-                            )
-
-                    filename = os.path.join(
-                        cycles_dir, 'cycle_correlation(logRatio).pdf'
-                        )
-                    open_file(filename)
-
-                    plt.show(block=False)
-                    plt.close('all')
-
-                plt.rcParams['figure.figsize'] = (6, 2)
-                axbox = plt.axes([0.4, 0.525, 0.35, 0.15])
-                text_box = TextBox(
-                    axbox, 'countCutoff', initial='',
-                    color='0.95',
-                    hovercolor='1.0',
-                    label_pad=0.05)
-                text_box.label.set_size(12)
-
-                text_box.on_submit(submit)
-
-                plt.show(block=True)
-
-                # grab selected y-axis count cutoff if one was entered
-                if os.path.exists(
-                  os.path.join(cycles_dir, 'count_cutoff.txt')):
-                    with open(
-                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'r') as f:
-                        count_cutoff = f.readlines()
-                        count_cutoff = float(count_cutoff[0])
-                else:
-                    # save count cutoff as pickle as 0.0
-                    count_cutoff = '0.0'
-                    with open(
-                      os.path.join(cycles_dir, 'count_cutoff.txt'), 'w') as f:
-                        f.write(count_cutoff)
-
-            # initialize set of cell indices to drop
-            indices_to_drop = set()
-
-            # loop over samples and cycles except (cycle1/cycle1)
-            for name, group in ratios_melt.groupby(['sample']):
-                for cycle_ratio in group['cycle'].unique():
-                    if not (
-                      cycle_ratio.split('/')[0]
-                      == cycle_ratio.split('/')[1]):
-
-                        # isolate ratio data
-                        cycle_data = group[group['cycle'] == cycle_ratio]
-
-                        # get histogram elements
-                        sns.set_style('whitegrid')
-                        fig, ax = plt.subplots()
-                        counts, bins, patches = plt.hist(
-                            cycle_data['log10(ratio)'],
-                            color='r', histtype='stepfilled',
-                            ec='none', range=None,
-                            bins=200, density=True)
-                        plt.close('all')
-
-                        # plot histogram of log(ratios)
-                        # with a horizontal line at cutoff point
-                        # ax.axhline(y=count_cutoff, c='k', linewidth=0.5)
-                        # plt.title(sample + '_' + col_name)
-                        # plt.show(block=True)
-
-                        # get bin values (i.e. ratios) where cell
-                        # counts are > than count_cutoff
-                        count_indices = np.where(counts >= count_cutoff)
-                        bin_values = [
-                            bins[i] for i in np.append(
-                                count_indices[0], count_indices[0].max() + 1)]
-
-                        if len(bin_values) > 1:
-                            min_bin_val = min(bin_values)
-                            max_bin_val = max(bin_values)
-
-                            # get indices in log(ratio) series outside
-                            # min_bin_val and max_bin_val
-                            idxs = list(
-                                cycle_data['index'][
-                                    (cycle_data['log10(ratio)'] <
-                                     min_bin_val)
-                                    |
-                                    (cycle_data['log10(ratio)'] >
-                                     max_bin_val)])
-
-                            # append indices of uncorrelated
-                            # log(ratios) to idx_list
-                            indices_to_drop.update(set(idxs))
             print()
+            print(f'Samples to threshold: {samples_to_threshold}')
 
-            # filter dataframe by selecting indices NOT in the
-            # indices_to_drop list
-            print('Y-axis gating: Dropping unstable cells from samples...')
-            df = data.loc[~data.index.isin(indices_to_drop)]
-            plt.close('all')
+        else:
+            # initialize a dictionary to append indices to drop
+            samples_to_threshold = len(data['Sample'].unique())
 
-        elif self.yAxisGating is False:
+            print()
+            print(f'Samples to threshold: {samples_to_threshold }')
 
-            napari_warnings()
+            idxs_to_drop = {}
 
-            # pick up where samples loop left off
-            if os.path.exists(os.path.join(cycles_dir, 'idxs_to_drop.csv')):
+        # drop samples previously run
+        ratios_melt = ratios_melt[~ratios_melt['sample'].isin(
+                [i for i in idxs_to_drop.keys()])]
 
-                # csv file might contain very huge fields, therefore increase
-                # the field_size_limit, then read stored dict
-                csv_module.field_size_limit(sys.maxsize)
+        if samples_to_threshold > 0:
 
-                idxs_to_drop = csv_to_dict(
-                    os.path.join(cycles_dir, 'idxs_to_drop.csv'))
-
-                # dictionary values from strings to lists
-                idxs_to_drop = {
-                    k: literal_eval(v) for k, v in idxs_to_drop.items()}
-
-                samples_to_threshold = (
-                    len(data['Sample'].unique())
-                    - len(idxs_to_drop.keys()))
+            for name, group in natsorted(ratios_melt.groupby('sample')):
 
                 print()
-                print(f'Samples to threshold: {samples_to_threshold}')
+                print(f'Sample: {name}')
 
-            else:
-                # initialize a dictionary to append indices to drop
-                samples_to_threshold = len(data['Sample'].unique())
+                # loop over last cycle only
+                cycle_ratio = group['cycle'].unique()[-1]
 
-                print()
-                print(f'Samples to threshold: {samples_to_threshold }')
+                # isolate ratio data
+                cycle_data = group[group['cycle'] == cycle_ratio]
 
-                idxs_to_drop = {}
+                cycle_num = cycle_ratio.split('/')[1]
 
-            # drop samples previously run
-            ratios_melt = ratios_melt[~ratios_melt['sample'].isin(
-                    [i for i in idxs_to_drop.keys()])]
+                # save dataframe of current cycle
+                cycle_data.to_parquet(
+                    os.path.join(cycles_dir, 'cycle_data.parquet'))
 
-            if samples_to_threshold > 0:
+                # get channel number from markers.csv
+                channel_number = marker_channel_number(
+                    markers, cycle_num)
 
-                for name, group in natsorted(ratios_melt.groupby('sample')):
+                # read segmentation outlines
+                file_path = f'{self.inDir}/seg/{name}.*tif'
 
-                    print()
-                    print(f'Sample: {name}')
+                # create image pyramid
+                seg, min, max = single_channel_pyramid(
+                    glob.glob(file_path)[0], channel=0
+                    )
 
-                    # loop over last cycle only
-                    cycle_ratio = group['cycle'].unique()[-1]
+                # add segmentation outlines image to viewer
+                viewer = napari.view_image(
+                    seg, rgb=False, title='CyLinter', blending='additive',
+                    opacity=0.5, colormap='gray', visible=False,
+                    name='segmentation', contrast_limits=(min, max)
+                    )
 
-                    # isolate ratio data
-                    cycle_data = group[group['cycle'] == cycle_ratio]
+                # read last DNA channel
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/{name}.*tif'):
 
-                    cycle_num = cycle_ratio.split('/')[1]
+                    dna_last, min, max = single_channel_pyramid(
+                        file_path, channel=channel_number.item() - 1
+                        )
 
-                    # save dataframe of current cycle
-                    cycle_data.to_parquet(
-                        os.path.join(cycles_dir, 'cycle_data.parquet'))
+                # add last DNA image to viewer
+                viewer.add_image(
+                    dna_last, rgb=False, blending='additive',
+                    colormap='magenta', name=f'{cycle_num}',
+                    contrast_limits=(min, max)
+                    )
 
-                    # get channel number from markers.csv
-                    channel_number = marker_channel_number(
-                        markers, cycle_num)
-
-                    # read segmentation outlines
-                    file_path = f'{self.inDir}/seg/{name}.*tif'
+                # read first DNA channel
+                for file_path in glob.glob(
+                  f'{self.inDir}/tif/{name}.*tif'):
 
                     # create image pyramid
-                    seg, min, max = single_channel_pyramid(
-                        glob.glob(file_path)[0], channel=0
+                    dna_first, min, max = single_channel_pyramid(
+                        file_path, channel=0
                         )
 
-                    # add segmentation outlines image to viewer
-                    viewer = napari.view_image(
-                        seg, rgb=False, title='CyLinter', blending='additive',
-                        opacity=0.5, colormap='gray', visible=False,
-                        name='segmentation', contrast_limits=(min, max)
-                        )
+                # add first DNA image to viewer
+                viewer.add_image(
+                    dna_first, rgb=False, blending='additive',
+                    colormap='green', name=f'{dna1}',
+                    contrast_limits=(min, max)
+                    )
 
-                    # read last DNA channel
-                    for file_path in glob.glob(
-                      f'{self.inDir}/tif/{name}.*tif'):
+                # generate Qt widget to dock in Napari viewer
+                widget = QtWidgets.QWidget()
 
-                        dna_last, min, max = single_channel_pyramid(
-                            file_path, channel=channel_number.item() - 1
-                            )
+                # generate a blank figure canvas
+                canvas = FigureCanvas(Figure())
 
-                    # add last DNA image to viewer
-                    viewer.add_image(
-                        dna_last, rgb=False, blending='additive',
-                        colormap='magenta', name=f'{cycle_num}',
-                        contrast_limits=(min, max)
-                        )
+                # construct vertical box layout object
+                # to line up widgets vertically
+                layout = QtWidgets.QVBoxLayout(widget)
 
-                    # read first DNA channel
-                    for file_path in glob.glob(
-                      f'{self.inDir}/tif/{name}.*tif'):
+                # add navigation tool bar and figure canvas to widget
+                layout.addWidget(NavigationToolbar(canvas, widget))
+                layout.addWidget(canvas)
 
-                        # create image pyramid
-                        dna_first, min, max = single_channel_pyramid(
-                            file_path, channel=0
-                            )
+                histtype = 'stepfilled'
 
-                    # add first DNA image to viewer
-                    viewer.add_image(
-                        dna_first, rgb=False, blending='additive',
-                        colormap='green', name=f'{dna1}',
-                        contrast_limits=(min, max)
-                        )
+                # set plot style
+                sns.set_style('whitegrid')
 
-                    # generate Qt widget to dock in Napari viewer
-                    widget = QtWidgets.QWidget()
+                # get figure object from canvas
+                fig = canvas.figure
 
-                    # generate a blank figure canvas
-                    canvas = FigureCanvas(Figure())
+                # adjust plot on canvas to taste
+                fig.subplots_adjust(left=0.25, bottom=0.25)
 
-                    # construct vertical box layout object
-                    # to line up widgets vertically
-                    layout = QtWidgets.QVBoxLayout(widget)
+                # set plot title
+                log10 = '$log_{10}$'
+                fig.suptitle(
+                    f'Sample={name}  {log10}({dna1}/{cycle_num})', size=10)
 
-                    # add navigation tool bar and figure canvas to widget
-                    layout.addWidget(NavigationToolbar(canvas, widget))
-                    layout.addWidget(canvas)
+                # get axis object from canvas
+                ax = canvas.figure.subplots()
 
-                    num_bins = 125
-                    histtype = 'stepfilled'
+                # plot log(cycle 1/n) histogram for current sample
+                counts, bins, patches = ax.hist(
+                    cycle_data['log10(ratio)'], bins=self.numBinsCorrelation,
+                    density=False, color='grey', ec='none',
+                    alpha=0.75, histtype=histtype,
+                    range=None, label='before')
 
-                    # set plot style
-                    sns.set_style('whitegrid')
+                ax.set_ylabel('count', size=13)
+                ax.tick_params(axis='x', labelsize=10)
+                ax.tick_params(axis='y', labelsize=10)
 
-                    # get figure object from canvas
-                    fig = canvas.figure
+                # add sliders to plot
+                axcolor = 'lightgoldenrodyellow'
+                axLowerCutoff = fig.add_axes(
+                    [0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
+                axUpperCutoff = fig.add_axes(
+                    [0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
 
-                    # adjust plot on canvas to taste
-                    fig.subplots_adjust(left=0.25, bottom=0.25)
+                # specify data range
+                rnge = [bins.min(), bins.max()]
 
-                    # set plot title
-                    log10 = '$log_{10}$'
-                    fig.suptitle(
-                        f'Sample={name}  {log10}({dna1}/{cycle_num})', size=10)
+                # add slider functionality
+                sLower = Slider(
+                    axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
+                    valinit=0.00, valstep=(rnge[1]/100000))
+                sLower.label.set_fontsize(11)
+                sLower.label.set_color('b')
+                sUpper = Slider(
+                    axUpperCutoff, 'upperCutoff', rnge[0], rnge[1],
+                    valinit=0.00, valstep=(rnge[1]/100000))
+                sUpper.label.set_fontsize(11)
+                sUpper.label.set_color('r')
 
-                    # get axis object from canvas
-                    ax = canvas.figure.subplots()
+                # specify function for updating sliders
+                def update(val):
 
-                    # plot log(cycle 1/n) histogram for current sample
-                    counts, bins, patches = ax.hist(
-                        cycle_data['log10(ratio)'], bins=num_bins,
-                        density=False, color='grey', ec='none',
-                        alpha=0.75, histtype=histtype,
-                        range=None, label='before')
+                    # remove current lines
+                    [i.remove() for i in ax.get_lines()]
 
-                    ax.set_ylabel('count', size=13)
-                    ax.tick_params(axis='x', labelsize=10)
-                    ax.tick_params(axis='y', labelsize=10)
+                    # new cutoffs
+                    lowerCutoff = sLower.val
+                    upperCutoff = sUpper.val
 
-                    # add sliders to plot
-                    axcolor = 'lightgoldenrodyellow'
-                    axLowerCutoff = fig.add_axes(
-                        [0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
-                    axUpperCutoff = fig.add_axes(
-                        [0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+                    # update plot with cutoffs
+                    blueLine = ax.axvline(
+                        x=lowerCutoff, c='b', linewidth=2.5)
+                    redLine = ax.axvline(
+                        x=upperCutoff, c='r', linewidth=2.5)
 
-                    # specify data range
-                    rnge = [bins.min(), bins.max()]
+                    return lowerCutoff, upperCutoff
 
-                    # add slider functionality
-                    sLower = Slider(
-                        axLowerCutoff, 'lowerCutoff', rnge[0], rnge[1],
-                        valinit=0.00, valstep=(rnge[1]/100000))
-                    sLower.label.set_fontsize(11)
-                    sLower.label.set_color('b')
-                    sUpper = Slider(
-                        axUpperCutoff, 'upperCutoff', rnge[0], rnge[1],
-                        valinit=0.00, valstep=(rnge[1]/100000))
-                    sUpper.label.set_fontsize(11)
-                    sUpper.label.set_color('r')
+                # update sliders when moved
+                sLower.on_changed(update)
+                sUpper.on_changed(update)
 
-                    # specify function for updating sliders
-                    def update(val):
+                # add button to show selected centroids in Napari viewer
+                button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
+                button = Button(
+                    button_ax, 'Plot Points',
+                    color=axcolor, hovercolor='0.975')
+                button.label.set_fontsize(11)
 
-                        # remove current lines
-                        [i.remove() for i in ax.get_lines()]
+                def apply_cutoffs(event):
 
-                        # new cutoffs
-                        lowerCutoff = sLower.val
-                        upperCutoff = sUpper.val
-
-                        # update plot with cutoffs
-                        blueLine = ax.axvline(
-                            x=lowerCutoff, c='b', linewidth=2.5)
-                        redLine = ax.axvline(
-                            x=upperCutoff, c='r', linewidth=2.5)
-
-                        return lowerCutoff, upperCutoff
-
-                    # update sliders when moved
-                    sLower.on_changed(update)
-                    sUpper.on_changed(update)
-
-                    # add button to show selected centroids in Napari viewer
-                    button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
-                    button = Button(
-                        button_ax, 'Plot Points',
-                        color=axcolor, hovercolor='0.975')
-                    button.label.set_fontsize(11)
-
-                    def apply_cutoffs(event):
-
-                        # get current cutoffs
-                        lowerCutoff, upperCutoff = update(val=None)
-
-                        # read group
-                        cycle_data = pd.read_parquet(
-                            os.path.join(cycles_dir, 'cycle_data.parquet'))
-
-                        # get indices in log(ratio) series outside
-                        # lower and upper cutoffs
-                        idxs = list(
-                            cycle_data['index'][
-                                (cycle_data['log10(ratio)']
-                                 < lowerCutoff) |
-                                (cycle_data['log10(ratio)']
-                                 > upperCutoff)])
-
-                        # filter group data by selecting
-                        # indices NOT in idxs
-                        sample_data = data[data['Sample'] == name]
-                        drop_df = sample_data.index.isin(idxs)
-                        centroids = sample_data[
-                            ['Y_centroid', 'X_centroid']][~drop_df]
-
-                        # remove existing centroids and
-                        # plot new centroid selection in Napari window
-                        if not centroids.empty:
-                            if len(viewer.layers) == 4:
-                                viewer.layers.pop(3)
-                            viewer.add_points(
-                                centroids,
-                                name='Selected Cells',
-                                properties=None,
-                                face_color='yellow',
-                                edge_color='k',
-                                edge_width=0.0, size=7.0)
-
-                    # add button functionality
-                    button.on_clicked(apply_cutoffs)
-
-                    # dock plot widget in Napari window
-                    viewer.window.add_dock_widget(
-                        widget, name=f'first/last DNA histogram',
-                        area='right')
-
-                    viewer.scale_bar.visible = True
-                    viewer.scale_bar.unit = 'um'
-
-                    napari.run()
-
-                    # get final lower and upper cutoffs
+                    # get current cutoffs
                     lowerCutoff, upperCutoff = update(val=None)
 
-                    # read dataframe of current cycle and apply final cutoffs
+                    # read group
                     cycle_data = pd.read_parquet(
                         os.path.join(cycles_dir, 'cycle_data.parquet'))
 
-                    # take all data if sliders not moved
-                    if lowerCutoff == upperCutoff:
-                        lowerCutoff = cycle_data['log10(ratio)'].min()
-                        upperCutoff = cycle_data['log10(ratio)'].max()
-                        print(
-                            'No cutoffs applied, selecting all data points.')
-                    else:
-                        print(
-                            f'Applied Lower Cutoff: {round(lowerCutoff, 2)}')
-                        print(
-                            f'Applied Upper Cutoff: {round(upperCutoff, 2)}')
-
-                    # otherwise, get indices outside lower and upper cutoffs
-                    # and append to idxs_to_drop dictionary
+                    # get indices in log(ratio) series outside
+                    # lower and upper cutoffs
                     idxs = list(
                         cycle_data['index'][
-                            (cycle_data['log10(ratio)'] < lowerCutoff)
-                            |
-                            (cycle_data['log10(ratio)'] > upperCutoff)])
-                    idxs_to_drop[name] = idxs
+                            (cycle_data['log10(ratio)']
+                             < lowerCutoff) |
+                            (cycle_data['log10(ratio)']
+                             > upperCutoff)])
 
-                    # save updated idxs_to_drop dictionary as a csv
-                    dict_to_csv(
-                        dict=idxs_to_drop,
-                        path=os.path.join(cycles_dir, 'idxs_to_drop.csv'))
-            print()
+                    # filter group data by selecting
+                    # indices NOT in idxs
+                    sample_data = data[data['Sample'] == name]
+                    drop_df = sample_data.index.isin(idxs)
+                    centroids = sample_data[
+                        ['Y_centroid', 'X_centroid']][~drop_df]
 
-            # filter data with indices to frop from all samples
-            print('X-axis gating: Dropping unstable cells from samples.')
-            indices_to_drop = set()
-            for k, v in idxs_to_drop.items():
-                for idx in v:
-                    indices_to_drop.update(set([idx]))
+                    # remove existing centroids and
+                    # plot new centroid selection in Napari window
+                    if not centroids.empty:
+                        if len(viewer.layers) == 4:
+                            viewer.layers.pop(3)
+                        viewer.add_points(
+                            centroids,
+                            name='Selected Cells',
+                            properties=None,
+                            face_color='yellow',
+                            edge_color='k',
+                            edge_width=0.0, size=7.0)
 
-            df = data.loc[~data.index.isin(indices_to_drop)]
-            plt.close('all')
+                # add button functionality
+                button.on_clicked(apply_cutoffs)
+
+                # dock plot widget in Napari window
+                viewer.window.add_dock_widget(
+                    widget, name=f'first/last DNA histogram',
+                    area='right')
+
+                viewer.scale_bar.visible = True
+                viewer.scale_bar.unit = 'um'
+
+                napari.run()
+
+                # get final lower and upper cutoffs
+                lowerCutoff, upperCutoff = update(val=None)
+
+                # read dataframe of current cycle and apply final cutoffs
+                cycle_data = pd.read_parquet(
+                    os.path.join(cycles_dir, 'cycle_data.parquet'))
+
+                # take all data if sliders not moved
+                if lowerCutoff == upperCutoff:
+                    lowerCutoff = cycle_data['log10(ratio)'].min()
+                    upperCutoff = cycle_data['log10(ratio)'].max()
+                    print(
+                        'No cutoffs applied, selecting all data points.')
+                else:
+                    print(
+                        f'Applied Lower Cutoff: {round(lowerCutoff, 2)}')
+                    print(
+                        f'Applied Upper Cutoff: {round(upperCutoff, 2)}')
+
+                # otherwise, get indices outside lower and upper cutoffs
+                # and append to idxs_to_drop dictionary
+                idxs = list(
+                    cycle_data['index'][
+                        (cycle_data['log10(ratio)'] < lowerCutoff)
+                        |
+                        (cycle_data['log10(ratio)'] > upperCutoff)])
+                idxs_to_drop[name] = idxs
+
+                # save updated idxs_to_drop dictionary as a csv
+                dict_to_csv(
+                    dict=idxs_to_drop,
+                    path=os.path.join(cycles_dir, 'idxs_to_drop.csv'))
+        print()
+
+        # filter data with indices to frop from all samples
+        print('Dropping unstable cells from samples.')
+        indices_to_drop = set()
+        for k, v in idxs_to_drop.items():
+            for idx in v:
+                indices_to_drop.update(set([idx]))
+
+        df = data.loc[~data.index.isin(indices_to_drop)]
+        plt.close('all')
 
         # grab dna and sample columns of filtered dataframe
         facet_input = df.loc[
@@ -3264,7 +3100,7 @@ class QC(object):
                         # PLOT embedding
                         for color_by in [
                           f'cluster_{self.dimensionEmbeddingQC}d',
-                          'QC_status', 'Reclass', 'Sample']:
+                          'QC_status', 'Reclass', 'annotation']:
 
                             highlight = 'none'
 
@@ -3473,24 +3309,28 @@ class QC(object):
 
                                 ax_reclass_lbs.axis('off')
 
-                            elif color_by == 'Sample':
+                            elif color_by == 'annotation':
 
                                 # build cmap
                                 cmap = categorical_cmap(
                                     numUniqueSamples=len(
-                                        chunk['Sample'].unique()),
+                                        chunk[
+                                            self.colormapAnnotationQC].unique()
+                                            ),
                                     numCatagories=10,
                                     cmap='tab10',
                                     continuous=False)
 
                                 sample_dict = dict(
                                     zip(natsorted(
-                                            chunk['Sample'].unique()),
-                                        list(range(len(chunk['Sample']
+                                            chunk[
+                                                self.colormapAnnotationQC].unique()),
+                                        list(range(len(
+                                            chunk[self.colormapAnnotationQC]
                                              .unique())))))
 
                                 c = [sample_dict[i] for
-                                     i in chunk['Sample']]
+                                     i in chunk[self.colormapAnnotationQC]]
 
                                 ax_sample.cla()
 
@@ -3499,7 +3339,9 @@ class QC(object):
                                     cmap=cmap, alpha=1.0, s=point_size,
                                     ec='k', linewidth=0.0)
 
-                                ax_sample.set_title('Sample', fontsize=7)
+                                ax_sample.set_title(
+                                    self.colormapAnnotationQC, fontsize=7
+                                    )
                                 ax_sample.axis('equal')
                                 ax_sample.axes.xaxis.set_visible(False)
                                 ax_sample.axes.yaxis.set_visible(False)
@@ -3507,7 +3349,8 @@ class QC(object):
 
                                 legend_elements = []
                                 for e, i in enumerate(
-                                  natsorted(chunk['Sample'].unique())):
+                                  natsorted(
+                                   chunk[self.colormapAnnotationQC].unique())):
 
                                     if i == highlight:
                                         markeredgecolor = 'k'
@@ -3515,8 +3358,10 @@ class QC(object):
                                         markeredgecolor = 'none'
 
                                     sample_to_map = (
-                                        chunk['Sample'][
-                                            chunk['Sample'] == i]
+                                        chunk[self.colormapAnnotationQC][
+                                            chunk[
+                                                self.colormapAnnotationQC] == i
+                                                ]
                                         .unique()[0])
 
                                     legend_elements.append(
@@ -4314,56 +4159,77 @@ class QC(object):
 
         sns.set_style("whitegrid", {'axes.grid': False})
         gs = plt.GridSpec(len(abx_channels), 1)
-        fig = plt.figure(figsize=(2, 7))
 
-        ax_objs = []
-        for i, channel in enumerate(abx_channels):
+        for plot in ['ridgeplots', 'ridgeplots_persample']:
+            fig = plt.figure(figsize=(2, 7))
+            ax_objs = []
+            for i, channel in enumerate(abx_channels):
 
-            # creating new axes object
-            ax_objs.append(fig.add_subplot(gs[i:i+1, 0:]))
+                # creating new axes object
+                ax_objs.append(fig.add_subplot(gs[i:i+1, 0:]))
 
-            # plotting the distribution
-            n, bins, patches = ax_objs[-1].hist(
-                data[channel], bins=700, density=True, histtype='stepfilled',
-                linewidth=2.0, ec='k', alpha=1.0, color='k')
+                if plot == 'ridgeplots':
+                    # plotting the distribution
+                    n, bins, patches = ax_objs[-1].hist(
+                        data[channel], bins=100, density=True,
+                        histtype='stepfilled', linewidth=2.0,
+                        ec='k', alpha=1.0, color='k'
+                        )
 
-            # setting uniform x and y lims
-            ax_objs[-1].set_xlim(0, 1)
-            ax_objs[-1].set_ylim(0, math.ceil(n.max())+1)
+                    # setting uniform x and y lims
+                    ax_objs[-1].set_xlim(0, 1)
+                    ax_objs[-1].set_ylim(0, math.ceil(n.max())+1)
 
-            # make background transparent
-            rect = ax_objs[-1].patch
-            rect.set_alpha(0)
+                elif plot == 'ridgeplots_persample':
+                    y_vals = []
+                    for sample in sorted(data['Sample'].unique()):
 
-            # remove borders, axis ticks, and labels
-            ax_objs[-1].set_yticklabels([])
+                        # plotting the distribution
+                        n, bins, patches = ax_objs[-1].hist(
+                            data[channel][data['Sample'] == sample], bins=100,
+                            density=True, histtype='stepfilled', linewidth=0.0,
+                            ec='k', alpha=1.0
+                            )
+                        y_vals.extend(n.tolist())
 
-            if i == len(abx_channels)-1:
-                ax_objs[-1].set_xlabel(
-                    'Intensity', fontsize=11, fontweight='normal', labelpad=10
+                    # setting uniform x and y lims
+                    ax_objs[-1].set_xlim(0, 1)
+                    ax_objs[-1].set_ylim(0, math.ceil(max(y_vals))+1)
+
+                # make background transparent
+                rect = ax_objs[-1].patch
+                rect.set_alpha(0)
+
+                # remove borders, axis ticks, and labels
+                ax_objs[-1].set_yticklabels([])
+
+                if i == len(abx_channels)-1:
+                    ax_objs[-1].set_xlabel(
+                        'Intensity', fontsize=10, fontweight='normal',
+                        labelpad=5
+                        )
+                else:
+                    ax_objs[-1].set_xticks([])
+                    ax_objs[-1].set_xticklabels([])
+
+                ax_objs[-1].set_yticks([])
+
+                spines = ['top', 'right', 'left']
+                for s in spines:
+                    ax_objs[-1].spines[s].set_visible(False)
+
+                ax_objs[-1].tick_params(axis='x', width=2)
+
+                ax_objs[-1].text(
+                    -0.02, 0, channel, fontweight='normal',
+                    fontsize=8, ha='right'
                     )
-            else:
-                ax_objs[-1].set_xticks([])
-                ax_objs[-1].set_xticklabels([])
 
-            ax_objs[-1].set_yticks([])
-
-            spines = ['top', 'right', 'left']
-            for s in spines:
-                ax_objs[-1].spines[s].set_visible(False)
-
-            ax_objs[-1].tick_params(axis='x', width=2)
-
-            ax_objs[-1].text(
-                -0.02, 0, channel, fontweight='normal',
-                fontsize=8, ha='right'
-                )
-
-        gs.update(hspace=0.3)
-        plt.subplots_adjust(left=0.3, bottom=0.1, right=0.9, top=0.95)
-        plt.tight_layout()
-        plt.savefig(os.path.join(pca_dir, 'ridgeplots.pdf'))
-        plt.close('all')
+            gs.update(hspace=0.3)
+            plt.subplots_adjust(left=0.3, bottom=0.1, right=0.9, top=0.95)
+            plt.tight_layout()
+            fig.savefig(os.path.join(pca_dir, f'{plot}.png'), dpi=800)
+            plt.close('all')
 
         #######################################################################
 
@@ -4953,16 +4819,18 @@ class QC(object):
             # show abx intensity for each marker on UMAP embedding
             print('Coloring embedding by channel.')
 
-            ncols = 5
-            nrows = math.ceil(len(abx_channels)/5)
+            ncols = 10
+            nrows = math.ceil(len(abx_channels)/ncols)
 
-            fig = plt.figure(figsize=(9.5, 6.0))
+            fig = plt.figure(figsize=(ncols, nrows))
 
             # grid specifications
             gs = plt.GridSpec(nrows=nrows, ncols=ncols, figure=fig)
 
             for e, ax in enumerate(product(range(nrows), range(ncols))):
+
                 if e < len(abx_channels):
+
                     ch = abx_channels[e]
                     ax = fig.add_subplot(gs[ax[0], ax[1]])
 
@@ -4971,19 +4839,26 @@ class QC(object):
                         s=20000/len(data), lw=0.0, alpha=1.0, cmap='magma'
                         )
 
-                    ax.set_title(ch, fontdict={'fontsize': 9})
-                    divider = make_axes_locatable(ax)
-                    cax = divider.append_axes(
-                        'right', size='5%', pad=0.05
-                        )
-                    cax.tick_params(labelsize=6)
-                    cbar = fig.colorbar(plot, cax=cax)
-                    cbar.outline.set_edgecolor('k')
-                    cbar.outline.set_linewidth(0.2)
-                    cbar.ax.tick_params(width=0.2)
+                    ax.set_title(ch, fontdict={'fontsize': 3}, pad=-0.1)
+                    ax.set_aspect('equal')
                     ax.axis('off')
 
-            plt.tight_layout()
+                    if e == len(abx_channels) - 1:  # last iteration in loop
+                        divider = make_axes_locatable(ax)
+                        cax = divider.append_axes(
+                            'right', size='5%', pad=0.05
+                            )
+                        cax.tick_params(labelsize=4)
+                        cbar = fig.colorbar(plot, cax=cax)
+                        cbar.outline.set_edgecolor('k')
+                        cbar.outline.set_linewidth(0.2)
+                        cbar.ax.tick_params(width=0.2)
+
+            plt.subplots_adjust(
+                left=0.01, right=0.99, bottom=0.01,
+                top=0.99, hspace=0, wspace=0.1
+                )
+
             plt.savefig(os.path.join(dim_dir, 'emb_channels.png'), dpi=800)
             plt.close('all')
 
@@ -5239,7 +5114,7 @@ class QC(object):
                     # PLOT embedding
                     for color_by in [
                       f'cluster_{self.dimensionEmbedding}d',
-                      'channel', 'Sample'
+                      'channel', 'annotation'
                       ]:
 
                         highlight = 'none'
@@ -5335,7 +5210,7 @@ class QC(object):
                                 sys.exit()
 
                             ax_channel.scatter(
-                                data['emb1'], data['emb2'], cmap='viridis',
+                                data['emb1'], data['emb2'], cmap='magma',
                                 c=c, alpha=1.0, s=point_size, ec='k',
                                 linewidth=0.0
                                 )
@@ -5348,21 +5223,24 @@ class QC(object):
 
                             ax_channel_lbs.axis('off')
 
-                        elif color_by == 'Sample':
+                        elif color_by == 'annotation':
 
                             # build cmap
                             cmap = categorical_cmap(
-                                numUniqueSamples=len(data['Sample'].unique()),
+                                numUniqueSamples=len(
+                                    data[self.colormapAnnotationClustering].unique()),
                                 numCatagories=10, cmap='tab10',
                                 continuous=False)
 
                             sample_dict = dict(
-                                zip(natsorted(data['Sample'].unique()),
-                                    list(range(len(data['Sample']
+                                zip(natsorted(
+                                    data[self.colormapAnnotationClustering].unique()),
+                                    list(range(len(
+                                        data[self.colormapAnnotationClustering]
                                          .unique())))))
 
                             c = [sample_dict[i] for
-                                 i in data['Sample']]
+                                 i in data[self.colormapAnnotationClustering]]
 
                             ax_sample.cla()
 
@@ -5370,7 +5248,9 @@ class QC(object):
                                 data['emb1'], data['emb2'], c=c, cmap=cmap,
                                 alpha=1.0, s=point_size, ec='k', linewidth=0.0)
 
-                            ax_sample.set_title('Sample', fontsize=7)
+                            ax_sample.set_title(
+                                self.colormapAnnotationClustering, fontsize=7
+                                )
                             ax_sample.set_aspect('equal')
                             ax_sample.axes.xaxis.set_visible(False)
                             ax_sample.axes.yaxis.set_visible(False)
@@ -5378,7 +5258,9 @@ class QC(object):
 
                             legend_elements = []
                             for e, i in enumerate(
-                              natsorted(data['Sample'].unique())):
+                              natsorted(
+                               data[
+                                self.colormapAnnotationClustering].unique())):
 
                                 if i == highlight:
                                     markeredgecolor = 'k'
@@ -5386,7 +5268,8 @@ class QC(object):
                                     markeredgecolor = 'none'
 
                                 sample_to_map = (
-                                    data['Sample'][data['Sample'] == i]
+                                    data[self.colormapAnnotationClustering][
+                                        data[self.colormapAnnotationClustering] == i]
                                     .unique()[0])
 
                                 legend_elements.append(
@@ -5445,7 +5328,7 @@ class QC(object):
 
                     for color_by in [
                       f'cluster_{self.dimensionEmbedding}d',
-                      'channel', 'Sample'
+                      'channel', 'annotation'
                       ]:
 
                         highlight = 'none'
@@ -5550,7 +5433,7 @@ class QC(object):
 
                             ax_channel.scatter(
                                 data['emb1'], data['emb2'], data['emb3'],
-                                cmap='viridis', c=c, alpha=1.0, s=point_size,
+                                cmap='magma', c=c, alpha=1.0, s=point_size,
                                 ec='k', linewidth=0.0)
 
                             ax_channel.set_title(title, fontsize=7)
@@ -5568,21 +5451,26 @@ class QC(object):
 
                             ax_channel_lbs.axis('off')
 
-                        elif color_by == 'Sample':
+                        elif color_by == 'annotation':
 
                             # build cmap
                             cmap = categorical_cmap(
-                                numUniqueSamples=len(data['Sample'].unique()),
+                                numUniqueSamples=len(
+                                    data[
+                                        self.colormapAnnotationClustering].unique()),
                                 numCatagories=10, cmap='tab10',
                                 continuous=False)
 
                             sample_dict = dict(
-                                zip(natsorted(data['Sample'].unique()),
-                                    list(range(len(data['Sample']
+                                zip(natsorted(
+                                    data[
+                                        self.colormapAnnotationClustering].unique()),
+                                    list(range(
+                                        len(data[self.colormapAnnotationClustering]
                                          .unique())))))
 
                             c = [sample_dict[i] for
-                                 i in data['Sample']]
+                                 i in data[self.colormapAnnotationClustering]]
 
                             ax_sample.scatter(
                                 data['emb1'], data['emb2'], data['emb3'],
@@ -5590,7 +5478,8 @@ class QC(object):
                                 ec='k', linewidth=0.0)
 
                             ax_sample.set_title(
-                                'Sample', fontsize=7)
+                                self.colormapAnnotationClustering, fontsize=7
+                                )
                             ax_sample.set_xticklabels([])
                             ax_sample.set_yticklabels([])
                             ax_sample.set_zticklabels([])
@@ -5604,7 +5493,9 @@ class QC(object):
 
                             legend_elements = []
                             for e, i in enumerate(
-                              natsorted(data['Sample'].unique())):
+                              natsorted(
+                               data[
+                                 self.colormapAnnotationClustering].unique())):
 
                                 if i == highlight:
                                     markeredgecolor = 'k'
@@ -5612,7 +5503,8 @@ class QC(object):
                                     markeredgecolor = 'none'
 
                                 sample_to_map = (
-                                    data['Sample'][data['Sample'] == i]
+                                    data[self.colormapAnnotationClustering][
+                                        data[self.colormapAnnotationClustering] == i]
                                     .unique()[0])
 
                                 legend_elements.append(
