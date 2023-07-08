@@ -4,7 +4,6 @@
 # CyLinter directories
 input/
 output/
-docs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
