@@ -1,0 +1,62 @@
+.main-branding {
+    height: 185px;
+}
+
+.site-logo::before {
+    content:"";
+}
+
+.site-logo {
+    height: 100%;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    padding-right: 300px;
+}
+
+.hero {
+  background-size: contain;
+}
+
+.hero-heading {
+    color: #4d4d4d;
+}
+
+.hero-body {
+    color: #4d4d4d;
+    font-size: 1.3rem;
+}
+
+.hero {
+    padding-top: 0px;
+    padding-bottom: 0px;
+    padding-right: 25px;
+    padding-left: 25px;
+}
+
+.hero-inner {
+    padding: 10px;
+    max-width: 2500px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    margin-bottom: 0px;
+}
+
+.site-header .site-logo {
+    height: 200% !important;
+}
+
+.hero-heading {
+    font-size: 2.0rem;
+}
+
+.main-content-wrap {
+    padding-top: 0px;
+    padding-bottom: 0px;
+    padding-right: 25px;
+    padding-left: 25px;
+}
+
+.btn-large {
+    font-size: 1.0rem;
+    text-transform: lowercase;
+}
