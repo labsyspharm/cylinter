@@ -1,0 +1,79 @@
+title: CyLinter
+description: Cylinter pipeline
+logo: "/assets/images/cylinter-logo.svg"
+hero_background:
+
+remote_theme: labsyspharm/just-the-docs-lsp
+color_scheme: cylinter
+search_enabled: true
+heading_anchors: true
+
+# Banner links to include
+banner_links:
+  lsp: true
+  hits: true
+
+# Aux links for the upper right navigation
+aux_links:
+  "CyLinter on GitHub":
+    - "//github.com/labsyspharm/cylinter"
+aux_links_new_tab: false
+
+
+# Footer content
+# appears at the bottom of every page's main content
+footer_content:
+
+# Back to top link
+back_to_top: false
+back_to_top_text: "Back to Top"
+
+# Provide license information for the project
+license:
+  - description: "CyLinter source code is licensed under an"
+    name: "MIT License"
+    url: "https://github.com/labsyspharm/cylinter/blob/master/LICENSE"
+  - description: "Contents of this site is licensed under"
+    name: <img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/80x15.png" />
+    url: "http://creativecommons.org/licenses/by-nc/4.0/"
+
+# Linked logos
+footer_logos:
+  - name: "Laboratory of Systems Pharmacology"
+    image: "/assets/images/logo_lsp_white.svg"
+    url: "https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/"
+  - name: "Harvard Medical School"
+    image: "/assets/images/logo_hms.svg"
+    url: "https://hms.harvard.edu/"
+
+# Footer last edited timestamp
+last_edit_timestamp: true # show or hide edit time - page must have `last_modified_date` defined in the frontmatter
+last_edit_time_format: "%b %e %Y" # format: https://ruby-doc.org/stdlib-2.7.0/libdoc/time/rdoc/Time.html
+
+# Footer "Edit this page on GitHub" link text
+gh_edit_link: false # show or hide edit this page link
+gh_edit_link_text: "Edit this page on GitHub."
+gh_edit_repository: "https://github.com/labsyspharm/cylinter" # the github URL for your repo
+gh_edit_branch: "master" # the branch that your docs is served from
+gh_edit_source: docs # the source that your files originate from
+gh_edit_view_mode: "tree" # "tree" or "edit" if you want the user to jump into the editor immediately
+
+# Google Analytics
+ga_tracking: G-TY4QP6H41T
+ga_tracking_anonymize_ip: true # Use GDPR compliant Google Analytics settings
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-remote-theme
+  - jekyll-include-cache
+
+repository: labsyspharm/cylinter
+
+exclude: ["node_modules/", "*.gemspec", "*.gem", "Gemfile", "Gemfile.lock", "package.json", "package-lock.json",  "script/", "LICENSE.txt", "lib/", "bin/", "README.md", "Rakefile"]
+compress_html:
+  clippings: all
+  comments: all
+  endings: all
+  startings: []
+  blanklines: false
+  profile: false
