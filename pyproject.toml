@@ -28,7 +28,7 @@ hdbscan = "*"
 joblib = "*"
 magicgui = "*"
 matplotlib = "<3.6"
-napari = { version = "<0.4.17", extras = ["all"] }
+napari = { version = "*", extras = ["all"] }
 numpy = "<1.24"
 natsort = "*"
 numba = "*"
