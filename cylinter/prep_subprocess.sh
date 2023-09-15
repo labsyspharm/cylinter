@@ -11,7 +11,7 @@ shift $(( OPTIND - 1 ))
 if [ "$2" == "cylinter_demo" ]; then
 
   # Transfer emit22_demo from Sage Synapse
-  synapse get -r syn25685780 --downloadLocation "$3" --multiThreaded
+  synapse get -r syn52468155 --downloadLocation "$3" --multiThreaded
 
   # Rename quantification and dearray subdirectories to "csv" and "tif", respectively.
   if [ -d "$3"/quantification ]; then

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "CyLinter"
-version = "0.0.46"
+version = "0.0.47"
 description = "CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy"
 readme = "README.md"
 license = "MIT"
@@ -13,6 +13,7 @@ classifiers=[
     'Development Status :: 4 - Beta',
     'Intended Audience :: End Users/Desktop',
     'Intended Audience :: Science/Research',
+    'Framework :: napari',
     'License :: OSI Approved :: MIT License',
     'Natural Language :: English',
     'Operating System :: OS Independent',
@@ -33,6 +34,7 @@ numpy = "<1.24"
 natsort = "*"
 numba = "*"
 pandas = "*"
+pyqt = "*"
 pyarrow = "*"
 pyyaml = "*"
 qtpy = "*"
@@ -44,6 +46,9 @@ tifffile = "*"
 umap-learn = "*"
 zarr = "<2.15"
 pydantic = "<2.0"
+bokeh = "*"
+svglib = "*"
+pypdf2 = "*"
 
 [tool.poetry.scripts]
 cylinter = "cylinter.cylinter:main"

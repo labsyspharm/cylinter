@@ -9,10 +9,10 @@ outDir: /Users/<username>/Desktop/cylinter_demo/output
 # CyLinter output directory. Path is created if it does not exist.
 
 sampleMetadata:
-  unmicst-1_cellMask: ["1", "Normal kidney cortex", "NKC", "CANCER-FALSE", 1]
-  unmicst-15_cellMask: ["15", "Glioblastoma", "GBM", "CANCER-TRUE", 1]
-  unmicst-18_cellMask: ["18", "Mesothelioma", "MTO", "CANCER-TRUE", 1]
-  unmicst-68_cellMask: ["68", "Tonsil", "TSL", "CANCER-FALSE", 3]
+  "1": ["1", "Normal kidney cortex", "NKC", "CANCER-FALSE", 1]
+  "15": ["15", "Glioblastoma", "GBM", "CANCER-TRUE", 1]
+  "18": ["18", "Mesothelioma", "MTO", "CANCER-TRUE", 1]
+  "68": ["68", "Tonsil", "TSL", "CANCER-FALSE", 3]
 # Sample metadata dictionary: keys = file names; values = list of strings.
 # First elements: sample names (str)
 # Second elements: descriptive text of experimental condition (str)
@@ -188,6 +188,27 @@ conditionsToSilhouette: []
 # of the plot (zorder). Useful for increasing visual clarity of PCA
 # plots containing many data points.
 
+# gating (optional)------------------------------------------------------------
+gating: True
+# (bool) Whether to perform data SYLARAS-style gating of data.
+# Cell Syst. 2020 Sep 23;11(3):272-285.e9 PMID: 32898474
+
+channelExclusionsGating: []
+# (list of strs) Immunomarkers to exclude from gating.
+
+samplesToRemoveGating: []
+# (list of strs) Samples to exclude from gating.
+
+vectorThreshold: 100
+# (int) vizualize Boolean vectors with cell counts >= vectorThreshold
+
+classes:
+  Tumor: 
+    definition: [+KI67, +pan-CK]
+    subsets: [CD73, CD107B, MART1]
+# (dict) Boolean immunophenotype signatures.
+# +marker = immunopositive , -marker = immunonegative, marker = don't care
+
 # clustering-------------------------------------------------------------------
 embeddingAlgorithm: "UMAP"
 # (str) Embedding algorithm to use for clustering (options: "TSNE" or "UMAP").
@@ -212,9 +233,6 @@ dimensionEmbedding: 2
 topMarkers: "clusters"
 # (str) Normalization axis ("channels" or "clusters") used to define
 # highest expressed markers per cluster.
-
-colormapChannel: "pan-CK"
-# (None type or str) Channel to colormap to the embedding.
 
 colormapAnnotationClustering: "Sample"
 # (str) Metadata annotation to colormap the embedding: Sample or Condition.
@@ -278,12 +296,6 @@ randomStateUMAP: 5
 # (int) Determines the random number generator for reproducible results
 # across multiple function calls.
 # --------------------------------------
-
-# setContrast------------------------------------------------------------------
-viewSample: "1"
-# (str) Sample used to assign image contrast settings that will be
-# applied to all samples in the analysis. Corresponds to first elements
-# of sample_metadata dict values.
 
 # frequencyStats---------------------------------------------------------------
 controlGroups: ["CANCER-FALSE"]

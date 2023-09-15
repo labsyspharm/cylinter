@@ -1,5 +1,34 @@
 import pathlib
 import yaml
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class BooleanTerm:
+    name: str
+    negated: bool
+
+    @classmethod
+    def parse_str(cls, s):
+        if s.startswith('+'):
+            negated = False
+            name = s[1:]
+        elif s.startswith('-'):
+            negated = True
+            name = s[1:]
+        else:
+            negated = None
+            name = s
+        return cls(name, negated)
+
+    def __repr__(self):
+        s = self.name
+        if self.negated:
+            s = '~' + self.name
+        return s
+
+    def __invert__(self):
+        return BooleanTerm(self.name, ~self.negated)
 
 
 class Config:
@@ -19,8 +48,7 @@ class Config:
         config.markersToExclude = (data['markersToExclude'])
 
         # CLASS MODULE CONFIGURATIONS
-        config.viewSample = str(data['viewSample'])
-
+        
         config.delintMode = bool(data['delintMode'])
         config.showAbChannels = bool(data['showAbChannels'])
         config.samplesForROISelection = list(data['samplesForROISelection'])
@@ -44,20 +72,27 @@ class Config:
         config.distanceCutoff = float(data['distanceCutoff'])
         config.conditionsToSilhouette = list(data['conditionsToSilhouette'])
 
+        config.gating = bool(data['gating'])
+        config.channelExclusionsGating = list(data['channelExclusionsGating'])
+        config.samplesToRemoveGating = list(data['samplesToRemoveGating'])
+        config.vectorThreshold = int(data['vectorThreshold'])
+        config.vectorThreshold = int(data['vectorThreshold'])
+        config._parse_classes(data['classes'])
+
         config.embeddingAlgorithmQC = str(data['embeddingAlgorithmQC'])
         config.embeddingAlgorithm = str(data['embeddingAlgorithm'])
         config.channelExclusionsClusteringQC = list(
             data['channelExclusionsClusteringQC']
-            )
+        )
         config.channelExclusionsClustering = list(
             data['channelExclusionsClustering']
-            )
+        )
         config.samplesToRemoveClusteringQC = list(
             data['samplesToRemoveClusteringQC']
-            )
+        )
         config.samplesToRemoveClustering = list(
             data['samplesToRemoveClustering']
-            )
+        )
         config.normalizeTissueCounts = bool(data['normalizeTissueCounts'])
         config.fracForEmbeddingQC = float(data['fracForEmbeddingQC'])
         config.fracForEmbedding = float(data['fracForEmbedding'])
@@ -69,11 +104,6 @@ class Config:
             data['colormapAnnotationQC'])
         config.colormapAnnotationClustering = str(
             data['colormapAnnotationClustering'])
-
-        if (data['colormapChannel']) is None:
-            config.colormapChannel = (data['colormapChannel'])
-        else:
-            config.colormapChannel = str(data['colormapChannel'])
 
         config.perplexityQC = float(data['perplexityQC'])
         config.perplexity = float(data['perplexity'])
@@ -133,6 +163,18 @@ class Config:
             self.sampleConditionAbbrs[file_name] = abbreviation
             self.sampleStatuses[file_name] = status
             self.sampleReplicates[file_name] = replicate
+
+    def _parse_classes(self, value):
+
+        self.classes = {}
+
+        if value is None:
+            return
+        
+        for outer_key, inner_dict in value.items():
+            boo = [BooleanTerm.parse_str(t) for t in inner_dict['definition']]
+            inner_dict['definition'] = boo
+            self.classes[str(outer_key)] = inner_dict
 
     @property
     def checkpoint_path(self):

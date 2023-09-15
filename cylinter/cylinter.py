@@ -2,7 +2,6 @@ import sys
 import argparse
 import pathlib
 import logging
-# import pandas as pd
 from .config import Config
 from . import pipeline, components
 

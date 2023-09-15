@@ -36,22 +36,6 @@ def run_pipeline(config, start_module_name):
             )
         data = pd.read_parquet(checkpoint_file_path)
 
-    # module_order = [
-    #  'getSingleCellData',
-    #  'setContrast',
-    #  'selectROIs',
-    #  'dnaIntensityCutoff',
-    #  'dnaAreaCutoff',
-    #  'crossCycleCorrelation',
-    #  'log10transform',
-    #  'pruneOutliers',
-    #  'performPCA',
-    #  'performClustering',
-    #  'getClustermap',
-    #  'lassoClusters',
-    #  'curateThumbnails',
-    #  ]
-
     # make instance of the QC class
     qc = components.QC(
         inDir=config.inDir,
@@ -87,6 +71,12 @@ def run_pipeline(config, start_module_name):
         distanceCutoff=config.distanceCutoff,
         conditionsToSilhouette=config.conditionsToSilhouette,
 
+        gating=config.gating,
+        channelExclusionsGating=config.channelExclusionsGating,
+        samplesToRemoveGating=config.samplesToRemoveGating,
+        vectorThreshold=config.vectorThreshold,
+        classes=config.classes,
+
         embeddingAlgorithmQC=config.embeddingAlgorithmQC,
         embeddingAlgorithm=config.embeddingAlgorithm,
         channelExclusionsClusteringQC=config.channelExclusionsClusteringQC,
@@ -102,7 +92,6 @@ def run_pipeline(config, start_module_name):
         topMarkers=config.topMarkers,
         colormapAnnotationQC=config.colormapAnnotationQC,
         colormapAnnotationClustering=config.colormapAnnotationClustering,
-        colormapChannel=config.colormapChannel,
 
         perplexityQC=config.perplexityQC,
         perplexity=config.perplexity,
@@ -129,13 +118,11 @@ def run_pipeline(config, start_module_name):
         denominatorCluster=config.denominatorCluster,
         FDRCorrection=config.FDRCorrection,
 
-        viewSample=config.viewSample,
-
         numThumbnails=config.numThumbnails,
         topMarkersThumbnails=config.topMarkersThumbnails,
         windowSize=config.windowSize,
         segOutlines=config.segOutlines,
-        )
+    )
 
     # start_idx = module_order[start_index:]
     for module in components.pipeline_modules[start_index:]:
