@@ -1,5 +1,5 @@
 {% set name = "cylinter" %}
-{% set version = "0.0.46" %}
+{% set version = "0.0.47" %}
 
 package:
   name: "{{ name|lower }}"
@@ -7,7 +7,7 @@ package:
 
 source:
   git_url: https://github.com/labsyspharm/cylinter.git
-  git_tag: v0.0.46
+  git_tag: v0.0.47
 
 build:
   number: 0
@@ -36,6 +36,7 @@ requirements:
     - numba
     - pandas
     - pyarrow
+    - pyqt
     - pyyaml
     - qtpy
     - scikit-image
@@ -46,6 +47,10 @@ requirements:
     - umap-learn
     - zarr <2.15  # zarr.LRUStoreCache() broken in current version, leads to blank images output from cellcutter
     - pydantic <2.0  # avoids AttributeError: module 'pydantic._migration' has no attribute 'ModelMetaclass'
+    # - bokeh
+    - svglib
+    - pypdf2
+    # - pyQt6 # M2 chip may require pyQt6
 
 test:
   imports:

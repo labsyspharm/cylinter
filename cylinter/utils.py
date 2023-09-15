@@ -1,15 +1,17 @@
 import os
 import sys
 import re
-import gc
-import csv
+# import gc
+# import csv
 import glob
+import pickle
+import logging
 
 import numpy as np
 import pandas as pd
-import psutil
+
+# import psutil
 import math
-import yaml
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import LassoSelector
@@ -21,21 +23,14 @@ from sklearn.preprocessing import MinMaxScaler
 import zarr
 import dask.array as da
 import tifffile
-from tifffile import imread
 
-import subprocess
+# import subprocess
+
+from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = ['.csv']
-
-
-def dataset_files(root):
-    """
-    Return a list of all supported extension
-    files in the specified directory.
-    """
-    total = os.listdir(root)
-    pruned = [i for i in total if i.endswith(tuple(SUPPORTED_EXTENSIONS))]
-    return pruned
 
 
 def log_banner(log_function, msg):
@@ -51,30 +46,203 @@ def log_multiline(log_function, msg):
         log_function(line)
 
 
-def dict_to_csv(dict, path):
-    file = open(path, 'w')
-    writer = csv.writer(file)
-    for key, value in dict.items():
-        writer.writerow([key, repr(value)])
-    file.close()
+def input_check(self):
+
+    contents = os.listdir(self.inDir)
+    
+    # check whether input directory contains expected files and folders:
+    if any(element not in contents for element in
+           ['config.yml', 'markers.csv', 'csv', 'tif', 'seg', 'mask']):
+
+        ##########################################################################################
+        # if not, check for mcmicro input directory
+        
+        # check that samples specified in config.yml each have a csv, tif, seg, and mask file
+        markers_list = []
+        for key in self.sampleNames.keys():
+            
+            sample_name = key.split('--')[0]
+            segmentation_method = key.split('--')[1].split('_')[0]
+            segmentation_object = key.split('--')[1].split('_')[1]
+
+            try:
+                markers = pd.read_csv(os.path.join(self.inDir, sample_name, 'markers.csv'))
+                markers_list.append(markers)
+            except FileNotFoundError:
+                logger.info(f'Aborting; markers.csv file for {sample_name} not found.')
+                sys.exit()
+            
+            try:
+                glob.glob(
+                    os.path.join(self.inDir, sample_name, 'quantification', f'{key}*.csv'))[0]
+            except IndexError:
+                logger.info(
+                    f'sampleMetadata key {sample_name} in config.yml does not match a CSV filename.'
+                )
+                sys.exit()
+            
+            try:
+                glob.glob(
+                    os.path.join(self.inDir, sample_name, 'registration', f'{sample_name}*.tif'))[0] 
+            except IndexError:
+                logger.info(f'Aborting; OME-TIFF for {sample_name} not found.')
+                sys.exit()
+
+            try:
+                glob.glob(
+                    os.path.join(self.inDir, sample_name, 'qc/s3seg',
+                                 f"{segmentation_method}-{sample_name}", 
+                                 f"{segmentation_object}*.tif"))[0]
+            except IndexError:
+                logger.info(f'Aborting; segmentation outlines for {sample_name} not found.')
+                sys.exit()
+            
+            try:
+                glob.glob(
+                    os.path.join(self.inDir, sample_name, 'segmentation',
+                                 f"{segmentation_method}-{sample_name}",
+                                 f"{segmentation_object}*.tif"))[0]
+            except IndexError:
+                logger.info(f'Aborting; segmentation mask for {sample_name} not found.')
+                sys.exit()
+
+        # check that all markers.csv files are identical (if not, which is one is correct?)
+        if not all(markers.equals(markers_list[0]) for markers in markers_list):
+            logger.info('Aborting; markers.csv files differ between samples.')
+            sys.exit()
+        
+        markers_filepath = os.path.join(
+            self.inDir, list(self.sampleNames.keys())[0].split('--')[0], 'markers.csv'
+        )
+        return 'mcmicro', markers_filepath
+
+        ##########################################################################################
+
+    # next, check that csv, tif, seg, and mask subdirectories each contain files for all samples
+    csv_names = set(
+        [os.path.basename(path).split('.')[0] for path
+         in glob.glob(os.path.join(self.inDir, 'csv', '*.csv'))]
+    )
+    
+    tif_names = set(
+        [os.path.basename(path).split('.')[0] for path
+         in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
+    )
+    
+    seg_names = set(
+        [os.path.basename(path).split('.')[0] for path
+         in glob.glob(os.path.join(self.inDir, 'seg', '*.tif'))]
+    )
+    
+    mask_names = set(
+        [os.path.basename(path).split('.')[0] for path
+         in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
+    )
+    
+    if not all(s == csv_names for s in [csv_names, tif_names, seg_names, mask_names]):
+        return False
+    
+    # check that file names specified in config.yml are contained in input directory
+    if not set(self.sampleNames.keys()).issubset(csv_names):
+        logger.info(
+            'Aborting; at least 1 sampleMetadata key in config.yml does not match a CSV filename.'
+        )
+        sys.exit()
+
+    markers_filepath = os.path.join(self.inDir, 'markers.csv')
+    return 'standard', markers_filepath
 
 
-def csv_to_dict(path):
-    with open(path, 'r') as inp:
-        reader = csv.reader(inp)
-        dict = {rows[0]: rows[1] for rows in reader}
-    return dict
+def get_filepath(self, check, sample, file_type):
+
+    sampleMetadata_key = next(
+        (key for key, val in self.sampleNames.items() if val == sample), None
+    )
+    
+    if check == 'standard':
+        if file_type == 'CSV':
+            file_path = os.path.join(self.inDir, 'csv', f"{sampleMetadata_key}.csv")
+        if file_type == 'TIF':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'tif', f"{sampleMetadata_key}.*tif"))[0]
+        if file_type == 'SEG':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'seg', f"{sampleMetadata_key}.*tif"))[0]
+        if file_type == 'MASK':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'mask', f"{sampleMetadata_key}.*tif"))[0]
+
+    else:
+        sample_name = sampleMetadata_key.split('--')[0]
+        segmentation_method = sampleMetadata_key.split('--')[1].split('_')[0]
+        segmentation_object = sampleMetadata_key.split('--')[1].split('_')[1]
+        
+        if file_type == 'CSV':
+            file_path = os.path.join(
+                self.inDir, sample_name, 'quantification', f'{sampleMetadata_key}.csv'
+            )
+        if file_type == 'TIF':
+            file_path = glob.glob(
+                os.path.join(self.inDir, sample_name, 'registration', f"{sample_name}.*tif"))[0]
+        if file_type == 'SEG':
+            file_path = glob.glob(
+                os.path.join(self.inDir, sample_name, 'qc/s3seg',
+                             f"{segmentation_method}-{sample_name}", 
+                             f"{segmentation_object}*.tif"))[0]
+        if file_type == 'MASK':
+            file_path = glob.glob(
+                os.path.join(self.inDir, sample_name, 'segmentation',
+                             f"{segmentation_method}-{sample_name}", 
+                             f"{segmentation_object}*.tif"))[0]
+
+    return file_path
+
+
+def napari_notification(msg):
+    notification_ = Notification(msg, severity=NotificationSeverity.INFO)
+    notification_manager.dispatch(notification_)
+
+
+def read_markers(markers_filepath, markers_to_exclude, data):
+
+    markers = pd.read_csv(markers_filepath, dtype={0: 'int16', 1: 'int16', 2: 'str'}, comment='#')
+    if data is None:
+        markers_to_include = [i for i in markers['marker_name'] if i not in markers_to_exclude]
+    else:
+        markers_to_include = [
+            i for i in markers['marker_name'] if i not in markers_to_exclude if i in data.columns
+        ]
+
+    markers = markers[markers['marker_name'].isin(markers_to_include)]
+
+    dna1 = markers['marker_name'][markers['channel_number'] == markers['channel_number'].min()][0]
+    dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
+
+    # abx channels
+    abx_channels = [i for i in markers['marker_name'] if dna_moniker not in i]
+
+    return markers, dna1, dna_moniker, abx_channels
+
+
+def marker_channel_number(markers, marker_name):
+
+    channel_number = markers.index[markers['marker_name'] == marker_name].item()
+
+    return channel_number
 
 
 def reorganize_dfcolumns(data, markers, cluster_dim):
 
     first_cols = (
-        ['CellID'] + [i for i in markers['marker_name'] if
-                      i in data.columns] +
+        ['CellID'] +
+        [i for i in markers['marker_name'] if
+         i in data.columns] +
+        [f'{i}_bool' for i in markers['marker_name'] if
+         f'{i}_bool' in data.columns] +
         ['X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
          'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent',
          'Orientation', 'Sample', 'Condition', 'Replicate']
-         )
+    )
 
     # (for BAF project)
     # first_cols = (
@@ -83,7 +251,7 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
     #     ['X_centroid', 'Y_centroid', 'Area', 'CytArea', 'Solidity',
     #      'AreaSubstruct', 'MeanInsideSubstruct', 'Corenum', 'CoreCoord',
     #      'CoreFlag', 'Sample', 'Condition', 'Replicate']
-    #      )
+    # )
 
     last_cols = [col for col in data.columns if col not in first_cols]
 
@@ -100,9 +268,7 @@ def single_channel_pyramid(tiff_path, channel):
 
         if len(tiff.series[0].levels) > 1:
 
-            pyramid = [
-                zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels
-                ]
+            pyramid = [zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels]
 
             pyramid = [da.from_zarr(z) for z in pyramid]
 
@@ -234,7 +400,7 @@ def read_dataframe(modules_list, start_module, outDir):
 
     fileList = glob.glob(os.path.join(outDir, 'dataframe_archive/*.parquet'))
     parquet_name = fileList[0].split('/')[-1]
-    print(f'Reading: {parquet_name}')
+    logger.info(f'Reading: {parquet_name}')
 
     for filePath in fileList:
         df = pd.read_parquet(filePath)
@@ -250,55 +416,13 @@ def save_dataframe(df, outDir, moduleName):
         os.remove(filePath)
 
     df.to_parquet(
-        os.path.join(outDir, f'dataframe_archive/{moduleName}.parquet'),
-        index=True
-        )
-
-
-def read_markers(markers_filepath, markers_to_exclude, data):
-
-    markers = pd.read_csv(
-        markers_filepath,
-        dtype={0: 'int16', 1: 'int16', 2: 'str'},
-        comment='#'
-        )
-    if data is None:
-        markers_to_include = [
-            i for i in markers['marker_name']
-            if i not in markers_to_exclude
-            ]
-    else:
-        markers_to_include = [
-            i for i in markers['marker_name']
-            if i not in markers_to_exclude if i in data.columns
-            ]
-
-    markers = markers[markers['marker_name'].isin(markers_to_include)]
-
-    dna1 = markers['marker_name'][markers['channel_number'] == 1][0]
-    dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
-
-    # abx channels
-    abx_channels = [
-        i for i in markers['marker_name'] if
-        dna_moniker not in i
-        ]
-
-    return markers, dna1, dna_moniker, abx_channels
-
-
-def marker_channel_number(markers, marker_name):
-
-    channel_number = markers['channel_number'][
-                markers['marker_name']
-                == marker_name]
-
-    return channel_number
+        os.path.join(outDir, f'dataframe_archive/{moduleName}.parquet'), index=True
+    )
 
 
 def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=False):
 
-    numSubcatagories = math.ceil(numUniqueSamples/numCatagories)
+    numSubcatagories = math.ceil(numUniqueSamples / numCatagories)
 
     if numCatagories > plt.get_cmap(cmap).N:
         raise ValueError('Too many categories for colormap.')
@@ -310,11 +434,11 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
         cd = {
             'B': 0, 'O': 1, 'G': 2, 'R': 3, 'Pu': 4,
             'Br': 5, 'Pi': 6, 'Gr': 7, 'Y': 8, 'Cy': 9,
-            }
+        }
         myorder = [
             cd['B'], cd['O'], cd['G'], cd['Pu'], cd['Y'],
             cd['R'], cd['Cy'], cd['Br'], cd['Gr'], cd['Pi']
-            ]
+        ]
         ccolors = [ccolors[i] for i in myorder]
 
         # use Okabe and Ito color-safe palette for first 6 colors
@@ -355,7 +479,7 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
         cluster_means = (
             df[markers + [f'cluster_{clus_dim}d']]
             .groupby(f'cluster_{clus_dim}d').mean()
-            )
+        )
 
         scaler = MinMaxScaler(feature_range=(0, 1), copy=True)
 
@@ -367,7 +491,7 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
             scaled_cluster_means = pd.DataFrame(
                 data=scaled_rows, index=cluster_means.index,
                 columns=cluster_means.columns
-                )
+            )
 
             # isolate markers with highest expression values across clusters
             hi_markers = (
@@ -375,7 +499,7 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
                 .loc[cluster]
                 .sort_values(ascending=False)[:num_proteins]
                 .index.tolist()
-                )
+            )
 
             return norm_ax, hi_markers
 
@@ -387,7 +511,7 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
             scaled_cluster_means = pd.DataFrame(
                 data=scaled_rows, index=cluster_means.index,
                 columns=cluster_means.columns
-                )
+            )
 
             # isolate markers with highest expression values across channels
             hi_markers = (
@@ -395,7 +519,7 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
                 .loc[cluster]
                 .sort_values(ascending=False)[:num_proteins]
                 .index.tolist()
-                )
+            )
 
             return norm_ax, hi_markers
 
@@ -403,6 +527,18 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
         hi_markers = 'unclustered cells'
 
         return norm_ax, hi_markers
+
+
+def gate_expression(pop, gate_dir):
+
+    if os.path.exists(os.path.join(gate_dir, 'signatures.pkl')):
+        f = open(os.path.join(gate_dir, 'signatures.pkl'), 'rb')
+        signatures = pickle.load(f)
+        hi_markers = [str(i) for i in signatures[pop] if i.negated is False]
+        return hi_markers
+    else:
+        logger.info('Aborting; Cell classification dictionary does not exit in gating output.')
+        sys.exit()
 
 
 def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
@@ -466,7 +602,7 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
         '''no frills empirical cdf used in fdrcorrection
         '''
         nobs = len(x)
-        return np.arange(1, nobs + 1)/float(nobs)
+        return np.arange(1, nobs + 1) / float(nobs)
 
     pvals = np.asarray(pvals)
     assert pvals.ndim == 1, "pvals must be 1-dimensional, of shape (n,)"
@@ -480,14 +616,14 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
     if method in ['i', 'indep', 'p', 'poscorr']:
         ecdffactor = _ecdf(pvals_sorted)
     elif method in ['n', 'negcorr']:
-        cm = np.sum(1./np.arange(1, len(pvals_sorted)+1))  # corrected this
+        cm = np.sum(1. / np.arange(1, len(pvals_sorted) + 1))  # corrected this
         ecdffactor = _ecdf(pvals_sorted) / cm
     # elif method in ['n', 'negcorr']:
     #     cm = np.sum(np.arange(len(pvals)))
     #     ecdffactor = ecdf(pvals_sorted)/cm
     else:
         raise ValueError('only indep and negcorr implemented')
-    reject = pvals_sorted <= ecdffactor*alpha
+    reject = pvals_sorted <= ecdffactor * alpha
     if reject.any():
         rejectmax = max(np.nonzero(reject)[0])
         reject[:rejectmax] = True
@@ -507,28 +643,28 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
         return reject, pvals_corrected
 
 
-def clearRAM(print_usage=False):
+# def clearRAM(print_usage=False):
 
-    gc.collect()
+#     gc.collect()
 
-    if print_usage:
-        process = psutil.Process(os.getpid())
+#     if print_usage:
+#         process = psutil.Process(os.getpid())
 
-        # Only needed for internal debugging. Let's not add this to the full
-        # dependency list.
-        try:
-            from hurry.filesize import size
-            print(size(process.memory_info().rss))
-        except ImportError:
-            print("Please install hurry.filesize for this feature")
+#         # Only needed for internal debugging. Let's not add this to the full
+#         # dependency list.
+#         try:
+#             from hurry.filesize import size
+#             logger.info(size(process.memory_info().rss))
+#         except ImportError:
+#             logger.info("Please install hurry.filesize for this feature")
 
 
-def open_file(filename):
-    if sys.platform == "win32":
-        os.startfile(filename)
-    else:
-        opener = "open" if sys.platform == "darwin" else "xdg-open"
-        subprocess.run([opener, filename])
+# def open_file(filename):
+#     if sys.platform == "win32":
+#         os.startfile(filename)
+#     else:
+#         opener = "open" if sys.platform == "darwin" else "xdg-open"
+#         subprocess.run([opener, filename])
 
 
 def triangulate_ellipse(corners, num_segments=100):
@@ -610,3 +746,19 @@ def triangulate_ellipse(corners, num_segments=100):
     triangles[-1, 2] = 1
 
     return vertices, triangles
+
+
+# def dict_to_csv(dict, path):
+#     file = open(path, 'w')
+#     writer = csv.writer(file)
+#     for key, value in dict.items():
+#         writer.writerow([key, repr(value)])
+#     file.close()
+
+
+# def csv_to_dict(path):
+#     with open(path, 'r') as inp:
+#         reader = csv.reader(inp)
+#         dict = {rows[0]: rows[1] for rows in reader}
+#     return dict
+
