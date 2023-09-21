@@ -460,6 +460,7 @@ def selectROIs(data, self, args):
 
         samples = iter(self.samplesForROISelection)
         sample = next(samples)
+        last_sample = None
         
         viewer = napari.Viewer(title='CyLinter')
         viewer.scale_bar.visible = True
@@ -467,17 +468,19 @@ def selectROIs(data, self, args):
 
         ### Load data for the data layer(s), i.e., polygon dicts, and potentially
         ### the points corresponding to centroids of cells classified as artifacts.
-        # load polygon dictionary if it exists
-
-        if os.path.exists(os.path.join(roi_dir, 'polygons.pkl')):
-            f = open(os.path.join(roi_dir, 'polygons.pkl'), 'rb')
-            polygon_dict = pickle.load(f)
-        else:
-            logger.info(
-                'Aborting; ROI polygon dictionary does not exist. '
-                'Please select ROIs.'
-            )
-            sys.exit()
+        varname_filename_lst = [('ROI', 'polygons.pkl'),
+                            ('ROI2', 'polygons2.pkl'),
+                            ('Detected Artifacts', 'points.pkl')]
+        layer_type = {'ROI': 'shape', 
+                      'ROI2': 'shape',
+                      'Detected Artifacts': 'point'}
+        extra_layers = {}
+        for varname, fname in varname_filename_lst:
+            if os.path.exists(os.path.join(roi_dir, fname)):
+                f = open(os.path.join(roi_dir, fname), 'rb')
+                extra_layers[varname] = pickle.load(f)
+            else:
+                extra_layers[varname] = {}
         
         ###################################################################
 
@@ -512,20 +515,29 @@ def selectROIs(data, self, args):
                 name=f'{dna1}: {sample}', contrast_limits=(min, max)
             )
 
-            # ROI selection channel
-            try:
-                polygon_dict[sample]
-                shapes = [polygon_dict[sample][i][0] for i in range(0, len(polygon_dict[sample]))]
-                polygons = [polygon_dict[sample][i][1] for i in range(0, len(polygon_dict[sample]))]
-            except KeyError:
-                shapes = 'polygone'
-                polygons = None
-            
-            viewer.add_shapes(
-                    data=polygons, shape_type=shapes, ndim=2,
-                    face_color=[1.0, 1.0, 1.0, 0.2], edge_color=[0.0, 0.66, 1.0, 1.0],
-                    edge_width=10.0, name='ROI(s)'
-                )
+            # ROI selection channel, as well as ROI2 and labeled artifacts
+            for varname, layer_data in extra_layers.items():
+                if layer_type[varname] == 'shape':
+                    try:
+                        shapes = [shape_data[0] for shape_data in layer_data[sample]]
+                        polygons = [shape_data[1] for shape_data in layer_data[sample]]
+                    except KeyError:
+                        shapes = 'polygon'
+                        polygons = None
+                    
+                    viewer.add_shapes(
+                            data=polygons, shape_type=shapes, ndim=2,
+                            face_color=[1.0, 1.0, 1.0, 0.2], edge_color=[0.0, 0.66, 1.0, 1.0],
+                            edge_width=10.0, name=varname
+                    )
+                elif layer_type[varname] == 'point':
+                    try:
+                        points = layer_data[sample]
+                    except:
+                        points = None
+                    viewer.add_points(points, ndim=2, face_color=[1.0, 1.0, 1.0, 1.0], 
+                                      edge_color=[0.0, 0.66, 1.0, 1.0], edge_width=0.0,
+                                      name=varname, size=100.0)
             
 
             ### Apply previously defined contrast limits if they exist
@@ -547,53 +559,74 @@ def selectROIs(data, self, args):
             for widget in widgets:
                 viewer.window.remove_dock_widget(widget)
 
-        def add_widgets(sample):
+        def add_widgets(last_sample, sample):
             @magicgui(
                 call_button="Apply ROI(s) and Move to Next Sample"
             )
-            def next_sample(sample, widgets):
+            def next_sample(last_sample, sample, widgets):
+                print('last sample is', last_sample)
                 try: 
-                    # update ROI
-                    updated_polygons = []
-                    for shape_type, roi in zip(viewer.layers[-1].shape_type, viewer.layers[-1].data):
-                        updated_polygons.append((shape_type, roi))
-                    polygon_dict[sample] = updated_polygons
+                    # update ROI and other shape layers
+                    for i, tupl in enumerate(varname_filename_lst[::-1]):
+                        varname, filename = tupl
+                        updated_layer_data = []
+                        layer = viewer.layers[-(i+1)]
+                        if layer_type[varname] == 'shape':
+                            for shape_type, roi in zip(layer.shape_type, layer.data):
+                                updated_layer_data.append((shape_type, roi))
+                            extra_layers[varname][sample] = updated_layer_data
+                        elif layer_type[varname] == 'point':
+                            updated_layer_data = layer.data
+                            extra_layers[varname][sample] = updated_layer_data
 
-                    f = open(os.path.join(roi_dir, 'polygons.pkl'), 'wb')
-                    pickle.dump(polygon_dict, f)
-                    f.close()
+                        f = open(os.path.join(roi_dir, filename), 'wb')
+                        pickle.dump(extra_layers[varname], f)
+                        f.close()
 
                     napari_notification(f'ROI(s) applied to sample {sample}.')
 
                     # move to next sample and re-render the GUI
-                    sample = next(samples)
+                    if last_sample is None:
+                        sample = next(samples)
+                    else: 
+                        sample = last_sample
+                        last_sample = None
                     next_sample.sample.bind(sample)
                     viewer.layers.clear()
                     clear_widgets(widgets)
                     add_layers(sample)
-                    add_widgets(sample)
+                    add_widgets(last_sample, sample)
                 except StopIteration:
                     print()
                     napari_notification('Gating complete!')
                     QTimer().singleShot(0, viewer.close)
 
             next_sample.sample.bind(sample) #should bind first sample_id
+            next_sample.last_sample.bind(last_sample)
 
             @magicgui(
                 call_button='Enter',
-                sample={'label': 'Sample Name'}
+                next_sample={'label': 'Sample Name'}
             )
-            def arbitrary_sample(sample: str, widgets):
+            def arbitrary_sample(sample, next_sample: str, widgets):
+                global last_sample
+                last_sample = sample
                 viewer.layers.clear()
                 clear_widgets(widgets)
-                add_layers(sample)
-                add_widgets(sample)
+                add_layers(next_sample)
+                add_widgets(last_sample, next_sample)
+            arbitrary_sample.sample.bind(sample)
 
             @magicgui(
                 call_button="Auto label artifacts"
             )
             def label_artifacts():
-                pass
+                centroids = data[['Y_centroid', 'X_centroid']]
+                viewer.add_points(
+                centroids, name='Reference gate', face_color='#00aaff', 
+                edge_color='#00aaff', edge_width=0.0, size=7.0, opacity=1.0,
+                blending='opaque', visible=True
+            )
 
 
             widgets = [next_sample, arbitrary_sample, label_artifacts]
@@ -604,7 +637,8 @@ def selectROIs(data, self, args):
                                                                     add_vertical_stretch=False,
                                                                     name=widget_name))
             next_sample.widgets.bind(napari_widgets)  
-            arbitrary_sample.widgets.bind(napari_widgets)            
+            arbitrary_sample.widgets.bind(napari_widgets) 
+
             for napari_widget in napari_widgets:
                 napari_widget.widget().setSizePolicy(
                     QtWidgets.QSizePolicy.Minimum,
@@ -614,7 +648,7 @@ def selectROIs(data, self, args):
         ###################################################################
 
         add_layers(sample)
-        add_widgets(sample)
+        add_widgets(last_sample, sample)
 
         napari.run() # blocks until window is closed
 
