@@ -460,6 +460,7 @@ def selectROIs(data, self, args):
 
         samples = iter(self.samplesForROISelection)
         sample = next(samples)
+        global last_sample
         last_sample = None
         
         viewer = napari.Viewer(title='CyLinter')
@@ -535,9 +536,9 @@ def selectROIs(data, self, args):
                         points = layer_data[sample]
                     except:
                         points = None
-                    viewer.add_points(points, ndim=2, face_color=[1.0, 1.0, 1.0, 1.0], 
-                                      edge_color=[0.0, 0.66, 1.0, 1.0], edge_width=0.0,
-                                      name=varname, size=100.0)
+                    viewer.add_points(points, ndim=2, face_color=[1.0, 0, 0, 1.0], 
+                                      edge_color=[0.0, 0.0, 0.0, 0.0],
+                                      edge_width=0.0, name=varname, size=10.0)
             
 
             ### Apply previously defined contrast limits if they exist
@@ -564,7 +565,6 @@ def selectROIs(data, self, args):
                 call_button="Apply ROI(s) and Move to Next Sample"
             )
             def next_sample(last_sample, sample, widgets):
-                print('last sample is', last_sample)
                 try: 
                     # update ROI and other shape layers
                     for i, tupl in enumerate(varname_filename_lst[::-1]):
@@ -610,23 +610,25 @@ def selectROIs(data, self, args):
             )
             def arbitrary_sample(sample, next_sample: str, widgets):
                 global last_sample
-                last_sample = sample
+                if last_sample is None:
+                    last_sample = sample
                 viewer.layers.clear()
                 clear_widgets(widgets)
                 add_layers(next_sample)
                 add_widgets(last_sample, next_sample)
             arbitrary_sample.sample.bind(sample)
 
+
             @magicgui(
                 call_button="Auto label artifacts"
             )
             def label_artifacts():
-                centroids = data[['Y_centroid', 'X_centroid']]
-                viewer.add_points(
-                centroids, name='Reference gate', face_color='#00aaff', 
-                edge_color='#00aaff', edge_width=0.0, size=7.0, opacity=1.0,
-                blending='opaque', visible=True
-            )
+                viewer.layers[-1].data = None
+                global artifact_mask
+                artifact_mask = [True] * len(data)
+                centroids = data[['Y_centroid', 'X_centroid']][artifact_mask]
+                viewer.layers[-1].add(centroids)
+            
 
 
             widgets = [next_sample, arbitrary_sample, label_artifacts]
@@ -657,7 +659,7 @@ def selectROIs(data, self, args):
         idxs_to_drop = {}
         for sample in samples:
             try:
-                if polygon_dict[sample]:
+                if extra_layers['ROI'][sample]:
 
                     logger.info(f'Generating ROI mask(s) for sample: {sample}')
 
@@ -673,55 +675,62 @@ def selectROIs(data, self, args):
                     dna = imread(file_path, key=0)
 
                     # create pillow image to convert into boolean mask
-                    img = Image.new('L', (dna.shape[1], dna.shape[0]))
+                    def shape_layer_to_mask(layer_data):
+                        img = Image.new('L', (dna.shape[1], dna.shape[0]))
 
-                    for shape_type, verts in polygon_dict[sample]:
+                        for shape_type, verts in layer_data:
 
-                        selection_verts = np.round(verts).astype(int)
+                            selection_verts = np.round(verts).astype(int)
 
-                        if shape_type == 'ellipse':
+                            if shape_type == 'ellipse':
 
-                            vertices, triangles = triangulate_ellipse(
-                                selection_verts
-                            )
+                                vertices, triangles = triangulate_ellipse(
+                                    selection_verts
+                                )
 
-                            # flip 2-tuple coordinates returned by
-                            # triangulate_ellipse() to draw image mask
-                            vertices = [tuple(reversed(tuple(i))) for i in vertices]
+                                # flip 2-tuple coordinates returned by
+                                # triangulate_ellipse() to draw image mask
+                                vertices = [tuple(reversed(tuple(i))) for i in vertices]
 
-                            # update pillow image with polygon
-                            ImageDraw.Draw(img).polygon(
-                                vertices, outline=1, fill=1
-                            )
+                                # update pillow image with polygon
+                                ImageDraw.Draw(img).polygon(
+                                    vertices, outline=1, fill=1
+                                )
 
-                        else:
-                            vertices = list(tuple(
-                                zip(selection_verts[:, 1],
-                                    selection_verts[:, 0])
-                            ))
+                            else:
+                                vertices = list(tuple(
+                                    zip(selection_verts[:, 1],
+                                        selection_verts[:, 0])
+                                ))
 
-                            # update pillow image with polygon
-                            ImageDraw.Draw(img).polygon(vertices, outline=1, fill=1)
+                                # update pillow image with polygon
+                                ImageDraw.Draw(img).polygon(vertices, outline=1, fill=1)
 
-                    # convert pillow image into boolean numpy array
-                    mask = np.array(img, dtype=bool)
-
+                        # convert pillow image into boolean numpy array
+                        mask = np.array(img, dtype=bool)
+                        return mask
+                    
+                    ROI_mask = shape_layer_to_mask(extra_layers['ROI'][sample])
+                    ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
                     # use numpy fancy indexing to get centroids
                     # where boolean mask is True
                     xs, ys = zip(*sample_data['tuple'])
 
-                    inter = mask[ys, xs]
+                    inter1 = ROI_mask[ys, xs]
+                    global artifact_mask
+                    inter2 = ~ROI2_mask[ys, xs] * artifact_mask[ys, xs]
 
                     # update sample_data with boolean calls per cell
-                    sample_data['inter'] = inter
+                    sample_data['inter1'] = inter1
+                    sample_data['inter2'] = inter2
 
                     if self.delintMode is True:
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][sample_data['inter']]
+                            sample_data['CellID'][sample_data['inter1'] * sample_data['inter2']]
                         )
                     else:
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][~sample_data['inter']]
+                            sample_data['CellID'][~sample_data['inter1'] * sample_data['inter2']]
                         )
                 else:
                     logger.info(f'No ROIs selected for sample: {sample}')
