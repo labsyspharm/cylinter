@@ -528,15 +528,15 @@ def selectROIs(data, self, args):
                     
                     if varname == 'ROI':
                         if self.delintMode:
-                            edge_color = [1.0, 0.00, 1.0, 1.0]
+                            edge_color = [1.0, 0.00, 0.0, 1.0]
                         else:
                             edge_color = [0.0, 0.66, 1.0, 1.0]
                     elif varname == 'ROI2':
-                        edge_color = [1.0, 0.00, 1.0, 1.0]
+                        edge_color = [0.0, 0.66, 1.0, 1.0]
                         
                     viewer.add_shapes(
                             data=polygons, shape_type=shapes, ndim=2,
-                            face_color=[1.0, 1.0, 1.0, 0.05], edge_color=[0.0, 0.66, 1.0, 1.0],
+                            face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
                             edge_width=10.0, name=varname
                     )
                 elif layer_type[varname] == 'point':
