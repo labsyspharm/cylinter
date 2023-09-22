@@ -3,6 +3,7 @@ import sys
 import logging
 import pickle
 
+import pandas as pd
 import numpy as np
 
 from natsort import natsorted
@@ -247,34 +248,42 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
             # get current cutoffs
             lowerCutoff, upperCutoff = update(val=None)
 
-            # add cutoffs to dictionary and store
-            cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
-            f = open(os.path.join(intensity_dir, 'cutoffs.pkl'), 'wb')
-            pickle.dump(cutoffs_dict, f)
-            f.close()
+            if lowerCutoff <= upperCutoff:
 
-            # go to next sample
-            try:
-                if arbitrary_selection_toggle:
-                    sample_index -= 1 
+                # add cutoffs to dictionary and store
+                cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
+                f = open(os.path.join(intensity_dir, 'cutoffs.pkl'), 'wb')
+                pickle.dump(cutoffs_dict, f)
+                f.close()
 
-                sample = samples[sample_index]
+                # go to next sample
+                try:
+                    if arbitrary_selection_toggle:
+                        sample_index -= 1 
+
+                    sample = samples[sample_index]
+                    
+                    initial_callback = False
+                    callback(
+                        self, viewer, sample, samples, data, initial_callback,
+                        selection_widget, selection_layout, hist_widget, hist_layout,
+                        intensity_dir 
+                    )
+
+                    sample_index += 1
+                    arbitrary_selection_toggle = False
                 
-                initial_callback = False
-                callback(
-                    self, viewer, sample, samples, data, initial_callback,
-                    selection_widget, selection_layout, hist_widget, hist_layout,
-                    intensity_dir 
+                except IndexError:
+
+                    print()
+                    napari_notification('Gating complete!')
+                    QTimer().singleShot(0, viewer.close)
+
+            else:
+                napari_notification(
+                    'LowerCutoff (blue) must be lower than upperCutoff (red).'
                 )
-
-                sample_index += 1
-                arbitrary_selection_toggle = False
-            
-            except IndexError:
-
-                print()
-                napari_notification('Gating complete!')
-                QTimer().singleShot(0, viewer.close)
+                pass
 
         next_sample.native.setSizePolicy(
             QtWidgets.QSizePolicy.Maximum,
@@ -415,6 +424,9 @@ def intensityFilter(data, self, args):
             lowerCutoff, upperCutoff = cutoffs_dict[sample]
             if lowerCutoff == upperCutoff:
                 logger.info(f'All data points selected for sample {sample}.')
+                # select all data points if sliders were not adjusted
+                lowerCutoff = np.log(group[dna1]).min()
+                upperCutoff = np.log(group[dna1]).max()
             else:
                 logger.info(
                     f'Applying cutoffs ({lowerCutoff:.3f}, '
@@ -439,11 +451,6 @@ def intensityFilter(data, self, args):
             alpha=0.5, histtype='stepfilled',
             range=None, label='before'
         )
-        
-        # select all data points if sliders were not adjusted
-        if lowerCutoff == upperCutoff:
-            lowerCutoff = np.log(group[dna1]).min()
-            upperCutoff = np.log(group[dna1]).max()
         
         # apply lower and upper cutoffs
         group_filtered = group.copy()[
@@ -485,13 +492,17 @@ def intensityFilter(data, self, args):
         data_to_drop = group.copy()[
             (np.log(group[dna1]) < lowerCutoff) | (np.log(group[dna1]) > upperCutoff)]
 
-        # create a column of unique IDs for cells to drop from current sample
-        data_to_drop['handle'] = data_to_drop['CellID'].map(str) + '_' + data_to_drop['Sample']
+        if not data_to_drop.empty:
+            # create a column of unique IDs for cells to drop from current sample
+            data_to_drop['handle'] = (
+                data_to_drop['CellID'].map(str) + '_' + data_to_drop['Sample']
+            )
 
-        # add IDs to idxs_to_drop dictionary
-        # sidxs_to_drop[sample] = [i for i in data_to_drop['handle']]
-        idxs_to_drop[sample] = data_to_drop['handle']
-
+            # add IDs to idxs_to_drop dictionary
+            idxs_to_drop[sample] = data_to_drop['handle']
+        else:
+            idxs_to_drop[sample] = pd.Series()
+    
     # create a column of unique IDs for cells in the full dataframe
     data['handle'] = data['CellID'].map(str) + '_' + data['Sample']
 

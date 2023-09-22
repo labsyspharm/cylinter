@@ -1,8 +1,6 @@
 import os
 import sys
 import re
-# import gc
-# import csv
 import glob
 import pickle
 import logging
@@ -10,7 +8,6 @@ import logging
 import numpy as np
 import pandas as pd
 
-# import psutil
 import math
 
 import matplotlib.pyplot as plt
@@ -23,8 +20,6 @@ from sklearn.preprocessing import MinMaxScaler
 import zarr
 import dask.array as da
 import tifffile
-
-# import subprocess
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
 
@@ -48,8 +43,13 @@ def log_multiline(log_function, msg):
 
 def input_check(self):
 
-    contents = os.listdir(self.inDir)
+    # check for redundant sampleMetadata keys
+    if len(set(self.sampleNames.keys())) != len(self.sampleNames.keys()):
+        logger.info('Aborting; sampleMetadata contains redundant keys.')
+        sys.exit()
     
+    contents = os.listdir(self.inDir)
+
     # check whether input directory contains expected files and folders:
     if any(element not in contents for element in
            ['config.yml', 'markers.csv', 'csv', 'tif', 'seg', 'mask']):
@@ -57,64 +57,128 @@ def input_check(self):
         ##########################################################################################
         # if not, check for mcmicro input directory
         
-        # check that samples specified in config.yml each have a csv, tif, seg, and mask file
-        markers_list = []
-        for key in self.sampleNames.keys():
-            
-            sample_name = key.split('--')[0]
-            segmentation_method = key.split('--')[1].split('_')[0]
-            segmentation_object = key.split('--')[1].split('_')[1]
-
+        # test for TMA data
+        if 'dearray' in contents:
             try:
-                markers = pd.read_csv(os.path.join(self.inDir, sample_name, 'markers.csv'))
-                markers_list.append(markers)
+                markers = pd.read_csv(os.path.join(self.inDir, 'markers.csv'))
             except FileNotFoundError:
-                logger.info(f'Aborting; markers.csv file for {sample_name} not found.')
+                logger.info('Aborting; markers.csv file not found.')
                 sys.exit()
             
-            try:
-                glob.glob(
-                    os.path.join(self.inDir, sample_name, 'quantification', f'{key}*.csv'))[0]
-            except IndexError:
-                logger.info(
-                    f'sampleMetadata key {sample_name} in config.yml does not match a CSV filename.'
-                )
-                sys.exit()
-            
-            try:
-                glob.glob(
-                    os.path.join(self.inDir, sample_name, 'registration', f'{sample_name}*.tif'))[0] 
-            except IndexError:
-                logger.info(f'Aborting; OME-TIFF for {sample_name} not found.')
-                sys.exit()
+            for key in self.sampleNames.keys():
 
-            try:
-                glob.glob(
-                    os.path.join(self.inDir, sample_name, 'qc/s3seg',
-                                 f"{segmentation_method}-{sample_name}", 
-                                 f"{segmentation_object}*.tif"))[0]
-            except IndexError:
-                logger.info(f'Aborting; segmentation outlines for {sample_name} not found.')
+                sample_name = key.split('--')[0]
+                segmentation_method = key.split('--')[1].split('_')[0]
+                segmentation_object = key.split('--')[1].split('_')[1]
+
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, 'quantification', f'{key}*.csv'))[0]
+                except IndexError:
+                    logger.info(
+                        f'sampleMetadata key {sample_name} in config.yml does '
+                        'not match a CSV filename.'
+                    )
+                    sys.exit()
+
+                try:
+                    glob.glob(
+                        os.path.join(
+                            self.inDir, 'dearray', f'{sample_name}*.tif'))[0] 
+                except IndexError:
+                    logger.info(f'Aborting; OME-TIFF for sample {sample_name} not found.')
+                    sys.exit()
+
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, 'qc/s3seg',
+                                     f"{segmentation_method}-{sample_name}", 
+                                     f"{segmentation_object}*.tif"))[0]
+                except IndexError:
+                    logger.info(f'Aborting; segmentation outlines for sample {sample_name} '
+                                'not found.'
+                                )
+                    sys.exit()
+                
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, 'segmentation',
+                                     f"{segmentation_method}-{sample_name}",
+                                     f"{segmentation_object}*.tif"))[0]
+                except IndexError:
+                    logger.info(f'Aborting; segmentation mask for sample {sample_name} '
+                                'not found.'
+                                )
+                    sys.exit()
+
+            markers_filepath = os.path.join(self.inDir, 'markers.csv')
+            return 'mcmicro_TMA', markers_filepath
+
+        else:
+            # test for WSI data
+            # check that samples specified in config.yml each have a csv, tif, seg, and mask file
+            markers_list = []
+            for key in self.sampleNames.keys():
+                
+                sample_name = key.split('--')[0]
+                segmentation_method = key.split('--')[1].split('_')[0]
+                segmentation_object = key.split('--')[1].split('_')[1]
+
+                try:
+                    markers = pd.read_csv(os.path.join(self.inDir, sample_name, 'markers.csv'))
+                    markers_list.append(markers)
+                except FileNotFoundError:
+                    logger.info(f'Aborting; markers.csv file for sample {sample_name} not found.')
+                    sys.exit()
+                
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, sample_name, 'quantification', f'{key}*.csv'))[0]
+                except IndexError:
+                    logger.info(
+                        f'sampleMetadata key {sample_name} in config.yml does '
+                        'not match a CSV filename.'
+                    )
+                    sys.exit()
+                
+                try:
+                    glob.glob(
+                        os.path.join(
+                            self.inDir, sample_name, 'registration', f'{sample_name}*.tif'))[0] 
+                except IndexError:
+                    logger.info(f'Aborting; OME-TIFF for sample {sample_name} not found.')
+                    sys.exit()
+
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, sample_name, 'qc/s3seg',
+                                     f"{segmentation_method}-{sample_name}", 
+                                     f"{segmentation_object}*.tif"))[0]
+                except IndexError:
+                    logger.info(f'Aborting; segmentation outlines for sample {sample_name} '
+                                'not found.'
+                                )
+                    sys.exit()
+                
+                try:
+                    glob.glob(
+                        os.path.join(self.inDir, sample_name, 'segmentation',
+                                     f"{segmentation_method}-{sample_name}",
+                                     f"{segmentation_object}*.tif"))[0]
+                except IndexError:
+                    logger.info(f'Aborting; segmentation mask for sample {sample_name} '
+                                'not found.')
+                    sys.exit()
+
+            # check that all markers.csv files are identical (if not, which is one is correct?)
+            if not all(markers.equals(markers_list[0]) for markers in markers_list):
+                logger.info('Aborting; markers.csv files differ between samples.')
                 sys.exit()
             
-            try:
-                glob.glob(
-                    os.path.join(self.inDir, sample_name, 'segmentation',
-                                 f"{segmentation_method}-{sample_name}",
-                                 f"{segmentation_object}*.tif"))[0]
-            except IndexError:
-                logger.info(f'Aborting; segmentation mask for {sample_name} not found.')
-                sys.exit()
-
-        # check that all markers.csv files are identical (if not, which is one is correct?)
-        if not all(markers.equals(markers_list[0]) for markers in markers_list):
-            logger.info('Aborting; markers.csv files differ between samples.')
-            sys.exit()
-        
-        markers_filepath = os.path.join(
-            self.inDir, list(self.sampleNames.keys())[0].split('--')[0], 'markers.csv'
-        )
-        return 'mcmicro', markers_filepath
+            markers_filepath = os.path.join(
+                self.inDir, list(self.sampleNames.keys())[0].split('--')[0], 'markers.csv'
+            )
+            return 'mcmicro_WSI', markers_filepath
 
         ##########################################################################################
 
@@ -123,7 +187,7 @@ def input_check(self):
         [os.path.basename(path).split('.')[0] for path
          in glob.glob(os.path.join(self.inDir, 'csv', '*.csv'))]
     )
-    
+
     tif_names = set(
         [os.path.basename(path).split('.')[0] for path
          in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
@@ -140,6 +204,7 @@ def input_check(self):
     )
     
     if not all(s == csv_names for s in [csv_names, tif_names, seg_names, mask_names]):
+
         return False
     
     # check that file names specified in config.yml are contained in input directory
@@ -158,7 +223,7 @@ def get_filepath(self, check, sample, file_type):
     sampleMetadata_key = next(
         (key for key, val in self.sampleNames.items() if val == sample), None
     )
-    
+
     if check == 'standard':
         if file_type == 'CSV':
             file_path = os.path.join(self.inDir, 'csv', f"{sampleMetadata_key}.csv")
@@ -172,7 +237,30 @@ def get_filepath(self, check, sample, file_type):
             file_path = glob.glob(
                 os.path.join(self.inDir, 'mask', f"{sampleMetadata_key}.*tif"))[0]
 
-    else:
+    elif check == 'mcmicro_TMA':
+        sample_name = sampleMetadata_key.split('--')[0]
+        segmentation_method = sampleMetadata_key.split('--')[1].split('_')[0]
+        segmentation_object = sampleMetadata_key.split('--')[1].split('_')[1]
+
+        if file_type == 'CSV':
+            file_path = os.path.join(
+                self.inDir, 'quantification', f'{sampleMetadata_key}.csv'
+            )
+        if file_type == 'TIF':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'dearray', f"{sample_name}.*tif"))[0]
+        if file_type == 'SEG':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'qc/s3seg',
+                             f"{segmentation_method}-{sample_name}", 
+                             f"{segmentation_object}*.tif"))[0]
+        if file_type == 'MASK':
+            file_path = glob.glob(
+                os.path.join(self.inDir, 'segmentation',
+                             f"{segmentation_method}-{sample_name}", 
+                             f"{segmentation_object}*.tif"))[0]
+
+    elif check == 'mcmicro_WSI':
         sample_name = sampleMetadata_key.split('--')[0]
         segmentation_method = sampleMetadata_key.split('--')[1].split('_')[0]
         segmentation_object = sampleMetadata_key.split('--')[1].split('_')[1]
@@ -643,30 +731,6 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
         return reject, pvals_corrected
 
 
-# def clearRAM(print_usage=False):
-
-#     gc.collect()
-
-#     if print_usage:
-#         process = psutil.Process(os.getpid())
-
-#         # Only needed for internal debugging. Let's not add this to the full
-#         # dependency list.
-#         try:
-#             from hurry.filesize import size
-#             logger.info(size(process.memory_info().rss))
-#         except ImportError:
-#             logger.info("Please install hurry.filesize for this feature")
-
-
-# def open_file(filename):
-#     if sys.platform == "win32":
-#         os.startfile(filename)
-#     else:
-#         opener = "open" if sys.platform == "darwin" else "xdg-open"
-#         subprocess.run([opener, filename])
-
-
 def triangulate_ellipse(corners, num_segments=100):
 
     # from Napari's GitHub page: napari/napari/layers/shapes/_shapes_utils.py
@@ -746,19 +810,3 @@ def triangulate_ellipse(corners, num_segments=100):
     triangles[-1, 2] = 1
 
     return vertices, triangles
-
-
-# def dict_to_csv(dict, path):
-#     file = open(path, 'w')
-#     writer = csv.writer(file)
-#     for key, value in dict.items():
-#         writer.writerow([key, repr(value)])
-#     file.close()
-
-
-# def csv_to_dict(path):
-#     with open(path, 'r') as inp:
-#         reader = csv.reader(inp)
-#         dict = {rows[0]: rows[1] for rows in reader}
-#     return dict
-

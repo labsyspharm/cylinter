@@ -31,7 +31,8 @@ requirements:
     - magicgui
     - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
     - napari
-    - numpy <1.24 # avoids runtime errors in napari when empty polygon layer is added to viewer
+    # - numpy <1.24 # avoids runtime errors in napari when empty polygon layer is added to viewer
+    - numpy
     - natsort
     - numba
     - pandas
@@ -45,12 +46,11 @@ requirements:
     - seaborn
     - tifffile
     - umap-learn
-    - zarr <2.15  # zarr.LRUStoreCache() broken in current version, leads to blank images output from cellcutter
+    # - zarr <2.15  # zarr.LRUStoreCache() broken in current version, leads to blank images output from cellcutter
+    - zarr
     - pydantic <2.0  # avoids AttributeError: module 'pydantic._migration' has no attribute 'ModelMetaclass'
-    # - bokeh
     - svglib
     - pypdf2
-    # - pyQt6 # M2 chip may require pyQt6
 
 test:
   imports:

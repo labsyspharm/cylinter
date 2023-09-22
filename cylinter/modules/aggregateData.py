@@ -12,7 +12,7 @@ def aggregateData(data, self, args):
     print()
     
     check, markers_filepath = input_check(self)
-    
+
     markers, dna1, dna_moniker, abx_channels = read_markers(
         markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=None
     )
@@ -106,7 +106,7 @@ def aggregateData(data, self, args):
             # cols_update = [
             #     i.rsplit('_', 1)[0] if 'Mask' in i else
             #     i for i in csv.columns
-            #     ]
+            # ]
             # csv.columns = cols_update
 
             # add sample column
@@ -124,6 +124,7 @@ def aggregateData(data, self, args):
             # append the set of csv columns for sample to a list
             # this will be used to select columns shared among samples
             channel_setlist.append(set(csv.columns))
+
         else:
             logger.info(f'censoring sample {sample}')
     print()
