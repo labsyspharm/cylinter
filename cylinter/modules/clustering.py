@@ -1214,6 +1214,9 @@ def clustering(data, self, args):
 
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
+    # save dataframe in standard CSV format for analysis outside CyLinter
+    data.to_csv(os.path.join(self.outDir, 'checkpoints', 'clustering.csv'), index=False)
+
     print()
     print()
     return data

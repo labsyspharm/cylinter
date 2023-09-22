@@ -1241,18 +1241,24 @@ def metaQC(data, self, args):
         # to yield final clean data
         drop = reclass_storage_dict['noisy'][
             reclass_storage_dict['noisy']['QC_status'] == 'clean'].copy()
-        drop['handle'] = (
-            drop['CellID'].map(str) + '_' + drop['Sample']
-        )
+        
+        if not drop.empty:    
+            drop['handle'] = drop['CellID'].map(str) + '_' + drop['Sample']
+        else:
+            drop['handle'] = pd.Series()
+        
         dropped = cleaned_raw[~cleaned_raw['handle'].isin(drop['handle'])]
 
         # convert noisy data in predominantly clean clusters to clean
         # to yield final replace data
         replace = reclass_storage_dict['clean'][
             reclass_storage_dict['clean']['QC_status'] == 'noisy'].copy()
-        replace['handle'] = (
-            replace['CellID'].map(str) + '_' + replace['Sample']
-        )
+        
+        if not replace.empty:
+            replace['handle'] = replace['CellID'].map(str) + '_' + replace['Sample']
+        else:
+            replace['handle'] = pd.Series()
+        
         replaced = pre_qc[pre_qc['handle'].isin(replace['handle'])]
 
         data = pd.concat([dropped, replaced], axis=0)

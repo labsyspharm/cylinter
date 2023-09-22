@@ -1,6 +1,5 @@
 import os
 import sys
-import glob
 import yaml
 import pickle
 import logging
@@ -59,6 +58,7 @@ def callback(self, viewer, sample, data, initial_callback, next_widget, next_lay
         if os.path.exists(os.path.join(roi_dir, 'polygons.pkl')):
             f = open(os.path.join(roi_dir, 'polygons.pkl'), 'rb')
             polygon_dict = pickle.load(f)
+            
         else:
             # create polygon dictionary
             polygon_dict = {}
@@ -344,6 +344,8 @@ def selectROIs(data, self, args):
 
             napari.run()
 
+            print()
+
             ###################################################################
             # load polygon dictionary if it exists
 
@@ -357,8 +359,6 @@ def selectROIs(data, self, args):
                     'Please select ROIs.'
                 )
                 sys.exit()
-            
-            print()
             
             idxs_to_drop = {}
             for sample in samples:
@@ -441,19 +441,21 @@ def selectROIs(data, self, args):
                         'ROIs for this sample.'
                     )
                     sys.exit()
+                
             print()
 
             # drop cells from samples
-            for sample, cell_ids in idxs_to_drop.items():
-                if cell_ids:
-                    logger.info(f'Dropping cells from sample: {sample}')
-                    global_idxs_to_drop = data[
-                        (data['Sample'] == sample) 
-                        & (data['CellID'].isin(set(cell_ids)))].index
-                    data.drop(global_idxs_to_drop, inplace=True)
-                else:
-                    pass
-            print()
+            if not all([True if not value else False for value in idxs_to_drop.values()]):
+                for sample, cell_ids in idxs_to_drop.items():
+                    if cell_ids:
+                        logger.info(f'Dropping cells from sample: {sample}')
+                        global_idxs_to_drop = data[
+                            (data['Sample'] == sample) 
+                            & (data['CellID'].isin(set(cell_ids)))].index
+                        data.drop(global_idxs_to_drop, inplace=True)
+                    else:
+                        pass
+                print()
 
             # save plots of selected data points
             plot_dir = os.path.join(roi_dir, 'plots')
@@ -464,8 +466,8 @@ def selectROIs(data, self, args):
 
                 logger.info(f'Plotting ROI selections for sample: {sample}')
 
-                for file_path in glob.glob(f'{self.inDir}/tif/{sample}.*tif'):
-                    dna = imread(file_path, key=0)
+                file_path = get_filepath(self, check, sample, 'TIF')
+                dna = imread(file_path, key=0)
 
                 fig, ax = plt.subplots()
                 ax.imshow(dna, cmap='gray')

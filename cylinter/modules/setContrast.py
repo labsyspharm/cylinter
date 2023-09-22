@@ -247,12 +247,14 @@ def setContrast(data, self, args):
     for ch in abx_channels:
         medians = data[['Sample', ch]].groupby('Sample').median()
         percentile_value = medians.quantile(0.85).item()
-        sample = (medians[ch] == percentile_value).idxmax()
-        channels_to_samples[ch] = sample
+        differences = abs(medians - percentile_value)
+        # select sample whose median channel value is closest to quantile
+        selected_sample = differences.idxmin().item()  
+        channels_to_samples[ch] = selected_sample
 
     # pass first channel and sample in channels_to_samples to callback
     channel = list(channels_to_samples.keys())[0]
-    sample = channels_to_samples[list(channels_to_samples.keys())[0]] 
+    sample = channels_to_samples[channel] 
     
     initial_callback = True
     callback(

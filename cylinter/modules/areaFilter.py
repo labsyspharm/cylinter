@@ -3,6 +3,7 @@ import sys
 import logging
 import pickle
 
+import pandas as pd
 import numpy as np
 
 from natsort import natsorted
@@ -38,7 +39,12 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
     if sample in data['Sample'].unique():
         
         print()
-
+        
+        # FOR ALI
+        # data.drop(columns='Area', inplace=True)
+        # data.rename(columns={'N_distance': 'Area'}, inplace=True)
+        # data['Area'] = np.log(data['Area'])
+        
         check, markers_filepath = input_check(self)
 
         # read marker metadata
@@ -247,35 +253,43 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
             # get current cutoffs
             lowerCutoff, upperCutoff = update(val=None)
 
-            # add cutoffs to dictionary and store
-            cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
-            f = open(os.path.join(area_dir, 'cutoffs.pkl'), 'wb')
-            pickle.dump(cutoffs_dict, f)
-            f.close()
+            if lowerCutoff <= upperCutoff:
+           
+                # add cutoffs to dictionary and store
+                cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
+                f = open(os.path.join(area_dir, 'cutoffs.pkl'), 'wb')
+                pickle.dump(cutoffs_dict, f)
+                f.close()
 
-            # go to next sample
-            try:
-                if arbitrary_selection_toggle:
-                    sample_index -= 1 
+                # go to next sample
+                try:
+                    if arbitrary_selection_toggle:
+                        sample_index -= 1 
 
-                sample = samples[sample_index]
+                    sample = samples[sample_index]
+                    
+                    initial_callback = False
+                    callback(
+                        self, viewer, sample, samples, data, initial_callback,
+                        selection_widget, selection_layout, hist_widget, hist_layout,
+                        area_dir 
+                    )
+
+                    sample_index += 1
+                    arbitrary_selection_toggle = False
                 
-                initial_callback = False
-                callback(
-                    self, viewer, sample, samples, data, initial_callback,
-                    selection_widget, selection_layout, hist_widget, hist_layout,
-                    area_dir 
-                )
+                except IndexError:
 
-                sample_index += 1
-                arbitrary_selection_toggle = False
+                    print()
+                    napari_notification('Gating complete!')
+                    QTimer().singleShot(0, viewer.close)
             
-            except IndexError:
-
-                print()
-                napari_notification('Gating complete!')
-                QTimer().singleShot(0, viewer.close)
-
+            else:
+                napari_notification(
+                    'LowerCutoff (blue) must be lower than upperCutoff (red).'
+                )
+                pass
+        
         next_sample.native.setSizePolicy(
             QtWidgets.QSizePolicy.Maximum,
             QtWidgets.QSizePolicy.Maximum,
@@ -415,6 +429,9 @@ def areaFilter(data, self, args):
             lowerCutoff, upperCutoff = cutoffs_dict[sample]
             if lowerCutoff == upperCutoff:
                 logger.info(f'All data points selected for sample {sample}.')
+                # select all data points if sliders were not adjusted
+                lowerCutoff = np.log(group['Area']).min()
+                upperCutoff = np.log(group['Area']).max()
             else:
                 logger.info(
                     f'Applying cutoffs ({lowerCutoff:.3f}, '
@@ -439,12 +456,7 @@ def areaFilter(data, self, args):
             alpha=0.5, histtype='stepfilled',
             range=None, label='before'
         )
-        
-        # select all data points if sliders were not adjusted
-        if lowerCutoff == upperCutoff:
-            lowerCutoff = np.log(group['Area']).min()
-            upperCutoff = np.log(group['Area']).max()
-        
+
         # apply lower and upper cutoffs
         group_filtered = group.copy()[
             (np.log(group['Area']) > lowerCutoff) & (np.log(group['Area']) < upperCutoff)]
@@ -485,13 +497,17 @@ def areaFilter(data, self, args):
         data_to_drop = group.copy()[
             (np.log(group['Area']) < lowerCutoff) | (np.log(group['Area']) > upperCutoff)]
 
-        # create a column of unique IDs for cells to drop from current sample
-        data_to_drop['handle'] = data_to_drop['CellID'].map(str) + '_' + data_to_drop['Sample']
+        if not data_to_drop.empty:
+            # create a column of unique IDs for cells to drop from current sample
+            data_to_drop['handle'] = (
+                data_to_drop['CellID'].map(str) + '_' + data_to_drop['Sample']
+            )
 
-        # add IDs to idxs_to_drop dictionary
-        # sidxs_to_drop[sample] = [i for i in data_to_drop['handle']]
-        idxs_to_drop[sample] = data_to_drop['handle']
-
+            # add IDs to idxs_to_drop dictionary
+            idxs_to_drop[sample] = data_to_drop['handle']
+        else:
+            idxs_to_drop[sample] = pd.Series()
+    
     # create a column of unique IDs for cells in the full dataframe
     data['handle'] = data['CellID'].map(str) + '_' + data['Sample']
 

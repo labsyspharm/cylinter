@@ -272,35 +272,43 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
             # get current cutoffs
             lowerCutoff, upperCutoff = update(val=None)
 
-            # add cutoffs to dictionary and store
-            cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
-            f = open(os.path.join(cycles_dir, 'cutoffs.pkl'), 'wb')
-            pickle.dump(cutoffs_dict, f)
-            f.close()
-
-            # go to next sample
-            try:
-                if arbitrary_selection_toggle:
-                    sample_index -= 1 
-
-                sample = samples[sample_index]
-                
-                initial_callback = False
-                callback(
-                    self, viewer, sample, samples, data, ratios_melt, initial_callback,
-                    selection_widget, selection_layout, hist_widget, hist_layout,
-                    cycles_dir 
-                )
-
-                sample_index += 1
-                arbitrary_selection_toggle = False
+            if lowerCutoff <= upperCutoff:
             
-            except IndexError:
+                # add cutoffs to dictionary and store
+                cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
+                f = open(os.path.join(cycles_dir, 'cutoffs.pkl'), 'wb')
+                pickle.dump(cutoffs_dict, f)
+                f.close()
 
-                print()
-                napari_notification('Gating complete!')
-                QTimer().singleShot(0, viewer.close)
+                # go to next sample
+                try:
+                    if arbitrary_selection_toggle:
+                        sample_index -= 1 
 
+                    sample = samples[sample_index]
+                    
+                    initial_callback = False
+                    callback(
+                        self, viewer, sample, samples, data, ratios_melt, initial_callback,
+                        selection_widget, selection_layout, hist_widget, hist_layout,
+                        cycles_dir 
+                    )
+
+                    sample_index += 1
+                    arbitrary_selection_toggle = False
+                
+                except IndexError:
+
+                    print()
+                    napari_notification('Gating complete!')
+                    QTimer().singleShot(0, viewer.close)
+
+            else:
+                napari_notification(
+                    'LowerCutoff (blue) must be lower than upperCutoff (red).'
+                )
+                pass
+        
         next_sample.native.setSizePolicy(
             QtWidgets.QSizePolicy.Maximum,
             QtWidgets.QSizePolicy.Maximum,
@@ -490,7 +498,10 @@ def cycleCorrelation(data, self, args):
         try:
             lowerCutoff, upperCutoff = cutoffs_dict[sample]
             if lowerCutoff == upperCutoff:
-                logger.info(f'All data points selected for sample {sample}.')
+                logger.info(f'All data points selected for sample {sample}.')      
+                # select all data points if sliders were not adjusted
+                lowerCutoff = cycle_data['log10(ratio)'].min()
+                upperCutoff = cycle_data['log10(ratio)'].max()
             else:
                 logger.info(
                     f'Applying cutoffs ({lowerCutoff:.3f}, '
@@ -516,11 +527,6 @@ def cycleCorrelation(data, self, args):
             histtype='stepfilled', range=None, label='before'
         )
 
-        # select all data points if sliders were not adjusted
-        if lowerCutoff == upperCutoff:
-            lowerCutoff = cycle_data['log10(ratio)'].min()
-            upperCutoff = cycle_data['log10(ratio)'].max()
-
         # apply lower and upper cutoffs
         idxs = list(
             cycle_data['index'][
@@ -529,7 +535,7 @@ def cycleCorrelation(data, self, args):
         )
 
         cycle_data_filtered = cycle_data[~cycle_data['index'].isin(idxs)]
-        
+
         # plot DNA ratio histogram AFTER filtering
         counts, bins, patches = plt.hist(
             cycle_data_filtered['log10(ratio)'], bins=bins,
@@ -574,7 +580,7 @@ def cycleCorrelation(data, self, args):
     
     print()
 
-    logger.info(f'Plotting cycle correlation graphs')
+    logger.info('Plotting cycle correlation graphs')
     
     # grab dna and sample columns of filtered dataframe
     facet_input = data.loc[:, data.columns.str.contains(f'{dna_moniker}|Sample')].copy()
