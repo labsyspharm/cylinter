@@ -526,17 +526,26 @@ def selectROIs(data, self, args):
                         shapes = 'polygon'
                         polygons = None
                     
+                    if varname == 'ROI':
+                        if self.delintMode:
+                            edge_color = [1.0, 0.00, 1.0, 1.0]
+                        else:
+                            edge_color = [0.0, 0.66, 1.0, 1.0]
+                    elif varname == 'ROI2':
+                        edge_color = [1.0, 0.00, 1.0, 1.0]
+                        
                     viewer.add_shapes(
                             data=polygons, shape_type=shapes, ndim=2,
-                            face_color=[1.0, 1.0, 1.0, 0.2], edge_color=[0.0, 0.66, 1.0, 1.0],
+                            face_color=[1.0, 1.0, 1.0, 0.05], edge_color=[0.0, 0.66, 1.0, 1.0],
                             edge_width=10.0, name=varname
                     )
                 elif layer_type[varname] == 'point':
                     try:
-                        points = layer_data[sample]
+                        global artifact_mask
+                        points, artifact_mask = layer_data[sample]
                     except:
                         points = None
-                    viewer.add_points(points, ndim=2, face_color=[1.0, 0, 0, 1.0], 
+                    viewer.add_points(points, ndim=2, face_color=[1.0, 0, 0, 0.2], 
                                       edge_color=[0.0, 0.0, 0.0, 0.0],
                                       edge_width=0.0, name=varname, size=10.0)
             
@@ -576,7 +585,8 @@ def selectROIs(data, self, args):
                                 updated_layer_data.append((shape_type, roi))
                             extra_layers[varname][sample] = updated_layer_data
                         elif layer_type[varname] == 'point':
-                            updated_layer_data = layer.data
+                            global artifact_mask
+                            updated_layer_data = layer.data, artifact_mask
                             extra_layers[varname][sample] = updated_layer_data
 
                         f = open(os.path.join(roi_dir, filename), 'wb')
@@ -628,6 +638,7 @@ def selectROIs(data, self, args):
                 artifact_mask = [True] * len(data)
                 centroids = data[['Y_centroid', 'X_centroid']][artifact_mask]
                 viewer.layers[-1].add(centroids)
+
             
 
 
@@ -657,9 +668,10 @@ def selectROIs(data, self, args):
         ###################################################################
 
         idxs_to_drop = {}
+        samples = self.samplesForROISelection
         for sample in samples:
             try:
-                if extra_layers['ROI'][sample]:
+                if extra_layers['ROI'][sample] or extra_layers['Detected Artifacts']:
 
                     logger.info(f'Generating ROI mask(s) for sample: {sample}')
 
@@ -718,19 +730,22 @@ def selectROIs(data, self, args):
 
                     inter1 = ROI_mask[ys, xs]
                     global artifact_mask
-                    inter2 = ~ROI2_mask[ys, xs] * artifact_mask[ys, xs]
+                    inter2 = ~ROI2_mask[ys, xs] * artifact_mask
+                    print(sum(inter1))
+                    print(sum(inter2))
 
                     # update sample_data with boolean calls per cell
                     sample_data['inter1'] = inter1
                     sample_data['inter2'] = inter2
 
                     if self.delintMode is True:
+                        print(sum(sample_data['inter1'] | sample_data['inter2']))
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][sample_data['inter1'] * sample_data['inter2']]
+                            sample_data['CellID'][sample_data['inter1'] | sample_data['inter2']]
                         )
                     else:
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][~sample_data['inter1'] * sample_data['inter2']]
+                            sample_data['CellID'][~sample_data['inter1'] | sample_data['inter2']]
                         )
                 else:
                     logger.info(f'No ROIs selected for sample: {sample}')
