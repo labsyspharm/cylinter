@@ -481,9 +481,13 @@ def selectROIs(data, self, args):
             layer_type = {'ROI': 'shape', 
                         'ROI2': 'shape',
                         'Detected Artifacts': 'point'}
+            layer_name = {'ROI': 'Negative Selection' if self.delintMode else 'Positive Selection',
+                          'ROI2': 'Ignore Artifact Prediction Selection',
+                          'Detected Artifacts': 'Predicted Artifacts'}
         else:
             varname_filename_lst = [('ROI', 'polygons.pkl')]
             layer_type = {'ROI': 'shape'}
+            layer_name = {'ROI': 'Negative Selection' if self.delintMode else 'Positive Selection'}
         
 
         extra_layers = {}
@@ -574,7 +578,7 @@ def selectROIs(data, self, args):
                     viewer.add_shapes(
                                 data=polygons, shape_type=shapes, ndim=2,
                                 face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
-                                edge_width=10.0, name=varname
+                                edge_width=10.0, name=layer_name[varname]
                     )
                 elif layer_type[varname] == 'point':
                     if self.autoArtifactDetection:
@@ -589,7 +593,7 @@ def selectROIs(data, self, args):
                         viewer.add_points(points, ndim=2, 
                                         #face_color=[1.0, 0, 0, 0.2], 
                                         edge_color=[0.0, 0.0, 0.0, 0.0],
-                                        edge_width=0.0, name=varname, size=10.0,
+                                        edge_width=0.0, name=layer_name[varname], size=10.0,
                                         face_color_cycle={1:'white', 2:'red', 3:'blue', 4:'green', 5:'cyan', 6:'magenta'},
                                         face_color='artifact_class',
                                         features={'artifact_class': np.array(artifact_mask_, dtype=int)})
