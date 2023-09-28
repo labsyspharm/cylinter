@@ -170,7 +170,6 @@ def selectROIs(data, self, args):
 
             # ROI selection channel, as well as ROI2 and labeled artifacts
             for varname, layer_data in extra_layers.items():
-                print(varname, layer_type[varname])
                 if layer_type[varname] == 'shape':
                     try:
                         shapes = [shape_data[0] for shape_data in layer_data[sample]]
@@ -199,7 +198,6 @@ def selectROIs(data, self, args):
                             artifact_mask_ = global_state.artifact_mask[global_state.binarized_artifact_mask]
                             artifact_proba_ = global_state.artifact_proba[global_state.binarized_artifact_mask]
                         except:
-                            print("no artifacts loaded")
                             points = None
                             artifact_mask_ = []
                             artifact_proba_ = []
@@ -256,7 +254,6 @@ def selectROIs(data, self, args):
                             extra_layers[varname][sample] = updated_layer_data
 
                         f = open(os.path.join(roi_dir, filename), 'wb')
-                        print(varname, extra_layers[varname])
                         pickle.dump(extra_layers[varname], f)
                         f.close()
 
@@ -275,7 +272,7 @@ def selectROIs(data, self, args):
                     add_widgets(last_sample, sample)
                 except StopIteration:
                     print()
-                    napari_notification('Gating complete!')
+                    napari_notification('ROI selection complete')
                     QTimer().singleShot(0, viewer.close)
 
             next_sample.sample.bind(sample) #should bind first sample_id
@@ -298,12 +295,13 @@ def selectROIs(data, self, args):
             @magicgui(
                 proba_threshold={'label': 'Threshold',
                                  'widget_type': 'FloatSlider',
-                                 'min': 0.,
-                                 'max': 1.,
-                                 'step': 0.01},
+                                 'min': 0.001,
+                                 'max': 0.999,
+                                 'step': 0.001},
                 call_button="Auto label artifacts"
             )
             def label_artifacts(proba_threshold: float = 0.5):
+                viewer.layers.selection.active = viewer.layers[-1]
                 viewer.layers[-1].data = None
                 global_state.artifact_detection_threshold = proba_threshold
                 global_state.artifact_mask, class_probas = artifact_detection_model(data)
@@ -318,16 +316,19 @@ def selectROIs(data, self, args):
                 points_layer.face_color[:, -1] = np.array(artifact_proba[binarized_artifact_mask])
                 points_layer.refresh()
                 points_layer.face_color_mode = 'cycle'
+                viewer.layers.selection.active = viewer.layers[-2]
 
             @label_artifacts.proba_threshold.changed.connect
             def on_slider_changed(threshold):
+                viewer.layers.selection.active = viewer.layers[-1] # consider using resource management "with...as" here
                 points_layer = viewer.layers[-1]
                 global_state.artifact_detection_threshold = threshold
                 points_layer.face_color_mode = 'direct'
                 proba = np.array(global_state.artifact_proba[global_state.binarized_artifact_mask])
-                points_layer.face_color[:, -1] = np.maximum(0, (proba - threshold) / (np.max(proba) - threshold))
+                points_layer.face_color[:, -1] = np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
                 points_layer.face_color_mode = 'cycle'
+                viewer.layers.selection.active = viewer.layers[-2]
 
 
 
