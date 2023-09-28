@@ -52,6 +52,7 @@ class Config:
         config.delintMode = bool(data['delintMode'])
         config.showAbChannels = bool(data['showAbChannels'])
         config.samplesForROISelection = list(data['samplesForROISelection'])
+        config.autoArtifactDetection = bool(data['autoArtifactDetection'])
 
         config.numBinsIntensity = int(data['numBinsIntensity'])
 
