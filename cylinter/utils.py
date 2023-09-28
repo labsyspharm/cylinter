@@ -202,7 +202,6 @@ def input_check(self):
         [os.path.basename(path).split('.')[0] for path
          in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
     )
-    
     if not all(s == csv_names for s in [csv_names, tif_names, seg_names, mask_names]):
 
         return False
@@ -360,8 +359,8 @@ def single_channel_pyramid(tiff_path, channel):
 
             pyramid = [da.from_zarr(z) for z in pyramid]
 
-            min_val = pyramid[0].min()
-            max_val = pyramid[0].max()
+            min_val = pyramid[-1].min()
+            max_val = pyramid[-1].max()
             vmin, vmax = da.compute(min_val, max_val)
 
         else:
