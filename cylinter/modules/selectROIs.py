@@ -89,12 +89,18 @@ def selectROIs(data, self, args):
 
         ### Load data for the data layer(s), i.e., polygon dicts, and potentially
         ### the points corresponding to centroids of cells classified as artifacts.
-        varname_filename_lst = [('ROI', 'polygons.pkl'),
-                            ('ROI2', 'polygons2.pkl'),
-                            ('Detected Artifacts', 'points.pkl')]
-        layer_type = {'ROI': 'shape', 
-                      'ROI2': 'shape',
-                      'Detected Artifacts': 'point'}
+        if self.autoArtifactDetection:
+            varname_filename_lst = [('ROI', 'polygons.pkl'),
+                                ('ROI2', 'polygons2.pkl'),
+                                ('Detected Artifacts', 'points.pkl')]
+            layer_type = {'ROI': 'shape', 
+                        'ROI2': 'shape',
+                        'Detected Artifacts': 'point'}
+        else:
+            varname_filename_lst = [('ROI', 'polygons.pkl')]
+            layer_type = {'ROI': 'shape'}
+        
+
         extra_layers = {}
         for varname, fname in varname_filename_lst:
             if os.path.exists(os.path.join(roi_dir, fname)):
@@ -180,34 +186,35 @@ def selectROIs(data, self, args):
                             edge_color = [0.0, 0.66, 1.0, 1.0]
                     elif varname == 'ROI2':
                         edge_color = [0.0, 0.66, 1.0, 1.0]
-                        
+                    
                     viewer.add_shapes(
-                            data=polygons, shape_type=shapes, ndim=2,
-                            face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
-                            edge_width=10.0, name=varname
+                                data=polygons, shape_type=shapes, ndim=2,
+                                face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
+                                edge_width=10.0, name=varname
                     )
                 elif layer_type[varname] == 'point':
-                    try:
-                        points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
-                        artifact_mask_ = global_state.artifact_mask[global_state.binarized_artifact_mask]
-                        artifact_proba_ = global_state.artifact_proba[global_state.binarized_artifact_mask]
-                    except:
-                        print("no artifacts loaded")
-                        points = None
-                        artifact_mask_ = []
-                        artifact_proba_ = []
-                    viewer.add_points(points, ndim=2, 
-                                      #face_color=[1.0, 0, 0, 0.2], 
-                                      edge_color=[0.0, 0.0, 0.0, 0.0],
-                                      edge_width=0.0, name=varname, size=10.0,
-                                      face_color_cycle={1:'white', 2:'red', 3:'blue', 4:'green', 5:'cyan', 6:'magenta'},
-                                      face_color='artifact_class',
-                                      features={'artifact_class': np.array(artifact_mask_, dtype=int)})
-                    points_layer = viewer.layers[-1]
-                    points_layer.face_color_mode = 'direct'
-                    points_layer.face_color[:, -1] * np.array(artifact_proba_)
-                    points_layer.refresh()
-                    points_layer.face_color_mode = 'cycle'
+                    if self.autoArtifactDetection:
+                        try:
+                            points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
+                            artifact_mask_ = global_state.artifact_mask[global_state.binarized_artifact_mask]
+                            artifact_proba_ = global_state.artifact_proba[global_state.binarized_artifact_mask]
+                        except:
+                            print("no artifacts loaded")
+                            points = None
+                            artifact_mask_ = []
+                            artifact_proba_ = []
+                        viewer.add_points(points, ndim=2, 
+                                        #face_color=[1.0, 0, 0, 0.2], 
+                                        edge_color=[0.0, 0.0, 0.0, 0.0],
+                                        edge_width=0.0, name=varname, size=10.0,
+                                        face_color_cycle={1:'white', 2:'red', 3:'blue', 4:'green', 5:'cyan', 6:'magenta'},
+                                        face_color='artifact_class',
+                                        features={'artifact_class': np.array(artifact_mask_, dtype=int)})
+                        points_layer = viewer.layers[-1]
+                        points_layer.face_color_mode = 'direct'
+                        points_layer.face_color[:, -1] * np.array(artifact_proba_)
+                        points_layer.refresh()
+                        points_layer.face_color_mode = 'cycle'
             
 
             ### Apply previously defined contrast limits if they exist
@@ -288,7 +295,6 @@ def selectROIs(data, self, args):
                 add_widgets(last_sample, next_sample)
             arbitrary_sample.sample.bind(sample)
 
-
             @magicgui(
                 proba_threshold={'label': 'Threshold',
                                  'widget_type': 'FloatSlider',
@@ -325,7 +331,9 @@ def selectROIs(data, self, args):
 
 
 
-            widgets = [next_sample, arbitrary_sample, label_artifacts]
+            widgets = [next_sample, arbitrary_sample]
+            if self.autoArtifactDetection:
+                widgets.append(label_artifacts)
             widget_names = [f'Sample {sample}', 'Arbitrary Sample Selection', 'Automation Module']
             napari_widgets = []
             for widget, widget_name in zip(widgets, widget_names):
@@ -354,7 +362,8 @@ def selectROIs(data, self, args):
         samples = self.samplesForROISelection
         for sample in samples:
             try:
-                if extra_layers['ROI'][sample] or extra_layers['Detected Artifacts']:
+                have_artifact_layer = extra_layers['Detected Artifacts'] if self.autoArtifactDetection else False
+                if extra_layers['ROI'][sample] or have_artifact_layer:
 
                     logger.info(f'Generating ROI mask(s) for sample: {sample}')
 
@@ -405,29 +414,29 @@ def selectROIs(data, self, args):
                         mask = np.array(img, dtype=bool)
                         return mask
                     
-                    ROI_mask = shape_layer_to_mask(extra_layers['ROI'][sample])
-                    ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
                     # use numpy fancy indexing to get centroids
                     # where boolean mask is True
                     xs, ys = zip(*sample_data['tuple'])
-
+                    ROI_mask = shape_layer_to_mask(extra_layers['ROI'][sample])
                     inter1 = ROI_mask[ys, xs]
-                    if global_state.artifact_mask == []:
-                        global_state.artifact_mask = np.array([1]*len(xs))
-                    inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask!=1) & (global_state.artifact_proba > global_state.artifact_detection_threshold) # there's hard-coded assumption here about class 1 is the clean cell class that we want to keep
-
-                    # update sample_data with boolean calls per cell
                     sample_data['inter1'] = inter1
-                    sample_data['inter2'] = inter2
 
+                    autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0 # might want to keep track if auto artifact detection is used separately in the global state
+                    if self.autoArtifactDetection and autoArtifactDetectionUsed:
+                        ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
+                        if global_state.artifact_mask == []:
+                            global_state.artifact_mask = np.array([1]*len(xs))
+                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask!=1) & (global_state.artifact_proba > global_state.artifact_detection_threshold) 
+                        sample_data['inter2'] = inter2
+
+                    drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False 
                     if self.delintMode is True:
-                        print(sum(sample_data['inter1'] | sample_data['inter2']))
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][sample_data['inter1'] | sample_data['inter2']]
+                            sample_data['CellID'][sample_data['inter1'] | drop_artifact_ids]
                         )
                     else:
                         idxs_to_drop[sample] = list(
-                            sample_data['CellID'][~sample_data['inter1'] | sample_data['inter2']]
+                            sample_data['CellID'][~sample_data['inter1'] | drop_artifact_ids]
                         )
                 else:
                     logger.info(f'No ROIs selected for sample: {sample}')

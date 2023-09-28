@@ -51,6 +51,7 @@ def run_pipeline(config, start_module_name):
         delintMode=config.delintMode,
         showAbChannels=config.showAbChannels,
         samplesForROISelection=config.samplesForROISelection,
+        autoArtifactDetection=config.autoArtifactDetection,
 
         numBinsIntensity=config.numBinsIntensity,
 
