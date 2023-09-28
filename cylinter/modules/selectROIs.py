@@ -15,10 +15,7 @@ from matplotlib.backends.qt_compat import QtWidgets
 from qtpy.QtCore import QTimer
 
 import napari
-from napari.layers.points.points import Points
-
 from magicgui import magicgui
-from magicgui import widgets
 
 from ..utils import (
     input_check, read_markers, get_filepath, marker_channel_number, napari_notification,
@@ -27,14 +24,31 @@ from ..utils import (
 
 import pickle as pkl
 from pathlib import Path
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-arbitrary_selection_toggle = False
+@dataclass
+class GlobalState():
+    base_clf = None
+    _artifact_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=int))
+    binarized_artifact_mask: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
+    artifact_proba: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    artifact_detection_threshold: float = 0.5
+
+    @property
+    def artifact_mask(self):
+        return self._artifact_mask
+    
+    @artifact_mask.setter
+    def artifact_mask(self, data: np.ndarray):
+        self._artifact_mask = data
+        self.binarized_artifact_mask = self.artifact_mask != 1 # may need to remove this hard-coded assumption later
+
 
 def selectROIs(data, self, args):
 
-    base_clf = None
+    global_state = GlobalState()
 
     check, markers_filepath = input_check(self)
     
@@ -91,13 +105,11 @@ def selectROIs(data, self, args):
         
         ###################################################################
         def artifact_detection_model(data):
-            nonlocal base_clf
-
-            if base_clf is None:
+            if global_state.base_clf is None:
                 model_path = os.path.join(Path(__file__).absolute().parent, 
                                           '../pretrained_models/pretrained_model.pkl')
                 with open(model_path, 'rb') as f:
-                    base_clf = pkl.load(f)
+                    global_state.base_clf = pkl.load(f)
 
             ################# Consider put this into the sklearn pipeline?!
             ### make sure to strip off cell_id first
@@ -114,8 +126,8 @@ def selectROIs(data, self, args):
             model_input = model_input[marker_list]
 
             #clf_probs = base_clf.predict_proba(data.values)
-            clf_preds = base_clf.predict(model_input)
-            clf_proba = base_clf.predict_proba(model_input)
+            clf_preds = global_state.base_clf.predict(model_input)
+            clf_proba = global_state.base_clf.predict_proba(model_input)
             #####################################################
             return clf_preds, clf_proba
     
@@ -176,10 +188,9 @@ def selectROIs(data, self, args):
                     )
                 elif layer_type[varname] == 'point':
                     try:
-                        global artifact_mask, artifact_proba
-                        points, artifact_mask, artifact_proba = layer_data[sample]
-                        artifact_mask_ = artifact_mask[artifact_mask!=1]
-                        artifact_proba_ = artifact_proba[artifact_mask!=1]
+                        points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
+                        artifact_mask_ = global_state.artifact_mask[global_state.binarized_artifact_mask]
+                        artifact_proba_ = global_state.artifact_proba[global_state.binarized_artifact_mask]
                     except:
                         print("no artifacts loaded")
                         points = None
@@ -234,8 +245,7 @@ def selectROIs(data, self, args):
                                 updated_layer_data.append((shape_type, roi))
                             extra_layers[varname][sample] = updated_layer_data
                         elif layer_type[varname] == 'point':
-                            global artifact_mask, artifact_proba
-                            updated_layer_data = layer.data, artifact_mask, artifact_proba
+                            updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
                             extra_layers[varname][sample] = updated_layer_data
 
                         f = open(os.path.join(roi_dir, filename), 'wb')
@@ -289,11 +299,10 @@ def selectROIs(data, self, args):
             )
             def label_artifacts(proba_threshold: float = 0.5):
                 viewer.layers[-1].data = None
-                global artifact_mask, artifact_proba, artifact_detection_threshold
-                artifact_detection_threshold = proba_threshold
-                artifact_mask, class_probas = artifact_detection_model(data)
-                artifact_proba = 1-class_probas[:, 0]
-                binarized_artifact_mask = artifact_mask != 1                 
+                global_state.artifact_detection_threshold = proba_threshold
+                global_state.artifact_mask, class_probas = artifact_detection_model(data)
+                global_state.artifact_proba = 1-class_probas[:, 0]
+                artifact_mask, binarized_artifact_mask, artifact_proba = global_state.artifact_mask, global_state.binarized_artifact_mask, global_state.artifact_proba
                 centroids = data[['Y_centroid', 'X_centroid']][binarized_artifact_mask]
                 points_layer = viewer.layers[-1]
                 points_layer.add(centroids)
@@ -307,11 +316,9 @@ def selectROIs(data, self, args):
             @label_artifacts.proba_threshold.changed.connect
             def on_slider_changed(threshold):
                 points_layer = viewer.layers[-1]
-                global artifact_mask, artifact_proba, artifact_detection_threshold
-                artifact_detection_threshold = threshold
-                binarized_artifact_mask = artifact_mask != 1
+                global_state.artifact_detection_threshold = threshold
                 points_layer.face_color_mode = 'direct'
-                proba = np.array(artifact_proba[binarized_artifact_mask])
+                proba = np.array(global_state.artifact_proba[global_state.binarized_artifact_mask])
                 points_layer.face_color[:, -1] = np.maximum(0, (proba - threshold) / (np.max(proba) - threshold))
                 points_layer.refresh()
                 points_layer.face_color_mode = 'cycle'
@@ -405,11 +412,9 @@ def selectROIs(data, self, args):
                     xs, ys = zip(*sample_data['tuple'])
 
                     inter1 = ROI_mask[ys, xs]
-                    global artifact_mask, artifact_proba, artifact_detection_threshold
-                    if artifact_mask == []:
-                        artifact_mask = [1]*len(xs)
-                    artifact_mask = np.array(artifact_mask)
-                    inter2 = ~ROI2_mask[ys, xs] & (artifact_mask!=1) & (artifact_proba > artifact_detection_threshold) # there's hard-coded assumption here about class 1 is the clean cell class that we want to keep
+                    if global_state.artifact_mask == []:
+                        global_state.artifact_mask = np.array([1]*len(xs))
+                    inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask!=1) & (global_state.artifact_proba > global_state.artifact_detection_threshold) # there's hard-coded assumption here about class 1 is the clean cell class that we want to keep
 
                     # update sample_data with boolean calls per cell
                     sample_data['inter1'] = inter1
