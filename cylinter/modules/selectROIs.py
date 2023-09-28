@@ -216,7 +216,6 @@ def selectROIs(data, self, args):
                         points_layer.face_color_mode = 'direct'
                         points_layer.face_color[:, -1] * np.array(artifact_proba_)
                         points_layer.refresh()
-                        points_layer.face_color_mode = 'cycle'
             
 
             ### Apply previously defined contrast limits if they exist
@@ -313,13 +312,13 @@ def selectROIs(data, self, args):
                 artifact_mask, binarized_artifact_mask, artifact_proba = global_state.artifact_mask, global_state.binarized_artifact_mask, global_state.artifact_proba
                 centroids = data[['Y_centroid', 'X_centroid']][binarized_artifact_mask]
                 points_layer = viewer.layers[-1]
+                points_layer.face_color_mode = 'cycle'
                 points_layer.add(centroids)
                 points_layer.features.loc[-len(centroids):, 'artifact_class'] = artifact_mask[binarized_artifact_mask]
                 points_layer.refresh_colors()
                 points_layer.face_color_mode = 'direct'
                 points_layer.face_color[:, -1] = np.array(artifact_proba[binarized_artifact_mask])
                 points_layer.refresh()
-                points_layer.face_color_mode = 'cycle'
                 viewer.layers.selection.active = viewer.layers[-2]
 
             @label_artifacts.proba_threshold.changed.connect
@@ -331,7 +330,6 @@ def selectROIs(data, self, args):
                 proba = np.array(global_state.artifact_proba[global_state.binarized_artifact_mask])
                 points_layer.face_color[:, -1] = np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
-                points_layer.face_color_mode = 'cycle'
                 viewer.layers.selection.active = viewer.layers[-2]
 
 
