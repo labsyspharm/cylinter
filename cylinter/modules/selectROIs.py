@@ -526,6 +526,23 @@ def selectROIs(data, self, args):
             #####################################################
             return clf_preds, clf_proba
     
+        def save_shapes(sample):
+            for i, tupl in enumerate(varname_filename_lst[::-1]):
+                varname, filename = tupl
+                updated_layer_data = []
+                layer = viewer.layers[-(i+1)]
+                if layer_type[varname] == 'shape':
+                    for shape_type, roi in zip(layer.shape_type, layer.data):
+                        updated_layer_data.append((shape_type, roi))
+                    extra_layers[varname][sample] = updated_layer_data
+                elif layer_type[varname] == 'point':
+                    updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
+                    extra_layers[varname][sample] = updated_layer_data
+
+                f = open(os.path.join(roi_dir, filename), 'wb')
+                pickle.dump(extra_layers[varname], f)
+                f.close()
+
         def add_layers(sample):
             # antibody/immunomarker channels
             if self.showAbChannels:
@@ -629,23 +646,7 @@ def selectROIs(data, self, args):
             def next_sample(last_sample, sample, widgets):
                 try: 
                     # update ROI and other shape layers
-                    for i, tupl in enumerate(varname_filename_lst[::-1]):
-                        varname, filename = tupl
-                        updated_layer_data = []
-                        layer = viewer.layers[-(i+1)]
-                        if layer_type[varname] == 'shape':
-                            for shape_type, roi in zip(layer.shape_type, layer.data):
-                                updated_layer_data.append((shape_type, roi))
-                            extra_layers[varname][sample] = updated_layer_data
-                        elif layer_type[varname] == 'point':
-                            updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
-                            extra_layers[varname][sample] = updated_layer_data
-
-                        f = open(os.path.join(roi_dir, filename), 'wb')
-                        pickle.dump(extra_layers[varname], f)
-                        f.close()
-
-                    napari_notification(f'ROI(s) applied to sample {sample}.')
+                    save_shapes(sample)
 
                     # move to next sample and re-render the GUI
                     if last_sample is None:
@@ -658,6 +659,7 @@ def selectROIs(data, self, args):
                     clear_widgets(widgets)
                     add_layers(sample)
                     add_widgets(last_sample, sample)
+                    napari_notification(f'ROI(s) applied to sample {sample}.')
                 except StopIteration:
                     print()
                     napari_notification('ROI selection complete')
@@ -674,6 +676,7 @@ def selectROIs(data, self, args):
                 global last_sample
                 if last_sample is None:
                     last_sample = sample
+                save_shapes(sample)
                 viewer.layers.clear()
                 clear_widgets(widgets)
                 add_layers(next_sample)
@@ -713,7 +716,8 @@ def selectROIs(data, self, args):
                 global_state.artifact_detection_threshold = threshold
                 points_layer.face_color_mode = 'direct'
                 proba = np.array(global_state.artifact_proba[global_state.binarized_artifact_mask])
-                points_layer.face_color[:, -1] = np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
+                points_layer.face_color[:, -1] = np.piecewise(proba, [proba < threshold, proba > threshold], [lambda v: 0, lambda v: (v-threshold)/(1-threshold)*(1-0.3)+0.3])                
+                # np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
                 viewer.layers.selection.active = viewer.layers[-2]
 
