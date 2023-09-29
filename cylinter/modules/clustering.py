@@ -112,7 +112,7 @@ def clustering(data, self, args):
                 clustering_input = data[['emb1', 'emb2']]
             except ValueError:
                 logger.info(
-                    'Aborting; the number of rows in the dataframe differs from the embedding. '
+                    'Aborting; the number of rows in the dataframe differs from embedding.npy. '
                     'Ensure that the dataframe contains the same cells referred to in the ' 
                     'embedding or re-embed the current dataframe after removing the existing '
                     'embedding.'
