@@ -90,19 +90,19 @@ def selectROIs(data, self, args):
         ### Load data for the data layer(s), i.e., polygon dicts, and potentially
         ### the points corresponding to centroids of cells classified as artifacts.
         if self.autoArtifactDetection:
-            varname_filename_lst = [('ROI', 'polygons.pkl'),
-                                ('ROI2', 'polygons2.pkl'),
+            varname_filename_lst = [('ROI', 'ROI_selection.pkl'),
+                                ('ROI2', 'artifact_pred_selection.pkl'),
                                 ('Detected Artifacts', 'points.pkl')]
             layer_type = {'ROI': 'shape', 
                         'ROI2': 'shape',
                         'Detected Artifacts': 'point'}
-            layer_name = {'ROI': 'Negative Selection' if self.delintMode else 'Positive Selection',
+            layer_name = {'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
                           'ROI2': 'Ignore Artifact Prediction Selection',
                           'Detected Artifacts': 'Predicted Artifacts'}
         else:
-            varname_filename_lst = [('ROI', 'polygons.pkl')]
+            varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
             layer_type = {'ROI': 'shape'}
-            layer_name = {'ROI': 'Negative Selection' if self.delintMode else 'Positive Selection'}
+            layer_name = {'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection'}
         
 
         extra_layers = {}
@@ -427,8 +427,6 @@ def selectROIs(data, self, args):
                     autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0 # might want to keep track if auto artifact detection is used separately in the global state
                     if self.autoArtifactDetection and autoArtifactDetectionUsed:
                         ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
-                        if global_state.artifact_mask == []:
-                            global_state.artifact_mask = np.array([1]*len(xs))
                         inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask!=1) & (global_state.artifact_proba > global_state.artifact_detection_threshold) 
                         sample_data['inter2'] = inter2
 
