@@ -84,6 +84,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
         # plot raw facets
         col_wrap = 5
         sns.set_style('white')
+
         g_raw = sns.FacetGrid(
             hist_facet, col='for_plot', col_wrap=col_wrap, height=1.27,
             aspect=(1.27 / 1.27), sharex=True, sharey=False

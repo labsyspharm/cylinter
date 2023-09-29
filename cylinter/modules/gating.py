@@ -467,8 +467,7 @@ def callback(self, viewer, data, zeros, hist_widget, hist_layout, selection_widg
             
             if math.isnan(zeros.loc[row]['gate']):
                 napari_notification(
-                    "Gate not saved; select a gate then click " 
-                    "'Apply Gate and Move to Next Sample -->'."
+                    "Select a gate then click 'Apply Gate and Move to Next Sample -->'."
                 )
             else:
                 if zeros['gate'].isnull().any():

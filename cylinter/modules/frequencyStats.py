@@ -86,7 +86,7 @@ def frequencyStats(data, self, args):
                             
                             logger.info(
                                 f'Calculating log2({test}/{control}) of mean cell '
-                                f'density for cluster {str(cluster)}.')
+                                f'density for population {str(cluster)}.')
 
                             group = (
                                 group.groupby(['Sample', 'Replicate', type])
