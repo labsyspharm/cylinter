@@ -30,8 +30,8 @@ requirements:
     - joblib
     - magicgui
     - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
+    # - matplotlib
     - napari
-    # - numpy <1.24 # avoids runtime errors in napari when empty polygon layer is added to viewer
     - numpy
     - natsort
     - numba
@@ -41,14 +41,13 @@ requirements:
     - pyyaml
     - qtpy
     - scikit-image
-    - scikit-learn <1.3 # avoids error in FAST_METRICS = KDTree.valid_metrics + BallTree.valid_metrics + ["cosine", "arccos"]
+    # - scikit-learn
+    - scikit-learn <= 1.2.2  # avoids InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.2.2 when using version 1.3.1. because artifact detection model was built using v1.2.2
     - scipy
     - seaborn
     - tifffile
     - umap-learn
-    # - zarr <2.15  # zarr.LRUStoreCache() broken in current version, leads to blank images output from cellcutter
     - zarr
-    - pydantic <2.0  # avoids AttributeError: module 'pydantic._migration' has no attribute 'ModelMetaclass'
     - svglib
     - pypdf2
 
