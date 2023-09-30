@@ -124,7 +124,7 @@ def selectROIs(data, self, args):
             # Consider put this into the sklearn pipeline?!
             # make sure to strip off cell_id first
             if ('CellID' in data.columns):
-                model_input = data.loc[:,data.columns!='CellID']
+                model_input = data.loc[:, data.columns != 'CellID']
             
             # keep just relevant columns
             marker_list = [
@@ -147,7 +147,7 @@ def selectROIs(data, self, args):
             for i, tupl in enumerate(varname_filename_lst[::-1]):
                 varname, filename = tupl
                 updated_layer_data = []
-                layer = viewer.layers[-(i+1)]
+                layer = viewer.layers[-(i + 1)]
                 if layer_type[varname] == 'shape':
                     for shape_type, roi in zip(layer.shape_type, layer.data):
                         updated_layer_data.append((shape_type, roi))
@@ -238,7 +238,7 @@ def selectROIs(data, self, args):
                                 'magenta'
                             }, face_color='artifact_class',
                             features={'artifact_class': np.array(artifact_mask_, dtype=int)}
-                        ) # face_color=[1.0, 0, 0, 0.2],
+                        )  # face_color=[1.0, 0, 0, 0.2],
                         points_layer = viewer.layers[-1]
                         points_layer.face_color_mode = 'direct'
                         points_layer.face_color[:, -1] * np.array(artifact_proba_)
@@ -406,7 +406,7 @@ def selectROIs(data, self, args):
 
                     # create pillow image to convert into boolean mask
                     def shape_layer_to_mask(layer_data):
-                        img = Image.new('L', (dna.shape[1], dna.shape[0]))
+                        img = Image.new('L', (dna[0].shape[1], dna[0].shape[0]))
 
                         for shape_type, verts in layer_data:
 
@@ -450,8 +450,7 @@ def selectROIs(data, self, args):
                     autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0  # might want to keep track if auto artifact detection is used separately in the global state
                     if self.autoArtifactDetection and autoArtifactDetectionUsed:
                         ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
-                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & 
-                        (global_state.artifact_proba > global_state.artifact_detection_threshold) 
+                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & (global_state.artifact_proba > global_state.artifact_detection_threshold)
                         sample_data['inter2'] = inter2
 
                     drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False 
@@ -502,7 +501,7 @@ def selectROIs(data, self, args):
             dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             fig, ax = plt.subplots()
-            ax.imshow(dna, cmap='gray')
+            ax.imshow(dna[0], cmap='gray')
             ax.grid(False)
             ax.set_axis_off()
             coords = data[['X_centroid', 'Y_centroid', 'Area']][
@@ -525,4 +524,3 @@ def selectROIs(data, self, args):
     print()
     print()
     return data
-
