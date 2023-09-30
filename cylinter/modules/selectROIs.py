@@ -153,8 +153,7 @@ def selectROIs(data, self, args):
                         updated_layer_data.append((shape_type, roi))
                     extra_layers[varname][sample] = updated_layer_data
                 elif layer_type[varname] == 'point':
-                    updated_layer_data = layer.data, global_state.artifact_mask,
-                    global_state.artifact_proba
+                    updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
                     extra_layers[varname][sample] = updated_layer_data
 
                 f = open(os.path.join(roi_dir, filename), 'wb')
@@ -218,8 +217,7 @@ def selectROIs(data, self, args):
                 elif layer_type[varname] == 'point':
                     if self.autoArtifactDetection:
                         try:
-                            points, global_state.artifact_mask,
-                            global_state.artifact_proba = layer_data[sample]
+                            points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
                             artifact_mask_ = (
                                 global_state.artifact_mask[global_state.binarized_artifact_mask]
                             )
