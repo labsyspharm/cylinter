@@ -3,6 +3,8 @@ import sys
 import yaml
 import pickle
 import logging
+from pathlib import Path
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -21,11 +23,8 @@ from ..utils import (
     single_channel_pyramid, triangulate_ellipse, reorganize_dfcolumns
 )
 
-import pickle as pkl
-from pathlib import Path
-from dataclasses import dataclass, field
-
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class GlobalState():
@@ -42,7 +41,7 @@ class GlobalState():
     @artifact_mask.setter
     def artifact_mask(self, data: np.ndarray):
         self._artifact_mask = data
-        self.binarized_artifact_mask = self.artifact_mask != 1 # may need to remove this hard-coded assumption later
+        self.binarized_artifact_mask = self.artifact_mask != 1  # may need to remove this hard-coded assumption later
 
 
 def selectROIs(data, self, args):
@@ -86,23 +85,25 @@ def selectROIs(data, self, args):
         viewer.scale_bar.visible = True
         viewer.scale_bar.unit = 'um'
 
-        ### Load data for the data layer(s), i.e., polygon dicts, and potentially
-        ### the points corresponding to centroids of cells classified as artifacts.
+        # Load data for the data layer(s), i.e., polygon dicts, and potentially
+        # the points corresponding to centroids of cells classified as artifacts.
         if self.autoArtifactDetection:
-            varname_filename_lst = [('ROI', 'ROI_selection.pkl'),
-                                ('ROI2', 'artifact_pred_selection.pkl'),
-                                ('Detected Artifacts', 'points.pkl')]
-            layer_type = {'ROI': 'shape', 
-                        'ROI2': 'shape',
-                        'Detected Artifacts': 'point'}
-            layer_name = {'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
-                          'ROI2': 'Ignore Artifact Prediction Selection',
-                          'Detected Artifacts': 'Predicted Artifacts'}
+            varname_filename_lst = [
+                ('ROI', 'ROI_selection.pkl'), ('ROI2', 'artifact_pred_selection.pkl'),
+                ('Detected Artifacts', 'points.pkl')
+            ]
+            layer_type = {'ROI': 'shape', 'ROI2': 'shape', 'Detected Artifacts': 'point'}
+            layer_name = {
+                'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
+                'ROI2': 'Ignore Artifact Prediction Selection', 
+                'Detected Artifacts': 'Predicted Artifacts'
+            }
         else:
             varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
             layer_type = {'ROI': 'shape'}
-            layer_name = {'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection'}
-        
+            layer_name = {
+                'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection'
+            }
 
         extra_layers = {}
         for varname, fname in varname_filename_lst:
@@ -118,23 +119,25 @@ def selectROIs(data, self, args):
                 model_path = os.path.join(Path(__file__).absolute().parent, 
                                           '../pretrained_models/pretrained_model.pkl')
                 with open(model_path, 'rb') as f:
-                    global_state.base_clf = pkl.load(f)
+                    global_state.base_clf = pickle.load(f)
 
-            ################# Consider put this into the sklearn pipeline?!
-            ### make sure to strip off cell_id first
+            # Consider put this into the sklearn pipeline?!
+            # make sure to strip off cell_id first
             if ('CellID' in data.columns):
                 model_input = data.loc[:,data.columns!='CellID']
             
             # keep just relevant columns
-            marker_list = ['Hoechst0', 'anti_CD3', 'anti_CD45RO', 'Keratin_570', 'aSMA_660', 'CD4_488', 'CD45_PE', 
-               'PD1_647', 'CD20_488', 'CD68_555', 'CD8a_660', 'CD163_488', 'FOXP3_570', 'PDL1_647', 
-               'Ecad_488', 'Vimentin_555', 'CDX2_647', 'LaminABC_488', 'Desmin_555', 'CD31_647', 
-               'PCNA_488', 'CollagenIV_647', 'Area', 'MajorAxisLength', 'MinorAxisLength', 'Eccentricity', 
-               'Solidity', 'Extent', 'Orientation']
+            marker_list = [
+                'Hoechst0', 'anti_CD3', 'anti_CD45RO', 'Keratin_570', 'aSMA_660', 'CD4_488',
+                'CD45_PE', 'PD1_647', 'CD20_488', 'CD68_555', 'CD8a_660', 'CD163_488',
+                'FOXP3_570', 'PDL1_647', 'Ecad_488', 'Vimentin_555', 'CDX2_647', 'LaminABC_488',
+                'Desmin_555', 'CD31_647', 'PCNA_488', 'CollagenIV_647', 'Area', 'MajorAxisLength',
+                'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent', 'Orientation'
+            ]
             
             model_input = model_input[marker_list]
 
-            #clf_probs = base_clf.predict_proba(data.values)
+            # clf_probs = base_clf.predict_proba(data.values)
             clf_preds = global_state.base_clf.predict(model_input)
             clf_proba = global_state.base_clf.predict_proba(model_input)
             #####################################################
@@ -150,7 +153,8 @@ def selectROIs(data, self, args):
                         updated_layer_data.append((shape_type, roi))
                     extra_layers[varname][sample] = updated_layer_data
                 elif layer_type[varname] == 'point':
-                    updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
+                    updated_layer_data = layer.data, global_state.artifact_mask,
+                    global_state.artifact_proba
                     extra_layers[varname][sample] = updated_layer_data
 
                 f = open(os.path.join(roi_dir, filename), 'wb')
@@ -207,39 +211,47 @@ def selectROIs(data, self, args):
                         edge_color = [0.0, 0.66, 1.0, 1.0]
                     
                     viewer.add_shapes(
-                                data=polygons, shape_type=shapes, ndim=2,
-                                face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
-                                edge_width=10.0, name=layer_name[varname]
+                        data=polygons, shape_type=shapes, ndim=2,
+                        face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
+                        edge_width=10.0, name=layer_name[varname]
                     )
                 elif layer_type[varname] == 'point':
                     if self.autoArtifactDetection:
                         try:
-                            points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
-                            artifact_mask_ = global_state.artifact_mask[global_state.binarized_artifact_mask]
-                            artifact_proba_ = global_state.artifact_proba[global_state.binarized_artifact_mask]
-                        except:
+                            points, global_state.artifact_mask,
+                            global_state.artifact_proba = layer_data[sample]
+                            artifact_mask_ = (
+                                global_state.artifact_mask[global_state.binarized_artifact_mask]
+                            )
+                            artifact_proba_ = (
+                                global_state.artifact_proba[global_state.binarized_artifact_mask]
+                            )
+                        except:  # may want to be explicit here about the expected exception.  
                             points = None
                             artifact_mask_ = []
                             artifact_proba_ = []
-                        viewer.add_points(points, ndim=2, 
-                                        #face_color=[1.0, 0, 0, 0.2], 
-                                        edge_color=[0.0, 0.0, 0.0, 0.0],
-                                        edge_width=0.0, name=layer_name[varname], size=10.0,
-                                        face_color_cycle={1:'white', 2:'red', 3:'blue', 4:'green', 5:'cyan', 6:'magenta'},
-                                        face_color='artifact_class',
-                                        features={'artifact_class': np.array(artifact_mask_, dtype=int)})
+                        viewer.add_points(
+                            points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
+                            edge_width=0.0, name=layer_name[varname], size=10.0,
+                            face_color_cycle={
+                                1: 'white', 2: 'red', 3: 'blue', 4: 'green', 5: 'cyan', 6:
+                                'magenta'
+                            }, face_color='artifact_class',
+                            features={'artifact_class': np.array(artifact_mask_, dtype=int)}
+                        ) # face_color=[1.0, 0, 0, 0.2],
                         points_layer = viewer.layers[-1]
                         points_layer.face_color_mode = 'direct'
                         points_layer.face_color[:, -1] * np.array(artifact_proba_)
                         points_layer.refresh()
-            
 
-            ### Apply previously defined contrast limits if they exist
+            # Apply previously defined contrast limits if they exist
             if os.path.exists(os.path.join(f'{self.outDir}/contrast/contrast_limits.yml')):
 
                 logger.info('Reading existing contrast settings.')
 
-                contrast_limits = yaml.safe_load(open(f'{self.outDir}/contrast/contrast_limits.yml'))
+                contrast_limits = yaml.safe_load(
+                    open(f'{self.outDir}/contrast/contrast_limits.yml')
+                )
 
                 viewer.layers[
                     f'{dna1}: {sample}'].contrast_limits = (
@@ -279,7 +291,7 @@ def selectROIs(data, self, args):
                     napari_notification('ROI selection complete')
                     QTimer().singleShot(0, viewer.close)
 
-            next_sample.sample.bind(sample) #should bind first sample_id
+            next_sample.sample.bind(sample)  # should bind first sample_id
             next_sample.last_sample.bind(last_sample)
 
             @magicgui(
@@ -310,13 +322,18 @@ def selectROIs(data, self, args):
                 viewer.layers[-1].data = None
                 global_state.artifact_detection_threshold = proba_threshold
                 global_state.artifact_mask, class_probas = artifact_detection_model(data)
-                global_state.artifact_proba = 1-class_probas[:, 0]
-                artifact_mask, binarized_artifact_mask, artifact_proba = global_state.artifact_mask, global_state.binarized_artifact_mask, global_state.artifact_proba
+                global_state.artifact_proba = 1 - class_probas[:, 0]
+                artifact_mask, binarized_artifact_mask, artifact_proba = (
+                    global_state.artifact_mask, global_state.binarized_artifact_mask,
+                    global_state.artifact_proba
+                )
                 centroids = data[['Y_centroid', 'X_centroid']][binarized_artifact_mask]
                 points_layer = viewer.layers[-1]
                 points_layer.face_color_mode = 'cycle'
                 points_layer.add(centroids)
-                points_layer.features.loc[-len(centroids):, 'artifact_class'] = artifact_mask[binarized_artifact_mask]
+                points_layer.features.loc[-len(centroids):, 'artifact_class'] = (
+                    artifact_mask[binarized_artifact_mask]
+                )
                 points_layer.refresh_colors()
                 points_layer.face_color_mode = 'direct'
                 points_layer.face_color[:, -1] = np.array(artifact_proba[binarized_artifact_mask])
@@ -325,17 +342,18 @@ def selectROIs(data, self, args):
 
             @label_artifacts.proba_threshold.changed.connect
             def on_slider_changed(threshold):
-                viewer.layers.selection.active = viewer.layers[-1] # consider using resource management "with...as" here
+                viewer.layers.selection.active = viewer.layers[-1]  # consider using resource management "with...as" here
                 points_layer = viewer.layers[-1]
                 global_state.artifact_detection_threshold = threshold
                 points_layer.face_color_mode = 'direct'
                 proba = np.array(global_state.artifact_proba[global_state.binarized_artifact_mask])
-                points_layer.face_color[:, -1] = np.piecewise(proba, [proba < threshold, proba > threshold], [lambda v: 0, lambda v: (v-threshold)/(1-threshold)*(1-0.3)+0.3])                
+                points_layer.face_color[:, -1] = np.piecewise(
+                    proba, [proba < threshold, proba > threshold],
+                    [lambda v: 0, lambda v: (v - threshold) / (1 - threshold) * (1 - 0.3) + 0.3]
+                )                
                 # np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
                 viewer.layers.selection.active = viewer.layers[-2]
-
-
 
             widgets = [next_sample, arbitrary_sample]
             if self.autoArtifactDetection:
@@ -360,7 +378,7 @@ def selectROIs(data, self, args):
         add_layers(sample)
         add_widgets(last_sample, sample)
 
-        napari.run() # blocks until window is closed
+        napari.run()  # blocks until window is closed
 
         ###################################################################
 
@@ -368,7 +386,9 @@ def selectROIs(data, self, args):
         samples = self.samplesForROISelection
         for sample in samples:
             try:
-                have_artifact_layer = extra_layers['Detected Artifacts'] if self.autoArtifactDetection else False
+                have_artifact_layer = (
+                    extra_layers['Detected Artifacts'] if self.autoArtifactDetection else False
+                )
                 if extra_layers['ROI'][sample] or have_artifact_layer:
 
                     logger.info(f'Generating ROI mask(s) for sample: {sample}')
@@ -382,7 +402,7 @@ def selectROIs(data, self, args):
                     )
 
                     file_path = get_filepath(self, check, sample, 'TIF')
-                    dna = imread(file_path, key=0)
+                    dna, min, max = single_channel_pyramid(file_path, channel=0)
 
                     # create pillow image to convert into boolean mask
                     def shape_layer_to_mask(layer_data):
@@ -427,10 +447,11 @@ def selectROIs(data, self, args):
                     inter1 = ROI_mask[ys, xs]
                     sample_data['inter1'] = inter1
 
-                    autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0 # might want to keep track if auto artifact detection is used separately in the global state
+                    autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0  # might want to keep track if auto artifact detection is used separately in the global state
                     if self.autoArtifactDetection and autoArtifactDetectionUsed:
                         ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
-                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask!=1) & (global_state.artifact_proba > global_state.artifact_detection_threshold) 
+                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & 
+                        (global_state.artifact_proba > global_state.artifact_detection_threshold) 
                         sample_data['inter2'] = inter2
 
                     drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False 
@@ -477,8 +498,8 @@ def selectROIs(data, self, args):
 
             logger.info(f'Plotting ROI selections for sample: {sample}')
 
-            for file_path in glob.glob(f'{self.inDir}/tif/{sample}.*tif'):
-                dna = imread(file_path, key=0)
+            file_path = get_filepath(self, check, sample, 'TIF')
+            dna, min, max = single_channel_pyramid(file_path, channel=0)
 
             fig, ax = plt.subplots()
             ax.imshow(dna, cmap='gray')
