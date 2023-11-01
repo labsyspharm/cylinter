@@ -88,41 +88,42 @@ def selectROIs(data, self, args):
         viewer.scale_bar.visible = True
         viewer.scale_bar.unit = 'um'
 
+        ###################################################################
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
         # the points corresponding to centroids of cells classified as artifacts.
-        if self.autoArtifactDetection:
-            if self.artifactDetectionMethod == 'MLP':
-                varname_filename_lst = [
-                    ('ROI', 'ROI_selection.pkl'), ('ROI2',
-                                                'artifact_pred_selection.pkl'),
-                    ('Detected Artifacts', 'points.pkl')
-                ]
-                layer_type = {'ROI': 'shape', 'ROI2': 'shape',
-                            'Detected Artifacts': 'point'}
-                layer_name = {
-                    'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
-                    'ROI2': 'Ignore Artifact Prediction Selection',
-                    'Detected Artifacts': 'Predicted Artifacts'
-                }
-            elif self.artifactDetectionMethod == 'Classical':
-                pass
-        else:
+        # We wrap this into a function so we can reuse if when loading different samples
+        def load_extra_layers(sample_id):
             varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
-            layer_type = {'ROI': 'shape'}
-            layer_name = {
-                'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection'
-            }
+            layer_type = [('ROI', 'shape')]
+            layer_name = [('ROI', 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection')]
+            if self.autoArtifactDetection:
+                if self.artifactDetectionMethod == 'MLP':
+                    varname_filename_lst += [('ROI2', 'artifact_pred_selection.pkl'),
+                                            ('Detected Artifacts', 'points.pkl')]
+                    layer_type += [('ROI2', 'shape'), ('Detected Artifacts', 'point')]
+                    layer_name += [('ROI2', 'Ignore Artifact Prediction Selection'), 
+                                ('Detected Artifacts', 'Predicted Artifacts')]
+                elif self.artifactDetectionMethod == 'Classical':
+                    pass                
+            layer_type = dict(layer_type)
+            layer_name = dict(layer_name)
 
-        extra_layers = {}
-        for varname, fname in varname_filename_lst:
-            if os.path.exists(os.path.join(roi_dir, fname)):
-                f = open(os.path.join(roi_dir, fname), 'rb')
-                extra_layers[varname] = pickle.load(f)
-            else:
-                extra_layers[varname] = {}
+            extra_layers = {}
+            for varname, fname in varname_filename_lst:
+                fdir = os.path.join(roi_dir, sample_id + '_' + fname)
+                print(fdir)
+                if os.path.exists(fdir):
+                    f = open(fdir, 'rb')
+                    extra_layers[varname] = pickle.load(f)
+                else:
+                    extra_layers[varname] = {}
+            return extra_layers, layer_type, layer_name, varname_filename_lst
+        
+        # this is to initialize using the first sample available
+        extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers(sample)
 
         ###################################################################
-        def artifact_detection_model(data):
+        def artifact_detection_model_MLP(data):
             if global_state.base_clf is None:
                 model_path = os.path.join(Path(__file__).absolute().parent,
                                           '../pretrained_models/pretrained_model.pkl')
@@ -164,7 +165,7 @@ def selectROIs(data, self, args):
                     updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
                     extra_layers[varname][sample] = updated_layer_data
 
-                f = open(os.path.join(roi_dir, filename), 'wb')
+                f = open(os.path.join(roi_dir, sample + '_' + filename), 'wb')
                 pickle.dump(extra_layers[varname], f)
                 f.close()
 
@@ -227,34 +228,36 @@ def selectROIs(data, self, args):
                     )
                 elif layer_type[varname] == 'point':
                     if self.autoArtifactDetection:
-                        try:
-                            points, global_state.artifact_mask, global_state.artifact_proba = layer_data[
-                                sample]
-                            artifact_mask_ = (
-                                global_state.artifact_mask[global_state.binarized_artifact_mask]
-                            )
-                            artifact_proba_ = (
-                                global_state.artifact_proba[global_state.binarized_artifact_mask]
-                            )
-                        except:  # may want to be explicit here about the expected exception.
-                            points = None
-                            artifact_mask_ = []
-                            artifact_proba_ = []
-                        viewer.add_points(
-                            points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
-                            edge_width=0.0, name=layer_name[varname], size=10.0,
-                            face_color_cycle={
-                                1: 'white', 2: 'red', 3: 'blue', 4: 'green', 5: 'cyan', 6:
-                                'magenta'
-                            }, face_color='artifact_class',
-                            features={'artifact_class': np.array(
-                                artifact_mask_, dtype=int)}
-                        )  # face_color=[1.0, 0, 0, 0.2],
-                        points_layer = viewer.layers[-1]
-                        points_layer.face_color_mode = 'direct'
-                        points_layer.face_color[:, -1] * \
-                            np.array(artifact_proba_)
-                        points_layer.refresh()
+                        if self.artifactDetectionMethod == 'MLP':
+                            try:
+                                points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
+                                artifact_mask_ = (
+                                    global_state.artifact_mask[global_state.binarized_artifact_mask]
+                                )
+                                artifact_proba_ = (
+                                    global_state.artifact_proba[global_state.binarized_artifact_mask]
+                                )
+                            except:  # may want to be explicit here about the expected exception.
+                                points = None
+                                artifact_mask_ = []
+                                artifact_proba_ = []
+                            viewer.add_points(
+                                points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
+                                edge_width=0.0, name=layer_name[varname], size=10.0,
+                                face_color_cycle={
+                                    1: 'white', 2: 'red', 3: 'blue', 4: 'green', 5: 'cyan', 6:
+                                    'magenta'
+                                }, face_color='artifact_class',
+                                features={'artifact_class': np.array(
+                                    artifact_mask_, dtype=int)}
+                            )  # face_color=[1.0, 0, 0, 0.2],
+                            points_layer = viewer.layers[-1]
+                            points_layer.face_color_mode = 'direct'
+                            points_layer.face_color[:, -1] * \
+                                np.array(artifact_proba_)
+                            points_layer.refresh()
+                        elif self.artifactDetectionMethod == 'Classical':
+                            pass
 
             # Apply previously defined contrast limits if they exist
             if os.path.exists(os.path.join(f'{self.outDir}/contrast/contrast_limits.yml')):
@@ -328,15 +331,15 @@ def selectROIs(data, self, args):
                                  'step': 0.001},
                 call_button="Auto label artifacts"
             )
-            def label_artifacts(proba_threshold: float = 0.5):
+            def label_artifacts_MLP(proba_threshold: float = 0.5):
                 viewer.layers.selection.active = viewer.layers[-1]
                 viewer.layers[-1].data = None
                 global_state.artifact_detection_threshold = proba_threshold
-                global_state.artifact_mask, class_probas = artifact_detection_model(
-                    data)
+                global_state.artifact_mask, class_probas = artifact_detection_model_MLP(data)
                 global_state.artifact_proba = 1 - class_probas[:, 0]
                 artifact_mask, binarized_artifact_mask, artifact_proba = (
-                    global_state.artifact_mask, global_state.binarized_artifact_mask,
+                    global_state.artifact_mask, 
+                    global_state.binarized_artifact_mask,
                     global_state.artifact_proba
                 )
                 centroids = data[['Y_centroid', 'X_centroid']
@@ -354,7 +357,7 @@ def selectROIs(data, self, args):
                 points_layer.refresh()
                 viewer.layers.selection.active = viewer.layers[-2]
 
-            @label_artifacts.proba_threshold.changed.connect
+            @label_artifacts_MLP.proba_threshold.changed.connect
             def on_slider_changed(threshold):
                 # consider using resource management "with...as" here
                 viewer.layers.selection.active = viewer.layers[-1]
@@ -371,12 +374,18 @@ def selectROIs(data, self, args):
                 # np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
                 viewer.layers.selection.active = viewer.layers[-2]
+            
+            # NEED TO IMPLEMENT THIS
+            def generate_artifact_mask(params):
+                pass
 
             widgets = [next_sample, arbitrary_sample]
             if self.autoArtifactDetection:
-                widgets.append(label_artifacts)
-            widget_names = [
-                f'Sample {sample}', 'Arbitrary Sample Selection', 'Automation Module']
+                if self.artifactDetectionMethod == 'MLP':
+                    widgets.append(label_artifacts_MLP) # think up better function name?
+                elif self.artifactDetectionMethod == 'Classical':
+                    widgets.append(generate_artifact_mask) # need to implement this
+            widget_names = [f'Sample {sample}', 'Arbitrary Sample Selection', 'Automation Module']
             napari_widgets = []
             for widget, widget_name in zip(widgets, widget_names):
                 napari_widgets.append(viewer.window.add_dock_widget(widget=widget,
@@ -470,13 +479,18 @@ def selectROIs(data, self, args):
                     sample_data['inter1'] = inter1
 
                     # might want to keep track if auto artifact detection is used separately in the global state
-                    autoArtifactDetectionUsed = len(
-                        global_state.artifact_proba) > 0
+                    if self.artifactDetectionMethod == 'MLP':
+                        autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
+                    elif self.artifactDetectionMethod == 'Classical':
+                        autoArtifactDetectionUsed = True ## need to fix
+                    
                     if self.autoArtifactDetection and autoArtifactDetectionUsed:
-                        ROI2_mask = shape_layer_to_mask(
-                            extra_layers['ROI2'][sample])
-                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & (
-                            global_state.artifact_proba > global_state.artifact_detection_threshold)
+                        if self.artifactDetectionMethod == 'MLP':
+                            ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
+                        elif self.artifactDetectionMethod == 'Classical':
+                            pass # need to take union of all masks
+                        inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & \
+                            (global_state.artifact_proba > global_state.artifact_detection_threshold)
                         sample_data['inter2'] = inter2
 
                     drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False
