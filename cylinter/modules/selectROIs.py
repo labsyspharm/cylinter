@@ -91,18 +91,21 @@ def selectROIs(data, self, args):
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
         # the points corresponding to centroids of cells classified as artifacts.
         if self.autoArtifactDetection:
-            varname_filename_lst = [
-                ('ROI', 'ROI_selection.pkl'), ('ROI2',
-                                               'artifact_pred_selection.pkl'),
-                ('Detected Artifacts', 'points.pkl')
-            ]
-            layer_type = {'ROI': 'shape', 'ROI2': 'shape',
-                          'Detected Artifacts': 'point'}
-            layer_name = {
-                'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
-                'ROI2': 'Ignore Artifact Prediction Selection',
-                'Detected Artifacts': 'Predicted Artifacts'
-            }
+            if self.artifactDetectionMethod == 'MLP':
+                varname_filename_lst = [
+                    ('ROI', 'ROI_selection.pkl'), ('ROI2',
+                                                'artifact_pred_selection.pkl'),
+                    ('Detected Artifacts', 'points.pkl')
+                ]
+                layer_type = {'ROI': 'shape', 'ROI2': 'shape',
+                            'Detected Artifacts': 'point'}
+                layer_name = {
+                    'ROI': 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection',
+                    'ROI2': 'Ignore Artifact Prediction Selection',
+                    'Detected Artifacts': 'Predicted Artifacts'
+                }
+            elif self.artifactDetectionMethod == 'Classical':
+                pass
         else:
             varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
             layer_type = {'ROI': 'shape'}
