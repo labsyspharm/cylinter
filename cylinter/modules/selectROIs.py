@@ -5,6 +5,7 @@ import pickle
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 import numpy as np
 
@@ -18,10 +19,12 @@ from qtpy.QtCore import QTimer
 import napari
 from magicgui import magicgui
 from magicgui.widgets import ComboBox, SpinBox, Container, Button
+from skimage.morphology import flood
 
 from ..utils import (
     input_check, read_markers, get_filepath, marker_channel_number, napari_notification,
-    single_channel_pyramid, triangulate_ellipse, reorganize_dfcolumns, upscale
+    single_channel_pyramid, triangulate_ellipse, reorganize_dfcolumns, 
+    upscale, ArtifactInfo, artifact_detector_v3
 )
 
 logger = logging.getLogger(__name__)
@@ -29,8 +32,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GlobalState():
+    loaded_ims = {}
+    abx_layers = {}
     base_clf = None
     last_sample = None
+    artifacts = {}
     _artifact_mask: np.ndarray = field(
         default_factory=lambda: np.array([], dtype=int))
     binarized_artifact_mask: np.ndarray = field(
@@ -38,6 +44,10 @@ class GlobalState():
     artifact_proba: np.ndarray = field(
         default_factory=lambda: np.array([], dtype=float))
     artifact_detection_threshold: float = 0.5
+    ###
+    current_layer: napari.layers.Layer = None
+    current_point: np.ndarray = None
+    current_tol: int = None
 
     @property
     def artifact_mask(self):
@@ -190,11 +200,13 @@ def selectROIs(data, self, args):
                     file_path = get_filepath(self, check, sample, 'TIF')
                     img, min, max = single_channel_pyramid(
                         file_path, channel=channel_number)
-                    viewer.add_image(
+                    layer = viewer.add_image(
                         img, rgb=False, blending='additive',
                         colormap='green', visible=False, name=ch,
                         contrast_limits=(min, max)
                     )
+                    global_state.loaded_ims[ch] = img
+                    global_state.abx_layers[ch] = layer
 
             # H&E channel, as single image or using separate RGB channels, to be implemented
 
@@ -425,8 +437,95 @@ def selectROIs(data, self, args):
                     tolerance_spinbox, 
                 ])
 
+                #### bind callbacks
+                artifacts = global_state.artifacts
+                loaded_ims = global_state.loaded_ims
+
+                @compute_mask_button.clicked.connect
+                def compute_artifact_mask():
+                    ### first remove any existing layers if exist
+                    abx_channel = channel_selector_dropdown.value
+                    if abx_channel in artifacts.keys():
+                        try:
+                            viewer.layers.remove(artifacts[abx_channel].artifact_layer)
+                            viewer.layers.remove(artifacts[abx_channel].seed_layer)
+                        except:
+                            pass
+                    ### next, compute
+                    params = {'downscale': 2}
+                    artifact_mask, im_transformed, seeds, tols = \
+                                artifact_detector_v3(loaded_ims[abx_channel],
+                                                     downscale=params['downscale'])
+                    artifact_info = ArtifactInfo(params, artifact_mask, im_transformed, 
+                                                dict(zip(range(len(seeds)), seeds)), tols)
+                    artifacts[abx_channel] = artifact_info
+                    artifact_info.render(viewer, loaded_ims, layer_name, abx_channel)
+                    seed_layer, artifact_layer = artifact_info.seed_layer, artifact_info.artifact_layer
+                    
+                    def point_clicked_callback(event):
+                        current_layer = viewer.layers.selection.active
+                        global_state.current_layer = current_layer
+                        features = seed_layer.current_properties
+                        global_state.current_point = artifact_info.seeds[features['id'][0]]
+                        global_state.current_tol = features['tol'][0]
+                        tolerance_spinbox.value = features['tol'][0]
+                    
+                    def point_changed_callback(event):
+                        current_layer = viewer.layers.selection.active
+                        abx_channel = current_layer.metadata['abx_channel']
+                        pt_id = current_layer.current_properties['id'][0]
+                        artifact_info = artifacts[abx_channel]
+                        im_transformed = artifact_info.transformed
+                        global_state.current_layer = current_layer
+                        df = artifact_info.seed_layer.features.copy() # preemptive...but might be wasteful if df is large
+                        
+                        if event.action=='add':
+                            df = seed_layer.features
+                            pt_id = uuid4()
+                            df.loc[df.index[-1], 'id']=pt_id
+                            df.loc[df.index[-1], 'tol']=0
+                            seed = (current_layer.data[-1] / (2**current_layer.metadata['downscale'])).astype(int)
+                            artifact_info.seeds[pt_id] = seed
+                            new_fill = flood(im_transformed, seed_point=tuple(seed), 
+                                                            tolerance=0)
+                            artifact_info.update_mask(artifact_info.mask + new_fill)
+                        elif event.action=='remove':
+                            optimal_tol = global_state.current_tol
+                            old_fill = flood(im_transformed, seed_point=tuple(global_state.current_point), 
+                                            tolerance=optimal_tol) 
+                            artifact_info.update_mask(artifact_info.mask - old_fill)
+                    
+                    seed_layer.events.current_properties.connect(point_clicked_callback)
+                    seed_layer.events.data.connect(point_changed_callback)
+
+                    for layer in viewer.layers:
+                        layer.visible=False
+                    artifact_layer.visible=True
+                    seed_layer.visible=True
+                    global_state.abx_layers[abx_channel].visible=True
+                    seed_layer.selected=True
+
+                @tolerance_spinbox.changed.connect
+                def update_flood_mask():
+                    current_layer = global_state.current_layer
+                    abx_channel = current_layer.metadata['abx_channel']
+                    artifacts = global_state.artifacts
+                    pt_id = current_layer.current_properties['id'][0]
+                    df = artifacts[abx_channel].seed_layer.features
+                    pt_idx = df[df['id']==pt_id]['tol'].index.to_list()[0]
+                    optimal_tol = df.loc[pt_idx, 'tol']
+                    im_transformed = artifacts[abx_channel].transformed
+                    old_fill = flood(im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
+                                                    tolerance=optimal_tol) 
+                    new_tol = tolerance_spinbox.value
+                    new_fill = flood(im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
+                                                    tolerance=new_tol)
+                    artifacts[abx_channel].update_mask(artifacts[abx_channel].mask + new_fill - old_fill)
+                    artifacts[abx_channel].seed_layer.features.loc[pt_idx, 'tol'] = new_tol
+                ################################################################
                 widget_lst = [widget_combo_1, widget_combo_2]
                 widget_names = ['Automated artifact detection', 'Finetuning']
+
                 return widget_lst, widget_names
 
             widgets = [next_sample, arbitrary_sample]

@@ -4,6 +4,8 @@ import re
 import glob
 import pickle
 import logging
+from dataclasses import dataclass
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -21,6 +23,17 @@ import zarr
 import dask.array as da
 import tifffile
 import skimage
+
+## these imports are for classical artifact detection
+import napari
+from skimage.filters.rank import minimum as rank_min
+from skimage.filters.rank import maximum as rank_max
+from skimage.filters.rank import gradient, mean
+from skimage.measure import label 
+
+from skimage.morphology import disk, erosion, dilation, h_maxima, flood, local_maxima
+from skimage.exposure import rescale_intensity
+############
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
 
@@ -812,7 +825,108 @@ def triangulate_ellipse(corners, num_segments=100):
     return vertices, triangles
 
 
+def artifact_detector_v3(pyramid, 
+                      downscale=2, 
+                      erosion_kernel_size=5,
+                      lower_quantile_cutoff=0.2,
+                      max_contrast=20,
+                      h=None,
+                      debug=False):
+    if debug:
+        fig, axes = plt.subplots(1, 6, figsize=(24, 4))
+    kernel = disk(erosion_kernel_size)
+    kernel_large = disk(erosion_kernel_size*4)
+    im = rescale_intensity(pyramid[downscale].compute(), out_range=np.uint8)
+    im_eroded = rank_min(im, kernel)
+    lower_quantile = np.quantile(im_eroded.ravel(), lower_quantile_cutoff)
+    im_eroded[im_eroded < lower_quantile] = lower_quantile
+    im_transformed = rank_max(mean(im_eroded, kernel), kernel)
+    local_contrast = gradient(im_transformed, kernel_large)
+    
+    if h is None:
+        avg_ccmp_areas = []
+        for i in range(max_contrast):
+            num = np.sum(local_contrast > i)
+            denom = np.max(label(local_contrast > i))
+            if denom==0:
+                break
+            else: 
+                avg_ccmp_areas.append(num/denom)
+        h = np.argmin(avg_ccmp_areas)
+    local_maxima_ = h_maxima(im_transformed, h=h, footprint=kernel_large) if h > 0 else\
+                    local_maxima(im_transformed)
+    local_maxima_labeled = label(local_maxima_)
+    artifact_mask = np.zeros_like(im, dtype=np.int16)
+    max_contrast = np.max(im_transformed) - np.min(im_transformed)
+    
+    num_local_maxima = np.max(local_maxima_labeled)
+    seeds = np.empty((num_local_maxima, 2), dtype=int)
+    optimal_tols = np.empty((num_local_maxima,), dtype=int)
+    
+    for seg_id in range(1, num_local_maxima+1):
+        seed = np.argwhere(local_maxima_labeled==seg_id)[0]
+        num_filled_pixels = [np.sum(flood(im_transformed, seed_point=tuple(seed), 
+                                                tolerance=tol)) for tol in range(max_contrast+5)]
+        delta_num = np.diff(num_filled_pixels)
+        try: 
+            optimal_tol = argrelextrema(delta_num, np.greater)[0][-2] 
+            if optimal_tol >= 20:
+                optimal_tol -= 2 #kind of a fudging factor here
+        except:
+            optimal_tol = max(0, np.argmax(delta_num > np.mean(delta_num))-1) #-1 is a conservative fudging factor here
+        
+        seeds[seg_id-1, :] = seed
+        optimal_tols[seg_id-1] = optimal_tol
+        artifact_mask += flood(im_transformed, seed_point=tuple(seed), 
+                                                tolerance=optimal_tol)        
+
+    if debug:
+        axes[0].imshow(im, cmap='gray')
+        axes[1].imshow(im_eroded, cmap='gray')
+        axes[2].imshow(im_transformed, cmap='gray')
+        axes[3].imshow(local_contrast, cmap='gray')
+        axes[4].imshow(local_maxima_labeled, cmap='gray')
+        axes[5].imshow(artifact_mask, cmap='gray')
+    return artifact_mask, im_transformed, seeds, optimal_tols
+
+
 def upscale(raw_im, target_im):
     return skimage.transform.resize(raw_im, target_im.shape,
                                      order=0, preserve_range=True, 
                                      anti_aliasing=False)
+
+@dataclass
+class ArtifactInfo():
+    params: Dict
+    mask: np.ndarray
+    transformed: np.ndarray
+    seeds: np.ndarray
+    tols: np.ndarray
+    features: pd.DataFrame = None
+    artifact_layer: napari.layers.Image = None
+    seed_layer: napari.layers.Points = None
+        
+    def update_mask(self, new_mask):
+        self.mask = new_mask
+        self.artifact_layer.data = upscale(self.mask, 
+                                           self.artifact_layer.data)
+        self.artifact_layer.refresh()
+
+    def render(self, viewer, loaded_ims, layer_name, abx_channel):
+        grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
+        self.artifact_layer = viewer.add_image(grayscale,
+                                        name=layer_name[abx_channel+'_mask'], 
+                                        opacity=0.5)
+        self.artifact_layer.metadata['abx_channel'] = abx_channel
+        seeds = np.vstack(list(self.seeds.values()))
+        self.seed_layer = viewer.add_points(seeds*(2**self.params['downscale']), 
+                        name=layer_name[abx_channel+'_seeds'],
+                        face_color=[1,0,0,1],
+                        edge_color=[0,0,0,0],
+                        size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
+                        features={
+                            'id': list(self.seeds.keys()),
+                            'tol': self.tols
+                        })
+        self.seed_layer.metadata['abx_channel'] = abx_channel
+        self.seed_layer.metadata['downscale'] = self.params['downscale']
