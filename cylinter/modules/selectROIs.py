@@ -132,12 +132,18 @@ def selectROIs(data, self, args):
             extra_layers = {}
             for varname, fname in varname_filename_lst:
                 fdir = os.path.join(art_dir, fname)
-                print(fdir)
                 if os.path.exists(fdir):
                     f = open(fdir, 'rb')
                     extra_layers[varname] = pickle.load(f)
                 else:
                     extra_layers[varname] = {}
+
+            if self.artifactDetectionMethod == 'Classical':
+                for abx_channel in abx_channels:
+                    try:
+                        global_state.artifacts[abx_channel] = extra_layers[f'{abx_channel}_mask'][sample]
+                    except:
+                        pass
             return extra_layers, layer_type, layer_name, varname_filename_lst
         
         extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers()
@@ -190,8 +196,25 @@ def selectROIs(data, self, args):
                     pickle.dump(extra_layers[varname], f)
                     f.close()
             elif self.artifactDetectionMethod == 'Classical':
-                pass
-
+                for varname, filename in varname_filename_lst:
+                    if layer_type[varname] == 'shape':
+                        layer = viewer.layers[layer_name[varname]]
+                        updated_layer_data = []
+                        for shape_type, roi in zip(layer.shape_type, layer.data):
+                            updated_layer_data.append((shape_type, roi))
+                        extra_layers[varname][sample] = updated_layer_data
+                    elif layer_type[varname] == 'image' or layer_type[varname] == 'point':
+                        abx_channel = varname.split('_')[0] # find a better way for this
+                        try:
+                            extra_layers[varname][sample] = global_state.artifacts[abx_channel]
+                            # these attributes cannot be pickled and will be stale upon next load, anyway
+                            extra_layers[varname][sample].artifact_layer = None
+                            extra_layers[varname][sample].seed_layer = None
+                        except:
+                            pass
+                    f = open(os.path.join(art_dir, filename), 'wb')
+                    pickle.dump(extra_layers[varname], f)
+                    f.close() # simplify by merging the two cases later
         def add_layers(sample):
             # antibody/immunomarker channels
             if self.showAbChannels:
@@ -282,31 +305,18 @@ def selectROIs(data, self, args):
                                 np.array(artifact_proba_)
                             points_layer.refresh()
                         elif self.artifactDetectionMethod == 'Classical':
+                            abx_channel = varname.split('_')[0]
                             try:
-                                artifact_mask, abx_channel = layer_data[sample] #artifact_mask should be upscaled
-                                artifact_layer = viewer.add_image(artifact_mask,
-                                          name=layer_name[varname], opacity=0.5)
-                                artifact_layer.metadata['abx_channel'] = abx_channel
+                                extra_layers[varname][sample].render_seeds(viewer, global_state.loaded_ims, layer_name, abx_channel)
                             except:
                                 pass
                 elif layer_type[varname] == 'image':
-                    if self.autoArtifactDetection and self.artifactDetectionMethod == 'Classical':
+                    if self.autoArtifactDetection and self.artifactDetectionMethod == 'Classical': 
+                        abx_channel = varname.split('_')[0]
                         try:
-                            seeds, downscale, tols, abx_channel = layer_data[sample]
-                            seed_layer = viewer.add_points(seeds*(2**downscale), 
-                                    name=layer_name[varname],
-                                    face_color=[1,0,0,1],
-                                    edge_color=[0,0,0,0],
-                                    size=10, # fix this later to be dynamic!
-                                    features={
-                                        'id': range(len(seeds)),
-                                        'tol': tols
-                                    })
-                            seed_layer.metadata['abx_channel'] = abx_channel
-                            seed_layer.metadata['downscale'] = downscale
+                            extra_layers[varname][sample].render_mask(viewer, global_state.loaded_ims, layer_name, abx_channel)
                         except:
                             pass
-
             # Apply previously defined contrast limits if they exist
             if os.path.exists(os.path.join(f'{self.outDir}/contrast/contrast_limits.yml')):
 
@@ -447,8 +457,8 @@ def selectROIs(data, self, args):
                     abx_channel = channel_selector_dropdown.value
                     if abx_channel in artifacts.keys():
                         try:
-                            viewer.layers.remove(artifacts[abx_channel].artifact_layer)
-                            viewer.layers.remove(artifacts[abx_channel].seed_layer)
+                            viewer.layers.remove(viewer.layers[layer_name[f'{abx_channel}_seeds']])
+                            viewer.layers.remove(viewer.layers[layer_name[f'{abx_channel}_mask']])
                         except:
                             pass
                     ### next, compute

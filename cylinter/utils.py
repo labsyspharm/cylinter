@@ -912,12 +912,7 @@ class ArtifactInfo():
                                            self.artifact_layer.data)
         self.artifact_layer.refresh()
 
-    def render(self, viewer, loaded_ims, layer_name, abx_channel):
-        grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
-        self.artifact_layer = viewer.add_image(grayscale,
-                                        name=layer_name[abx_channel+'_mask'], 
-                                        opacity=0.5)
-        self.artifact_layer.metadata['abx_channel'] = abx_channel
+    def render_seeds(self, viewer, loaded_ims, layer_name, abx_channel):
         seeds = np.vstack(list(self.seeds.values()))
         self.seed_layer = viewer.add_points(seeds*(2**self.params['downscale']), 
                         name=layer_name[abx_channel+'_seeds'],
@@ -928,5 +923,18 @@ class ArtifactInfo():
                             'id': list(self.seeds.keys()),
                             'tol': self.tols
                         })
+        self.features = self.seed_layer.features
         self.seed_layer.metadata['abx_channel'] = abx_channel
         self.seed_layer.metadata['downscale'] = self.params['downscale']
+
+    def render_mask(self, viewer, loaded_ims, layer_name, abx_channel):
+        grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
+        self.artifact_layer = viewer.add_image(grayscale,
+                                        name=layer_name[abx_channel+'_mask'], 
+                                        opacity=0.5)
+        self.artifact_layer.metadata['abx_channel'] = abx_channel
+
+    def render(self, viewer, loaded_ims, layer_name, abx_channel):
+        self.render_mask(viewer, loaded_ims, layer_name, abx_channel)
+        self.render_seeds(viewer, loaded_ims, layer_name, abx_channel)
+        
