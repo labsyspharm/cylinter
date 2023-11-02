@@ -137,13 +137,6 @@ def selectROIs(data, self, args):
                     extra_layers[varname] = pickle.load(f)
                 else:
                     extra_layers[varname] = {}
-
-            if self.artifactDetectionMethod == 'Classical':
-                for abx_channel in abx_channels:
-                    try:
-                        global_state.artifacts[abx_channel] = extra_layers[f'{abx_channel}_mask'][sample]
-                    except:
-                        pass
             return extra_layers, layer_type, layer_name, varname_filename_lst
         
         extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers()
@@ -205,17 +198,27 @@ def selectROIs(data, self, args):
                         extra_layers[varname][sample] = updated_layer_data
                     elif layer_type[varname] == 'image' or layer_type[varname] == 'point':
                         abx_channel = varname.split('_')[0] # find a better way for this
-                        try:
-                            extra_layers[varname][sample] = global_state.artifacts[abx_channel]
-                            # these attributes cannot be pickled and will be stale upon next load, anyway
-                            extra_layers[varname][sample].artifact_layer = None
-                            extra_layers[varname][sample].seed_layer = None
-                        except:
-                            pass
+                        artifact_info = global_state.artifacts.get(abx_channel)
+                        if artifact_info is not None:
+                            extra_layers[varname][sample] = artifact_info
+                            artifact_info.features = None
+                            artifact_info.artifact_layer = None
+                            artifact_info.seed_layer = None
                     f = open(os.path.join(art_dir, filename), 'wb')
                     pickle.dump(extra_layers[varname], f)
                     f.close() # simplify by merging the two cases later
         def add_layers(sample):
+            # reset some global states if using classical artifact detection
+            if self.artifactDetectionMethod == 'Classical':
+                global_state.artifacts = {}
+                global_state.loaded_ims = {}
+                global_state.abx_layers = {}
+                for abx_channel in abx_channels:
+                    try:
+                        global_state.artifacts[abx_channel] = extra_layers[f'{abx_channel}_mask'][sample]
+                    except:
+                        pass
+
             # antibody/immunomarker channels
             if self.showAbChannels:
                 for ch in reversed(abx_channels):
@@ -372,6 +375,8 @@ def selectROIs(data, self, args):
                 next_sample={'label': 'Sample Name'}
             )
             def arbitrary_sample(sample, next_sample: str, widgets):
+                if next_sample == '':
+                    raise ValueError("Input sample ID cannot be empty!")
                 if global_state.last_sample is None:
                     global_state.last_sample = sample
                 save_shapes(sample)
@@ -574,110 +579,135 @@ def selectROIs(data, self, args):
         idxs_to_drop = {}
         samples = self.samplesForROISelection
         for sample in samples:
-            try:
-                have_artifact_layer = (
-                    extra_layers['Detected Artifacts'] if self.autoArtifactDetection else False
+            # try:
+            if extra_layers['ROI'][sample]:
+
+                logger.info(f'Generating ROI mask(s) for sample: {sample}')
+
+                sample_data = data[['X_centroid', 'Y_centroid', 'CellID']][
+                    data['Sample'] == sample].astype(int)
+
+                sample_data['tuple'] = list(
+                    zip(sample_data['X_centroid'],
+                        sample_data['Y_centroid'])
                 )
-                if extra_layers['ROI'][sample] or have_artifact_layer:
 
-                    logger.info(f'Generating ROI mask(s) for sample: {sample}')
+                file_path = get_filepath(self, check, sample, 'TIF')
+                dna, min, max = single_channel_pyramid(
+                    file_path, channel=0)
 
-                    sample_data = data[['X_centroid', 'Y_centroid', 'CellID']][
-                        data['Sample'] == sample].astype(int)
+                # create pillow image to convert into boolean mask
+                def shape_layer_to_mask(layer_data):
+                    img = Image.new(
+                        'L', (dna[0].shape[1], dna[0].shape[0]))
 
-                    sample_data['tuple'] = list(
-                        zip(sample_data['X_centroid'],
-                            sample_data['Y_centroid'])
-                    )
+                    for shape_type, verts in layer_data:
 
-                    file_path = get_filepath(self, check, sample, 'TIF')
-                    dna, min, max = single_channel_pyramid(
-                        file_path, channel=0)
+                        selection_verts = np.round(verts).astype(int)
 
-                    # create pillow image to convert into boolean mask
-                    def shape_layer_to_mask(layer_data):
-                        img = Image.new(
-                            'L', (dna[0].shape[1], dna[0].shape[0]))
+                        if shape_type == 'ellipse':
 
-                        for shape_type, verts in layer_data:
+                            vertices, triangles = triangulate_ellipse(
+                                selection_verts
+                            )
 
-                            selection_verts = np.round(verts).astype(int)
+                            # flip 2-tuple coordinates returned by
+                            # triangulate_ellipse() to draw image mask
+                            vertices = [tuple(reversed(tuple(i)))
+                                        for i in vertices]
 
-                            if shape_type == 'ellipse':
+                            # update pillow image with polygon
+                            ImageDraw.Draw(img).polygon(
+                                vertices, outline=1, fill=1
+                            )
 
-                                vertices, triangles = triangulate_ellipse(
-                                    selection_verts
-                                )
+                        else:
+                            vertices = list(tuple(
+                                zip(selection_verts[:, 1],
+                                    selection_verts[:, 0])
+                            ))
 
-                                # flip 2-tuple coordinates returned by
-                                # triangulate_ellipse() to draw image mask
-                                vertices = [tuple(reversed(tuple(i)))
-                                            for i in vertices]
+                            # update pillow image with polygon
+                            ImageDraw.Draw(img).polygon(
+                                vertices, outline=1, fill=1)
 
-                                # update pillow image with polygon
-                                ImageDraw.Draw(img).polygon(
-                                    vertices, outline=1, fill=1
-                                )
+                    # convert pillow image into boolean numpy array
+                    mask = np.array(img, dtype=bool)
+                    return mask
 
-                            else:
-                                vertices = list(tuple(
-                                    zip(selection_verts[:, 1],
-                                        selection_verts[:, 0])
-                                ))
+                # use numpy fancy indexing to get centroids
+                # where boolean mask is True
+                xs, ys = zip(*sample_data['tuple'])
+                ROI_mask = shape_layer_to_mask(extra_layers['ROI'][sample])
+                inter1 = ROI_mask[ys, xs]
+                sample_data['inter1'] = inter1
+            else:
+                logger.info(f'No ROIs selected for sample: {sample}')
+                sample_data = data[['X_centroid', 'Y_centroid', 'CellID']][
+                    data['Sample'] == sample].astype(int)
+                sample_data['tuple'] = list(
+                    zip(sample_data['X_centroid'],
+                        sample_data['Y_centroid'])
+                )
+                xs, ys = zip(*sample_data['tuple'])
+                sample_data['inter1'] = False
 
-                                # update pillow image with polygon
-                                ImageDraw.Draw(img).polygon(
-                                    vertices, outline=1, fill=1)
+                
+            # might want to keep track if auto artifact detection is used separately in the global state
+            if self.artifactDetectionMethod == 'MLP':
+                autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
+            elif self.artifactDetectionMethod == 'Classical':
+                autoArtifactDetectionUsed = len(global_state.artifacts) > 0
+                
+            if self.autoArtifactDetection:
+                if self.artifactDetectionMethod == 'MLP':
+                    autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
+                elif self.artifactDetectionMethod == 'Classical':
+                    autoArtifactDetectionUsed = sum([len(d) for d in list(extra_layers.values())[1:]]) > 0
 
-                        # convert pillow image into boolean numpy array
-                        mask = np.array(img, dtype=bool)
-                        return mask
-
-                    # use numpy fancy indexing to get centroids
-                    # where boolean mask is True
-                    xs, ys = zip(*sample_data['tuple'])
-                    ROI_mask = shape_layer_to_mask(extra_layers['ROI'][sample])
-                    inter1 = ROI_mask[ys, xs]
-                    sample_data['inter1'] = inter1
-
-                    # might want to keep track if auto artifact detection is used separately in the global state
+                if autoArtifactDetectionUsed:
                     if self.artifactDetectionMethod == 'MLP':
-                        autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
-                    elif self.artifactDetectionMethod == 'Classical':
-                        autoArtifactDetectionUsed = True ## need to fix
-                    
-                    if self.autoArtifactDetection and autoArtifactDetectionUsed:
-                        if self.artifactDetectionMethod == 'MLP':
-                            ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
-                        elif self.artifactDetectionMethod == 'Classical':
-                            pass # need to take union of all masks
+                        ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
                         inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & \
-                            (global_state.artifact_proba > global_state.artifact_detection_threshold)
-                        sample_data['inter2'] = inter2
+                        (global_state.artifact_proba > global_state.artifact_detection_threshold)
+                    elif self.artifactDetectionMethod == 'Classical':
+                        masks = []
+                        for abx_channel in abx_channels:
+                            artifact_info = extra_layers[f'{abx_channel}_mask'].get(sample)
+                            if artifact_info is None:
+                                break
+                            else:
+                                masks.append(upscale(artifact_info.mask > 0, 
+                                            global_state.loaded_ims[abx_channel][0]))
+                        if len(masks) == 0:
+                            inter2 = False
+                        else:
+                            ROI2_mask = np.logical_or.reduce(masks)
+                            inter2 = ROI2_mask[ys, xs]
+                        
+                        
+                    
+                    sample_data['inter2'] = inter2
+            else:
+                logger.info(f'Artifact Detection not enabled for sample: {sample}')
 
-                    drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False
-                    if self.delintMode is True:
-                        idxs_to_drop[sample] = list(
-                            sample_data['CellID'][sample_data['inter1']
-                                                  | drop_artifact_ids]
-                        )
-                    else:
-                        idxs_to_drop[sample] = list(
-                            sample_data['CellID'][~sample_data['inter1']
-                                                  | drop_artifact_ids]
-                        )
-                else:
-                    logger.info(f'No ROIs selected for sample: {sample}')
-                    idxs_to_drop[sample] = []
+            drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False
+            
+            if self.delintMode is False:
+                sample_data['inter1'] = ~sample_data['inter1']
 
-            except KeyError:
-                logger.info(
-                    f'Aborting; ROIs have not been '
-                    f'selected for sample {sample}. '
-                    'Please re-run selectROIs module to select '
-                    'ROIs for this sample.'
-                )
-                sys.exit()
+            idxs_to_drop[sample] = list(
+                sample_data['CellID'][sample_data['inter1'] | drop_artifact_ids]
+            )
+
+            # except KeyError:
+            #     logger.info(
+            #         f'Aborting; ROIs have not been '
+            #         f'selected for sample {sample}. '
+            #         'Please re-run selectROIs module to select '
+            #         'ROIs for this sample.'
+            #     )
+            #     sys.exit()
         print()
 
         # drop cells from samples
