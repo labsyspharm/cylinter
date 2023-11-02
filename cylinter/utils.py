@@ -20,6 +20,7 @@ from sklearn.preprocessing import MinMaxScaler
 import zarr
 import dask.array as da
 import tifffile
+import skimage
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
 
@@ -809,3 +810,9 @@ def triangulate_ellipse(corners, num_segments=100):
     triangles[-1, 2] = 1
 
     return vertices, triangles
+
+
+def upscale(raw_im, target_im):
+    return skimage.transform.resize(raw_im, target_im.shape,
+                                     order=0, preserve_range=True, 
+                                     anti_aliasing=False)

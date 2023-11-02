@@ -17,10 +17,11 @@ from qtpy.QtCore import QTimer
 
 import napari
 from magicgui import magicgui
+from magicgui.widgets import ComboBox, SpinBox, Container, Button
 
 from ..utils import (
     input_check, read_markers, get_filepath, marker_channel_number, napari_notification,
-    single_channel_pyramid, triangulate_ellipse, reorganize_dfcolumns
+    single_channel_pyramid, triangulate_ellipse, reorganize_dfcolumns, upscale
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,9 @@ def selectROIs(data, self, args):
         roi_dir = os.path.join(self.outDir, 'ROIs')
         if not os.path.exists(roi_dir):
             os.makedirs(roi_dir)
+        art_dir = os.path.join(roi_dir, self.artifactDetectionMethod)
+        if not os.path.exists(art_dir):
+            os.makedirs(art_dir)
 
         samples = iter(self.samplesForROISelection)
         sample = next(samples)
@@ -91,8 +95,7 @@ def selectROIs(data, self, args):
         ###################################################################
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
         # the points corresponding to centroids of cells classified as artifacts.
-        # We wrap this into a function so we can reuse if when loading different samples
-        def load_extra_layers(sample_id):
+        def load_extra_layers():
             varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
             layer_type = [('ROI', 'shape')]
             layer_name = [('ROI', 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection')]
@@ -104,13 +107,21 @@ def selectROIs(data, self, args):
                     layer_name += [('ROI2', 'Ignore Artifact Prediction Selection'), 
                                 ('Detected Artifacts', 'Predicted Artifacts')]
                 elif self.artifactDetectionMethod == 'Classical':
-                    pass                
+                    # to avoid complication, we implement the most straightforward method
+                    # of registering every abx channel, even if some may not have artifacts
+                    for abx_channel in abx_channels:
+                        varname_filename_lst += [(f'{abx_channel}_mask', f'{abx_channel}_artifact_mask.pkl'),
+                                                 (f'{abx_channel}_seeds', f'{abx_channel}_artifact_seeds.pkl')]
+                        layer_type += [(f'{abx_channel}_mask', 'image'),
+                                       (f'{abx_channel}_seeds', 'point')]
+                        layer_name += [(f'{abx_channel}_mask', f'{abx_channel} Artifact Mask'),
+                                       (f'{abx_channel}_seeds', f'{abx_channel} Artifact Seeds')]
             layer_type = dict(layer_type)
             layer_name = dict(layer_name)
 
             extra_layers = {}
             for varname, fname in varname_filename_lst:
-                fdir = os.path.join(roi_dir, sample_id + '_' + fname)
+                fdir = os.path.join(art_dir, fname)
                 print(fdir)
                 if os.path.exists(fdir):
                     f = open(fdir, 'rb')
@@ -119,8 +130,7 @@ def selectROIs(data, self, args):
                     extra_layers[varname] = {}
             return extra_layers, layer_type, layer_name, varname_filename_lst
         
-        # this is to initialize using the first sample available
-        extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers(sample)
+        extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers()
 
         ###################################################################
         def artifact_detection_model_MLP(data):
@@ -153,26 +163,29 @@ def selectROIs(data, self, args):
             return clf_preds, clf_proba
 
         def save_shapes(sample):
-            for i, tupl in enumerate(varname_filename_lst[::-1]):
-                varname, filename = tupl
-                updated_layer_data = []
-                layer = viewer.layers[-(i + 1)]
-                if layer_type[varname] == 'shape':
-                    for shape_type, roi in zip(layer.shape_type, layer.data):
-                        updated_layer_data.append((shape_type, roi))
-                    extra_layers[varname][sample] = updated_layer_data
-                elif layer_type[varname] == 'point':
-                    updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
-                    extra_layers[varname][sample] = updated_layer_data
+            if self.artifactDetectionMethod == 'MLP':
+                for i, tupl in enumerate(varname_filename_lst[::-1]):
+                    varname, filename = tupl
+                    updated_layer_data = []
+                    layer = viewer.layers[-(i + 1)]
+                    if layer_type[varname] == 'shape':
+                        for shape_type, roi in zip(layer.shape_type, layer.data):
+                            updated_layer_data.append((shape_type, roi))
+                        extra_layers[varname][sample] = updated_layer_data
+                    elif layer_type[varname] == 'point':
+                        updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
+                        extra_layers[varname][sample] = updated_layer_data
 
-                f = open(os.path.join(roi_dir, sample + '_' + filename), 'wb')
-                pickle.dump(extra_layers[varname], f)
-                f.close()
+                    f = open(os.path.join(art_dir, filename), 'wb')
+                    pickle.dump(extra_layers[varname], f)
+                    f.close()
+            elif self.artifactDetectionMethod == 'Classical':
+                pass
 
         def add_layers(sample):
             # antibody/immunomarker channels
             if self.showAbChannels:
-                for _, ch in enumerate(reversed(abx_channels)):
+                for ch in reversed(abx_channels):
                     channel_number = marker_channel_number(markers, ch)
                     file_path = get_filepath(self, check, sample, 'TIF')
                     img, min, max = single_channel_pyramid(
@@ -257,6 +270,29 @@ def selectROIs(data, self, args):
                                 np.array(artifact_proba_)
                             points_layer.refresh()
                         elif self.artifactDetectionMethod == 'Classical':
+                            try:
+                                artifact_mask, abx_channel = layer_data[sample] #artifact_mask should be upscaled
+                                artifact_layer = viewer.add_image(artifact_mask,
+                                          name=layer_name[varname], opacity=0.5)
+                                artifact_layer.metadata['abx_channel'] = abx_channel
+                            except:
+                                pass
+                elif layer_type[varname] == 'image':
+                    if self.autoArtifactDetection and self.artifactDetectionMethod == 'Classical':
+                        try:
+                            seeds, downscale, tols, abx_channel = layer_data[sample]
+                            seed_layer = viewer.add_points(seeds*(2**downscale), 
+                                    name=layer_name[varname],
+                                    face_color=[1,0,0,1],
+                                    edge_color=[0,0,0,0],
+                                    size=10, # fix this later to be dynamic!
+                                    features={
+                                        'id': range(len(seeds)),
+                                        'tol': tols
+                                    })
+                            seed_layer.metadata['abx_channel'] = abx_channel
+                            seed_layer.metadata['downscale'] = downscale
+                        except:
                             pass
 
             # Apply previously defined contrast limits if they exist
@@ -375,17 +411,34 @@ def selectROIs(data, self, args):
                 points_layer.refresh()
                 viewer.layers.selection.active = viewer.layers[-2]
             
-            # NEED TO IMPLEMENT THIS
-            def generate_artifact_mask(params):
-                pass
+            # might want to rewrite the above code for MLP model to reduce
+            # overhead of defining these widgets if we are never going to use them!
+            def generate_widgets_for_classical_method():
+                channel_selector_dropdown = ComboBox(choices=abx_channels, label='Abx channel')
+                compute_mask_button = Button(label='Compute artifact mask')
+                widget_combo_1 = Container(widgets=[
+                    channel_selector_dropdown, compute_mask_button
+                ])
+
+                tolerance_spinbox = SpinBox(value=0, label='Tolerance')
+                widget_combo_2 = Container(widgets=[
+                    tolerance_spinbox, 
+                ])
+
+                widget_lst = [widget_combo_1, widget_combo_2]
+                widget_names = ['Automated artifact detection', 'Finetuning']
+                return widget_lst, widget_names
 
             widgets = [next_sample, arbitrary_sample]
+            widget_names = [f'Sample {sample}', 'Arbitrary Sample Selection']
             if self.autoArtifactDetection:
                 if self.artifactDetectionMethod == 'MLP':
                     widgets.append(label_artifacts_MLP) # think up better function name?
+                    widget_names.append(['Automation Module'])
                 elif self.artifactDetectionMethod == 'Classical':
-                    widgets.append(generate_artifact_mask) # need to implement this
-            widget_names = [f'Sample {sample}', 'Arbitrary Sample Selection', 'Automation Module']
+                    new_widget_lst, new_widget_names = generate_widgets_for_classical_method()
+                    widgets.extend(new_widget_lst) # need to implement this
+                    widget_names.extend(new_widget_names)
             napari_widgets = []
             for widget, widget_name in zip(widgets, widget_names):
                 napari_widgets.append(viewer.window.add_dock_widget(widget=widget,
