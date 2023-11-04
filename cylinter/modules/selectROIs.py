@@ -376,7 +376,11 @@ def selectROIs(data, self, args):
             )
             def arbitrary_sample(sample, next_sample: str, widgets):
                 if next_sample == '':
-                    raise ValueError("Input sample ID cannot be empty!")
+                    napari.utils.notifications.show_error("Input sample ID cannot be empty.")
+                    return
+                elif not next_sample in self.samplesForROISelection:
+                    napari.utils.notifications.show_error("Input sample ID is not in the config file metadata.")
+                    return
                 if global_state.last_sample is None:
                     global_state.last_sample = sample
                 save_shapes(sample)
