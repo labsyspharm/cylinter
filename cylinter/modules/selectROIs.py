@@ -527,6 +527,9 @@ def selectROIs(data, self, args):
                 @tolerance_spinbox.changed.connect
                 def update_flood_mask():
                     current_layer = global_state.current_layer
+                    if current_layer is None:
+                        napari.utils.notifications.show_error("Please select a seed point. Note, you may need to re-compute the artifact mask.")
+                        return
                     abx_channel = current_layer.metadata['abx_channel']
                     artifacts = global_state.artifacts
                     pt_id = current_layer.current_properties['id'][0]
