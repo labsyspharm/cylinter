@@ -274,8 +274,8 @@ def selectROIs(data, self, args):
 
                     viewer.add_shapes(
                         data=polygons, shape_type=shapes, ndim=2,
-                        face_color=[1.0, 1.0, 1.0, 0.05], edge_color=edge_color,
-                        edge_width=10.0, name=layer_name[varname]
+                        face_color=[1.0, 1.0, 1.0, 0.3], edge_color=edge_color,
+                        edge_width=5.0, name=layer_name[varname]
                     )
                 elif layer_type[varname] == 'point':
                     if self.autoArtifactDetection:
@@ -520,7 +520,7 @@ def selectROIs(data, self, args):
                     for layer in viewer.layers:
                         layer.visible=False
                     artifact_layer.visible=True
-                    seed_layer.visible=True
+                    # seed_layer.visible=True  Per Greg's comment, make seed points invisible by default
                     global_state.abx_layers[abx_channel].visible=True
                     seed_layer.selected=True
 
