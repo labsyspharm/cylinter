@@ -18,7 +18,7 @@ from qtpy.QtCore import QTimer
 
 import napari
 from magicgui import magicgui
-from magicgui.widgets import ComboBox, SpinBox, Container, Button
+from magicgui.widgets import ComboBox, SpinBox, Container, Button, CheckBox
 from skimage.morphology import flood
 
 from ..utils import (
@@ -446,9 +446,14 @@ def selectROIs(data, self, args):
             # overhead of defining these widgets if we are never going to use them!
             def generate_widgets_for_classical_method():
                 channel_selector_dropdown = ComboBox(choices=abx_channels, label='Abx channel')
+                sensitivity_spinbox = SpinBox(value=0, label='Sensitivity', min=0, max=255)
+                sensitivity_auto_checkbox = CheckBox(value=True, label='Auto')
                 compute_mask_button = Button(label='Compute artifact mask')
                 widget_combo_1 = Container(widgets=[
-                    channel_selector_dropdown, compute_mask_button
+                    channel_selector_dropdown, 
+                    sensitivity_spinbox,
+                    sensitivity_auto_checkbox,
+                    compute_mask_button
                 ])
 
                 tolerance_spinbox = SpinBox(value=0, label='Tolerance')
@@ -472,9 +477,15 @@ def selectROIs(data, self, args):
                             pass
                     ### next, compute
                     params = {'downscale': 2}
-                    artifact_mask, im_transformed, seeds, tols = \
+                    if sensitivity_auto_checkbox.value:
+                        h = None
+                    else:
+                        h = sensitivity_spinbox.value
+                    artifact_mask, im_transformed, seeds, tols, opt_h = \
                                 artifact_detector_v3(loaded_ims[abx_channel],
-                                                     downscale=params['downscale'])
+                                                     downscale=params['downscale'], h=h)
+                    sensitivity_spinbox.value = opt_h
+                    sensitivity_auto_checkbox.value = True
                     artifact_info = ArtifactInfo(params, artifact_mask, im_transformed, 
                                                 dict(zip(range(len(seeds)), seeds)), tols)
                     artifacts[abx_channel] = artifact_info
@@ -523,6 +534,10 @@ def selectROIs(data, self, args):
                     # seed_layer.visible=True  Per Greg's comment, make seed points invisible by default
                     global_state.abx_layers[abx_channel].visible=True
                     seed_layer.selected=True
+
+                @sensitivity_spinbox.changed.connect
+                def deselect_auto():
+                    sensitivity_auto_checkbox.value = False
 
                 @tolerance_spinbox.changed.connect
                 def update_flood_mask():

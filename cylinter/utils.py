@@ -843,16 +843,25 @@ def artifact_detector_v3(pyramid,
     im_transformed = rank_max(mean(im_eroded, kernel), kernel)
     local_contrast = gradient(im_transformed, kernel_large)
     
+    # if h is None:
+    #     avg_ccmp_areas = []
+    #     for i in range(max_contrast):
+    #         num = np.sum(local_contrast > i)
+    #         denom = np.max(label(local_contrast > i))
+    #         if denom==0:
+    #             break
+    #         else: 
+    #             avg_ccmp_areas.append(num/denom)
+    #     h = np.argmin(avg_ccmp_areas)
+
     if h is None:
-        avg_ccmp_areas = []
-        for i in range(max_contrast):
-            num = np.sum(local_contrast > i)
-            denom = np.max(label(local_contrast > i))
-            if denom==0:
-                break
-            else: 
-                avg_ccmp_areas.append(num/denom)
-        h = np.argmin(avg_ccmp_areas)
+        try:
+            lower_quantile = np.quantile(local_contrast.ravel(), 0.5)
+            local_contrast_ = local_contrast[(local_contrast > lower_quantile)]
+            h = skimage.filters.threshold_minimum(local_contrast_)
+        except RuntimeError:
+            h=255
+
     local_maxima_ = h_maxima(im_transformed, h=h, footprint=kernel_large) if h > 0 else\
                     local_maxima(im_transformed)
     local_maxima_labeled = label(local_maxima_)
@@ -887,7 +896,7 @@ def artifact_detector_v3(pyramid,
         axes[3].imshow(local_contrast, cmap='gray')
         axes[4].imshow(local_maxima_labeled, cmap='gray')
         axes[5].imshow(artifact_mask, cmap='gray')
-    return artifact_mask, im_transformed, seeds, optimal_tols
+    return artifact_mask, im_transformed, seeds, optimal_tols, h
 
 
 def upscale(raw_im, target_im):
@@ -913,14 +922,18 @@ class ArtifactInfo():
         self.artifact_layer.refresh()
 
     def render_seeds(self, viewer, loaded_ims, layer_name, abx_channel):
-        seeds = np.vstack(list(self.seeds.values()))
+        if len(self.seeds) > 0:
+            seeds = np.vstack(list(self.seeds.values()))
+            ids = list(self.seeds.keys())
+        else:
+            seeds = ids = []
         self.seed_layer = viewer.add_points(seeds*(2**self.params['downscale']), 
                         name=layer_name[abx_channel+'_seeds'],
                         face_color=[1,0,0,1],
                         edge_color=[0,0,0,0],
                         size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
                         features={
-                            'id': list(self.seeds.keys()),
+                            'id': ids,
                             'tol': self.tols
                         }, visible=False)
         self.features = self.seed_layer.features
