@@ -931,7 +931,8 @@ class ArtifactInfo():
         grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
         self.artifact_layer = viewer.add_image(grayscale,
                                         name=layer_name[abx_channel+'_mask'], 
-                                        opacity=0.5, visible=False)
+                                        opacity=0.5, visible=False,
+                                        blending='additive')
         self.artifact_layer.metadata['abx_channel'] = abx_channel
 
     def render(self, viewer, loaded_ims, layer_name, abx_channel):
