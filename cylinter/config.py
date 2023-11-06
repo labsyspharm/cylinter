@@ -53,6 +53,7 @@ class Config:
         config.showAbChannels = bool(data['showAbChannels'])
         config.samplesForROISelection = list(data['samplesForROISelection'])
         config.autoArtifactDetection = bool(data['autoArtifactDetection'])
+        config.artifactDetectionMethod = str(data['artifactDetectionMethod'])
 
         config.numBinsIntensity = int(data['numBinsIntensity'])
 

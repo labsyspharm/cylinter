@@ -82,6 +82,7 @@ class QC(object):
                  showAbChannels=None,
                  samplesForROISelection=None,
                  autoArtifactDetection=None,
+                 artifactDetectionMethod=None,
 
                  # intensityFilter -
                  numBinsIntensity=None,
@@ -185,6 +186,7 @@ class QC(object):
         self.showAbChannels = showAbChannels
         self.samplesForROISelection = samplesForROISelection
         self.autoArtifactDetection = autoArtifactDetection
+        self.artifactDetectionMethod = artifactDetectionMethod
 
         self.numBinsIntensity = numBinsIntensity
 

@@ -4,6 +4,9 @@ import re
 import glob
 import pickle
 import logging
+from dataclasses import dataclass
+from typing import Dict
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -20,6 +23,18 @@ from sklearn.preprocessing import MinMaxScaler
 import zarr
 import dask.array as da
 import tifffile
+import skimage
+
+## these imports are for classical artifact detection
+import napari
+from skimage.filters.rank import minimum as rank_min
+from skimage.filters.rank import maximum as rank_max
+from skimage.filters.rank import gradient, mean
+from skimage.measure import label 
+
+from skimage.morphology import disk, erosion, dilation, h_maxima, flood, local_maxima
+from skimage.exposure import rescale_intensity
+############
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
 
@@ -371,8 +386,8 @@ def single_channel_pyramid(tiff_path, channel):
 
             pyramid = [da.from_array(z) for z in pyramid]
 
-            min_val = pyramid[0].min()
-            max_val = pyramid[0].max()
+            min_val = pyramid[-1].min()
+            max_val = pyramid[-1].max()
             vmin, vmax = da.compute(min_val, max_val)
 
         return pyramid, vmin, vmax
@@ -385,8 +400,8 @@ def single_channel_pyramid(tiff_path, channel):
 
             pyramid = [da.from_zarr(z) for z in pyramid]
 
-            min_val = pyramid[0].min()
-            max_val = pyramid[0].max()
+            min_val = pyramid[-1].min()
+            max_val = pyramid[-1].max()
             vmin, vmax = da.compute(min_val, max_val)
 
         else:
@@ -396,8 +411,8 @@ def single_channel_pyramid(tiff_path, channel):
 
             pyramid = [da.from_array(z) for z in pyramid]
 
-            min_val = pyramid[0].min()
-            max_val = pyramid[0].max()
+            min_val = pyramid[-1].min()
+            max_val = pyramid[-1].max()
             vmin, vmax = da.compute(min_val, max_val)
 
         return pyramid, vmin, vmax
@@ -809,3 +824,171 @@ def triangulate_ellipse(corners, num_segments=100):
     triangles[-1, 2] = 1
 
     return vertices, triangles
+
+
+def artifact_detector_v3(pyramid, 
+                      downscale=2, 
+                      erosion_kernel_size=5,
+                      lower_quantile_cutoff=0.2,
+                      max_contrast=20,
+                      h=None,
+                      debug=False):
+    if debug:
+        fig, axes = plt.subplots(1, 6, figsize=(24, 4))
+    kernel = disk(erosion_kernel_size)
+    kernel_large = disk(erosion_kernel_size*4)
+    im = rescale_intensity(pyramid[downscale].compute(), out_range=np.uint8)
+    im_eroded = rank_min(im, kernel)
+    lower_quantile = np.quantile(im_eroded.ravel(), lower_quantile_cutoff)
+    im_eroded[im_eroded < lower_quantile] = lower_quantile
+    im_transformed = rank_max(mean(im_eroded, kernel), kernel)
+    local_contrast = gradient(im_transformed, kernel_large)
+    
+    # if h is None:
+    #     avg_ccmp_areas = []
+    #     for i in range(max_contrast):
+    #         num = np.sum(local_contrast > i)
+    #         denom = np.max(label(local_contrast > i))
+    #         if denom==0:
+    #             break
+    #         else: 
+    #             avg_ccmp_areas.append(num/denom)
+    #     h = np.argmin(avg_ccmp_areas)
+
+    if h is None:
+        try:
+            lower_quantile = np.quantile(local_contrast.ravel(), 0.5)
+            local_contrast_ = local_contrast[(local_contrast > lower_quantile)]
+            h = skimage.filters.threshold_minimum(local_contrast_)
+        except RuntimeError:
+            h=255
+
+    local_maxima_ = h_maxima(im_transformed, h=h, footprint=kernel_large) if h > 0 else\
+                    local_maxima(im_transformed)
+    local_maxima_labeled = label(local_maxima_)
+    artifact_mask = np.zeros_like(im, dtype=np.int16)
+    max_contrast = np.max(im_transformed) - np.min(im_transformed)
+    
+    num_local_maxima = np.max(local_maxima_labeled)
+    seeds = np.empty((num_local_maxima, 2), dtype=int)
+    optimal_tols = np.empty((num_local_maxima,), dtype=int)
+    
+    for seg_id in range(1, num_local_maxima+1):
+        seed = np.argwhere(local_maxima_labeled==seg_id)[0]
+        num_filled_pixels = [np.sum(flood(im_transformed, seed_point=tuple(seed), 
+                                                tolerance=tol)) for tol in range(max_contrast+5)]
+        delta_num = np.diff(num_filled_pixels)
+        try: 
+            optimal_tol = argrelextrema(delta_num, np.greater)[0][-2] 
+            if optimal_tol >= 20:
+                optimal_tol -= 2 #kind of a fudging factor here
+        except:
+            optimal_tol = max(0, np.argmax(delta_num > np.mean(delta_num))-1) #-1 is a conservative fudging factor here
+        
+        seeds[seg_id-1, :] = seed
+        optimal_tols[seg_id-1] = optimal_tol
+        artifact_mask += flood(im_transformed, seed_point=tuple(seed), 
+                                                tolerance=optimal_tol)        
+
+    if debug:
+        axes[0].imshow(im, cmap='gray')
+        axes[1].imshow(im_eroded, cmap='gray')
+        axes[2].imshow(im_transformed, cmap='gray')
+        axes[3].imshow(local_contrast, cmap='gray')
+        axes[4].imshow(local_maxima_labeled, cmap='gray')
+        axes[5].imshow(artifact_mask, cmap='gray')
+    return artifact_mask, im_transformed, seeds, optimal_tols, h
+
+
+def upscale(raw_im, target_im):
+    return skimage.transform.resize(raw_im, target_im.shape,
+                                     order=0, preserve_range=True, 
+                                     anti_aliasing=False)
+
+@dataclass
+class ArtifactInfo():
+    params: Dict
+    mask: np.ndarray
+    transformed: np.ndarray
+    seeds: np.ndarray
+    tols: np.ndarray
+    features: pd.DataFrame = None
+    artifact_layer: napari.layers.Image = None
+    seed_layer: napari.layers.Points = None
+        
+    def update_mask(self, new_mask):
+        self.mask = new_mask
+        self.artifact_layer.data = upscale(self.mask, 
+                                           self.artifact_layer.data)
+        self.artifact_layer.refresh()
+
+    def bind_listener_seeds(self, viewer, global_state, tolerance_spinbox):
+        seed_layer = self.seed_layer
+        if seed_layer is None:
+            return
+        def point_clicked_callback(event):
+            current_layer = viewer.layers.selection.active
+            global_state.current_layer = current_layer
+            features = seed_layer.current_properties
+            global_state.current_point = self.seeds[features['id'][0]]
+            global_state.current_tol = features['tol'][0]
+            tolerance_spinbox.value = features['tol'][0]
+        
+        def point_changed_callback(event):
+            current_layer = viewer.layers.selection.active
+            abx_channel = current_layer.metadata['abx_channel']
+            pt_id = current_layer.current_properties['id'][0]
+            artifact_info = self
+            im_transformed = artifact_info.transformed
+            global_state.current_layer = current_layer
+            df = artifact_info.seed_layer.features.copy() # preemptive...but might be wasteful if df is large
+            
+            if event.action=='add':
+                df = seed_layer.features
+                pt_id = uuid4()
+                df.loc[df.index[-1], 'id']=pt_id
+                df.loc[df.index[-1], 'tol']=0
+                seed = (current_layer.data[-1] / (2**current_layer.metadata['downscale'])).astype(int)
+                artifact_info.seeds[pt_id] = seed
+                new_fill = flood(im_transformed, seed_point=tuple(seed), 
+                                                tolerance=0)
+                artifact_info.update_mask(artifact_info.mask + new_fill)
+            elif event.action=='remove':
+                optimal_tol = global_state.current_tol
+                old_fill = flood(im_transformed, seed_point=tuple(global_state.current_point), 
+                                tolerance=optimal_tol) 
+                artifact_info.update_mask(artifact_info.mask - old_fill)
+        
+        seed_layer.events.current_properties.connect(point_clicked_callback)
+        seed_layer.events.data.connect(point_changed_callback)
+    def render_seeds(self, viewer, loaded_ims, layer_name, abx_channel):
+        if len(self.seeds) > 0:
+            seeds = np.vstack(list(self.seeds.values()))
+            ids = list(self.seeds.keys())
+        else:
+            seeds = ids = []
+        self.seed_layer = viewer.add_points(seeds*(2**self.params['downscale']), 
+                        name=layer_name[abx_channel+'_seeds'],
+                        face_color=[1,0,0,1],
+                        edge_color=[0,0,0,0],
+                        size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
+                        features={
+                            'id': ids,
+                            'tol': self.tols
+                        }, visible=False)
+        self.features = self.seed_layer.features
+        self.seed_layer.metadata['abx_channel'] = abx_channel
+        self.seed_layer.metadata['downscale'] = self.params['downscale']
+
+    def render_mask(self, viewer, loaded_ims, layer_name, abx_channel):
+        grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
+        self.artifact_layer = viewer.add_image(grayscale,
+                                        name=layer_name[abx_channel+'_mask'], 
+                                        opacity=0.5, visible=False,
+                                        blending='additive')
+        self.artifact_layer.metadata['abx_channel'] = abx_channel
+
+    def render(self, viewer, loaded_ims, layer_name, abx_channel):
+        self.render_mask(viewer, loaded_ims, layer_name, abx_channel)
+        self.render_seeds(viewer, loaded_ims, layer_name, abx_channel)
+        
