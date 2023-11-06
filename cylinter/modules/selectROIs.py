@@ -480,11 +480,11 @@ def selectROIs(data, self, args):
                     if sensitivity_auto_checkbox.value:
                         h = None
                     else:
-                        h = sensitivity_spinbox.value
+                        h = 255 - sensitivity_spinbox.value
                     artifact_mask, im_transformed, seeds, tols, opt_h = \
                                 artifact_detector_v3(loaded_ims[abx_channel],
                                                      downscale=params['downscale'], h=h)
-                    sensitivity_spinbox.value = opt_h
+                    sensitivity_spinbox.value = 255 - opt_h
                     sensitivity_auto_checkbox.value = True
                     artifact_info = ArtifactInfo(params, artifact_mask, im_transformed, 
                                                 dict(zip(range(len(seeds)), seeds)), tols)
