@@ -106,9 +106,9 @@ def selectROIs(data, self, args):
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
         # the points corresponding to centroids of cells classified as artifacts.
         def load_extra_layers():
-            varname_filename_lst = [('ROI', 'ROI_selection.pkl')]
+            varname_filename_lst = [('ROI', 'manual_ROI_selection_neg.pkl' if self.delintMode else 'manual_ROI_selection_pos.pkl')]
             layer_type = [('ROI', 'shape')]
-            layer_name = [('ROI', 'Negative ROI Selection' if self.delintMode else 'Positive ROI Selection')]
+            layer_name = [('ROI', 'Manual ROI Selection (neg.)' if self.delintMode else 'Manual ROI Selection (pos.)')]
             if self.autoArtifactDetection:
                 if self.artifactDetectionMethod == 'MLP':
                     varname_filename_lst += [('ROI2', 'artifact_pred_selection.pkl'),
@@ -525,7 +525,7 @@ def selectROIs(data, self, args):
                     artifacts[abx_channel].seed_layer.features.loc[pt_idx, 'tol'] = new_tol
                 ################################################################
                 widget_lst = [widget_combo_1, widget_combo_2]
-                widget_names = ['Automated artifact detection', 'Finetuning']
+                widget_names = ['Automated artifact detection', 'Fine-tuning']
 
                 for artifact_info in global_state.artifacts.values():
                     artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
