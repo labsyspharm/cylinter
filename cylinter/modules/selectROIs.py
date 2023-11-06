@@ -204,6 +204,14 @@ def selectROIs(data, self, args):
                     elif layer_type[varname] == 'image' or layer_type[varname] == 'point':
                         abx_channel = varname.split('_')[0] # find a better way for this
                         artifact_info = global_state.artifacts.get(abx_channel)
+
+                        try:
+                            viewer.layers.index(layer_name[varname])
+                        except:
+                            if artifact_info is not None: # Napari layers are just deleted 
+                                extra_layers[varname].pop(sample, None)
+                                continue
+                        
                         if artifact_info is not None:
                             extra_layers[varname][sample] = artifact_info
                             artifact_info.features = None
