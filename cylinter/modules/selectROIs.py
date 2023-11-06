@@ -210,6 +210,12 @@ def selectROIs(data, self, args):
                         except:
                             if artifact_info is not None: # Napari layers are just deleted 
                                 extra_layers[varname].pop(sample, None)
+                                if len(extra_layers[varname]) > 0:
+                                    f = open(os.path.join(art_dir, filename), 'wb')
+                                    pickle.dump(extra_layers[varname], f)
+                                    f.close()
+                                else:
+                                    os.remove(os.path.join(art_dir, filename))
                                 continue
                         
                         if artifact_info is not None:
@@ -217,9 +223,10 @@ def selectROIs(data, self, args):
                             artifact_info.features = None
                             artifact_info.artifact_layer = None
                             artifact_info.seed_layer = None
-                    f = open(os.path.join(art_dir, filename), 'wb')
-                    pickle.dump(extra_layers[varname], f)
-                    f.close() # simplify by merging the two cases later
+                    if len(extra_layers[varname]) > 0:
+                        f = open(os.path.join(art_dir, filename), 'wb')
+                        pickle.dump(extra_layers[varname], f)
+                        f.close()
         def add_layers(sample):
             # reset some global states if using classical artifact detection
             if self.artifactDetectionMethod == 'Classical':
