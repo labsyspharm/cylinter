@@ -195,12 +195,15 @@ def selectROIs(data, self, args):
                     f.close()
             elif self.artifactDetectionMethod == 'Classical':
                 for varname, filename in varname_filename_lst:
+                    save_layer = False
                     if layer_type[varname] == 'shape':
                         layer = viewer.layers[layer_name[varname]]
                         updated_layer_data = []
                         for shape_type, roi in zip(layer.shape_type, layer.data):
                             updated_layer_data.append((shape_type, roi))
                         extra_layers[varname][sample] = updated_layer_data
+                        if updated_layer_data != []:
+                            save_layer = True
                     elif layer_type[varname] == 'image' or layer_type[varname] == 'point':
                         abx_channel = varname.split('_')[0] # find a better way for this
                         artifact_info = global_state.artifacts.get(abx_channel)
@@ -215,7 +218,10 @@ def selectROIs(data, self, args):
                                     pickle.dump(extra_layers[varname], f)
                                     f.close()
                                 else:
-                                    os.remove(os.path.join(art_dir, filename))
+                                    try:
+                                        os.remove(os.path.join(art_dir, filename))
+                                    except:
+                                        pass # file does not exist yet
                                 continue
                         
                         if artifact_info is not None:
@@ -223,7 +229,9 @@ def selectROIs(data, self, args):
                             artifact_info.features = None
                             artifact_info.artifact_layer = None
                             artifact_info.seed_layer = None
-                    if len(extra_layers[varname]) > 0:
+                        if len(extra_layers[varname]) > 0:
+                            save_layer = True
+                    if save_layer:
                         f = open(os.path.join(art_dir, filename), 'wb')
                         pickle.dump(extra_layers[varname], f)
                         f.close()
