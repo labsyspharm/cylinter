@@ -552,7 +552,6 @@ def selectROIs(data, self, args):
                     new_tol = tolerance_spinbox.value
                     new_fill = flood(im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
                                                     tolerance=new_tol)
-                    print(old_tol, new_tol)
                     artifacts[abx_channel].update_mask(artifacts[abx_channel].mask + new_fill - old_fill)
                     artifacts[abx_channel].tols[pt_idx] = new_tol
                     artifacts[abx_channel].seed_layer.features.loc[pt_idx, 'tol'] = new_tol
