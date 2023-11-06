@@ -491,43 +491,7 @@ def selectROIs(data, self, args):
                     artifacts[abx_channel] = artifact_info
                     artifact_info.render(viewer, loaded_ims, layer_name, abx_channel)
                     seed_layer, artifact_layer = artifact_info.seed_layer, artifact_info.artifact_layer
-                    
-                    def point_clicked_callback(event):
-                        current_layer = viewer.layers.selection.active
-                        global_state.current_layer = current_layer
-                        features = seed_layer.current_properties
-                        global_state.current_point = artifact_info.seeds[features['id'][0]]
-                        global_state.current_tol = features['tol'][0]
-                        tolerance_spinbox.value = features['tol'][0]
-                    
-                    def point_changed_callback(event):
-                        current_layer = viewer.layers.selection.active
-                        abx_channel = current_layer.metadata['abx_channel']
-                        pt_id = current_layer.current_properties['id'][0]
-                        artifact_info = artifacts[abx_channel]
-                        im_transformed = artifact_info.transformed
-                        global_state.current_layer = current_layer
-                        df = artifact_info.seed_layer.features.copy() # preemptive...but might be wasteful if df is large
-                        
-                        if event.action=='add':
-                            df = seed_layer.features
-                            pt_id = uuid4()
-                            df.loc[df.index[-1], 'id']=pt_id
-                            df.loc[df.index[-1], 'tol']=0
-                            seed = (current_layer.data[-1] / (2**current_layer.metadata['downscale'])).astype(int)
-                            artifact_info.seeds[pt_id] = seed
-                            new_fill = flood(im_transformed, seed_point=tuple(seed), 
-                                                            tolerance=0)
-                            artifact_info.update_mask(artifact_info.mask + new_fill)
-                        elif event.action=='remove':
-                            optimal_tol = global_state.current_tol
-                            old_fill = flood(im_transformed, seed_point=tuple(global_state.current_point), 
-                                            tolerance=optimal_tol) 
-                            artifact_info.update_mask(artifact_info.mask - old_fill)
-                    
-                    seed_layer.events.current_properties.connect(point_clicked_callback)
-                    seed_layer.events.data.connect(point_changed_callback)
-
+                    artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
                     for layer in viewer.layers:
                         layer.visible=False
                     artifact_layer.visible=True
@@ -562,6 +526,9 @@ def selectROIs(data, self, args):
                 ################################################################
                 widget_lst = [widget_combo_1, widget_combo_2]
                 widget_names = ['Automated artifact detection', 'Finetuning']
+
+                for artifact_info in global_state.artifacts.values():
+                    artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
 
                 return widget_lst, widget_names
 
