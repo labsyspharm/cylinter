@@ -697,7 +697,7 @@ def selectROIs(data, self, args):
                         for abx_channel in abx_channels:
                             artifact_info = extra_layers[f'{abx_channel}_mask'].get(sample)
                             if artifact_info is None:
-                                break
+                                continue
                             else:
                                 masks.append(upscale(artifact_info.mask > 0, 
                                             global_state.loaded_ims[abx_channel][0]))
