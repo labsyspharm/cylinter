@@ -141,6 +141,11 @@ def selectROIs(data, self, args):
         
         extra_layers, layer_type, layer_name, varname_filename_lst = load_extra_layers()
 
+        def float_roi_layer_to_top():
+            roi_layer_id = viewer.layers.index(viewer.layers[layer_name['ROI']])
+            top_layer_id = len(viewer.layers)
+            viewer.layers.move(roi_layer_id, top_layer_id)
+            
         ###################################################################
         def artifact_detection_model_MLP(data):
             if global_state.base_clf is None:
@@ -335,7 +340,8 @@ def selectROIs(data, self, args):
 
                 for ch in reversed(abx_channels):
                     viewer.layers[ch].contrast_limits = (
-                        contrast_limits[ch][0], contrast_limits[ch][1])
+                        contrast_limits[ch][0], contrast_limits[ch][1])           
+            float_roi_layer_to_top()
 
         def clear_widgets(widgets):
             for widget in widgets:
@@ -490,6 +496,8 @@ def selectROIs(data, self, args):
                                                 dict(zip(range(len(seeds)), seeds)), tols)
                     artifacts[abx_channel] = artifact_info
                     artifact_info.render(viewer, loaded_ims, layer_name, abx_channel)
+                    float_roi_layer_to_top()
+
                     seed_layer, artifact_layer = artifact_info.seed_layer, artifact_info.artifact_layer
                     artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
                     for layer in viewer.layers:
