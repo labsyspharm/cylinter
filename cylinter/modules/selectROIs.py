@@ -5,11 +5,9 @@ import pickle
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from uuid import uuid4
 
 import numpy as np
 
-from tifffile import imread
 from PIL import Image, ImageDraw
 
 import matplotlib.pyplot as plt
@@ -44,7 +42,7 @@ class GlobalState():
     artifact_proba: np.ndarray = field(
         default_factory=lambda: np.array([], dtype=float))
     artifact_detection_threshold: float = 0.5
-    ###
+ 
     current_layer: napari.layers.Layer = None
     current_point: np.ndarray = None
     current_tol: int = None
@@ -72,11 +70,7 @@ def selectROIs(data, self, args):
         markers_to_exclude=self.markersToExclude,
         data=data
     )
-
-    # print(markers_filepath, self.markersToExclude, data)
-    # print("########")
-    # print(markers)
-
+ 
     if self.samplesForROISelection:
 
         # check that all samples in samplesForROISelection are in dataframe
@@ -91,7 +85,7 @@ def selectROIs(data, self, args):
         roi_dir = os.path.join(self.outDir, 'ROIs')
         if not os.path.exists(roi_dir):
             os.makedirs(roi_dir)
-        art_dir = os.path.join(roi_dir, self.artifactDetectionMethod)
+        art_dir = os.path.join(roi_dir, 'masks', self.artifactDetectionMethod)
         if not os.path.exists(art_dir):
             os.makedirs(art_dir)
 
@@ -106,26 +100,41 @@ def selectROIs(data, self, args):
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
         # the points corresponding to centroids of cells classified as artifacts.
         def load_extra_layers():
-            varname_filename_lst = [('ROI', 'manual_ROI_selection_neg.pkl' if self.delintMode else 'manual_ROI_selection_pos.pkl')]
+            varname_filename_lst = [
+                ('ROI', 'manual_ROI_selections_neg.pkl' if self.delintMode else
+                 'manual_ROI_selections_pos.pkl')
+            ]
             layer_type = [('ROI', 'shape')]
-            layer_name = [('ROI', 'Manual ROI Selection (neg.)' if self.delintMode else 'Manual ROI Selection (pos.)')]
+            layer_name = [
+                ('ROI', 'Manual ROI Selections (neg.)' if self.delintMode else
+                 'Manual ROI Selections (pos.)')
+            ]
             if self.autoArtifactDetection:
                 if self.artifactDetectionMethod == 'MLP':
-                    varname_filename_lst += [('ROI2', 'artifact_pred_selection.pkl'),
-                                            ('Detected Artifacts', 'points.pkl')]
+                    varname_filename_lst += [
+                        ('ROI2', 'artifact_pred_selection.pkl'),
+                        ('Detected Artifacts', 'points.pkl')
+                    ]
                     layer_type += [('ROI2', 'shape'), ('Detected Artifacts', 'point')]
-                    layer_name += [('ROI2', 'Ignore Artifact Prediction Selection'), 
-                                ('Detected Artifacts', 'Predicted Artifacts')]
-                elif self.artifactDetectionMethod == 'Classical':
+                    layer_name += [
+                        ('ROI2', 'Ignore Artifact Prediction Selection'), 
+                        ('Detected Artifacts', 'Predicted Artifacts')
+                    ]
+                elif self.artifactDetectionMethod == 'classical':
                     # to avoid complication, we implement the most straightforward method
                     # of registering every abx channel, even if some may not have artifacts
                     for abx_channel in abx_channels:
-                        varname_filename_lst += [(f'{abx_channel}_mask', f'{abx_channel}_artifact_mask.pkl'),
-                                                 (f'{abx_channel}_seeds', f'{abx_channel}_artifact_seeds.pkl')]
-                        layer_type += [(f'{abx_channel}_mask', 'image'),
-                                       (f'{abx_channel}_seeds', 'point')]
-                        layer_name += [(f'{abx_channel}_mask', f'{abx_channel} Artifact Mask'),
-                                       (f'{abx_channel}_seeds', f'{abx_channel} Artifact Seeds')]
+                        varname_filename_lst += [
+                            (f'{abx_channel}_mask', f'{abx_channel}_artifact_mask.pkl'),
+                            (f'{abx_channel}_seeds', f'{abx_channel}_artifact_seeds.pkl')
+                        ]
+                        layer_type += [
+                            (f'{abx_channel}_mask', 'image'), (f'{abx_channel}_seeds', 'point')
+                        ]
+                        layer_name += [
+                            (f'{abx_channel}_mask', f'{abx_channel} Artifact Mask'),
+                            (f'{abx_channel}_seeds', f'{abx_channel} Artifact Seeds')
+                        ]
             layer_type = dict(layer_type)
             layer_name = dict(layer_name)
 
@@ -149,8 +158,10 @@ def selectROIs(data, self, args):
         ###################################################################
         def artifact_detection_model_MLP(data):
             if global_state.base_clf is None:
-                model_path = os.path.join(Path(__file__).absolute().parent,
-                                          '../pretrained_models/pretrained_model.pkl')
+                model_path = os.path.join(
+                    Path(__file__).absolute().parent,
+                    '../pretrained_models/pretrained_model.pkl'
+                )
                 with open(model_path, 'rb') as f:
                     global_state.base_clf = pickle.load(f)
 
@@ -187,13 +198,15 @@ def selectROIs(data, self, args):
                             updated_layer_data.append((shape_type, roi))
                         extra_layers[varname][sample] = updated_layer_data
                     elif layer_type[varname] == 'point':
-                        updated_layer_data = layer.data, global_state.artifact_mask, global_state.artifact_proba
+                        updated_layer_data = (
+                            layer.data, global_state.artifact_mask, global_state.artifact_proba
+                        )
                         extra_layers[varname][sample] = updated_layer_data
 
                     f = open(os.path.join(art_dir, filename), 'wb')
                     pickle.dump(extra_layers[varname], f)
                     f.close()
-            elif self.artifactDetectionMethod == 'Classical':
+            elif self.artifactDetectionMethod == 'classical':
                 for varname, filename in varname_filename_lst:
                     save_layer = False
                     if layer_type[varname] == 'shape':
@@ -205,13 +218,13 @@ def selectROIs(data, self, args):
                         if updated_layer_data != []:
                             save_layer = True
                     elif layer_type[varname] == 'image' or layer_type[varname] == 'point':
-                        abx_channel = varname.split('_')[0] # find a better way for this
+                        abx_channel = varname.split('_')[0]  # find a better way for this
                         artifact_info = global_state.artifacts.get(abx_channel)
 
                         try:
                             viewer.layers.index(layer_name[varname])
                         except:
-                            if artifact_info is not None: # Napari layers are just deleted 
+                            if artifact_info is not None:  # Napari layers are just deleted 
                                 extra_layers[varname].pop(sample, None)
                                 if len(extra_layers[varname]) > 0:
                                     f = open(os.path.join(art_dir, filename), 'wb')
@@ -221,7 +234,7 @@ def selectROIs(data, self, args):
                                     try:
                                         os.remove(os.path.join(art_dir, filename))
                                     except:
-                                        pass # file does not exist yet
+                                        pass  # file does not exist yet
                                 continue
                         
                         if artifact_info is not None:
@@ -235,15 +248,18 @@ def selectROIs(data, self, args):
                         f = open(os.path.join(art_dir, filename), 'wb')
                         pickle.dump(extra_layers[varname], f)
                         f.close()
+        
         def add_layers(sample):
             # reset some global states if using classical artifact detection
-            if self.artifactDetectionMethod == 'Classical':
+            if self.artifactDetectionMethod == 'classical':
                 global_state.artifacts = {}
                 global_state.loaded_ims = {}
                 global_state.abx_layers = {}
                 for abx_channel in abx_channels:
                     try:
-                        global_state.artifacts[abx_channel] = extra_layers[f'{abx_channel}_mask'][sample]
+                        global_state.artifacts[abx_channel] = (
+                            extra_layers[f'{abx_channel}_mask'][sample]
+                        )
                     except:
                         pass
 
@@ -284,10 +300,8 @@ def selectROIs(data, self, args):
             for varname, layer_data in extra_layers.items():
                 if layer_type[varname] == 'shape':
                     try:
-                        shapes = [shape_data[0]
-                                  for shape_data in layer_data[sample]]
-                        polygons = [shape_data[1]
-                                    for shape_data in layer_data[sample]]
+                        shapes = [shape_data[0] for shape_data in layer_data[sample]]
+                        polygons = [shape_data[1] for shape_data in layer_data[sample]]
                     except KeyError:
                         shapes = 'polygon'
                         polygons = None
@@ -309,12 +323,15 @@ def selectROIs(data, self, args):
                     if self.autoArtifactDetection:
                         if self.artifactDetectionMethod == 'MLP':
                             try:
-                                points, global_state.artifact_mask, global_state.artifact_proba = layer_data[sample]
+                                (points, global_state.artifact_mask,
+                                 global_state.artifact_proba) = layer_data[sample]
                                 artifact_mask_ = (
-                                    global_state.artifact_mask[global_state.binarized_artifact_mask]
+                                    global_state.artifact_mask[
+                                        global_state.binarized_artifact_mask]
                                 )
                                 artifact_proba_ = (
-                                    global_state.artifact_proba[global_state.binarized_artifact_mask]
+                                    global_state.artifact_proba[
+                                        global_state.binarized_artifact_mask]
                                 )
                             except:  # may want to be explicit here about the expected exception.
                                 points = None
@@ -324,9 +341,9 @@ def selectROIs(data, self, args):
                                 points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
                                 edge_width=0.0, name=layer_name[varname], size=10.0,
                                 face_color_cycle={
-                                    1: 'white', 2: 'red', 3: 'blue', 4: 'green', 5: 'cyan', 6:
-                                    'magenta'
-                                }, face_color='artifact_class',
+                                    1: 'white', 2: 'red', 3: 'blue',
+                                    4: 'green', 5: 'cyan', 6: 'magenta'},
+                                face_color='artifact_class',
                                 features={'artifact_class': np.array(
                                     artifact_mask_, dtype=int)}
                             )  # face_color=[1.0, 0, 0, 0.2],
@@ -335,17 +352,21 @@ def selectROIs(data, self, args):
                             points_layer.face_color[:, -1] * \
                                 np.array(artifact_proba_)
                             points_layer.refresh()
-                        elif self.artifactDetectionMethod == 'Classical':
+                        elif self.artifactDetectionMethod == 'classical':
                             abx_channel = varname.split('_')[0]
                             try:
-                                extra_layers[varname][sample].render_seeds(viewer, global_state.loaded_ims, layer_name, abx_channel)
+                                extra_layers[varname][sample].render_seeds(
+                                    viewer, global_state.loaded_ims, layer_name, abx_channel
+                                )
                             except:
                                 pass
                 elif layer_type[varname] == 'image':
-                    if self.autoArtifactDetection and self.artifactDetectionMethod == 'Classical': 
+                    if self.autoArtifactDetection and self.artifactDetectionMethod == 'classical': 
                         abx_channel = varname.split('_')[0]
                         try:
-                            extra_layers[varname][sample].render_mask(viewer, global_state.loaded_ims, layer_name, abx_channel)
+                            extra_layers[varname][sample].render_mask(
+                                viewer, global_state.loaded_ims, layer_name, abx_channel
+                            )
                         except:
                             pass
             # Apply previously defined contrast limits if they exist
@@ -371,9 +392,7 @@ def selectROIs(data, self, args):
                 viewer.window.remove_dock_widget(widget)
 
         def add_widgets(last_sample, sample):
-            @magicgui(
-                call_button="Apply ROI(s) and Move to Next Sample"
-            )
+            @magicgui(call_button="Apply ROI(s) and Move to Next Sample")
             def next_sample(last_sample, sample, widgets):
                 try:
                     # update ROI and other shape layers
@@ -407,8 +426,10 @@ def selectROIs(data, self, args):
                 if next_sample == '':
                     napari.utils.notifications.show_error("Input sample ID cannot be empty.")
                     return
-                elif not next_sample in self.samplesForROISelection:
-                    napari.utils.notifications.show_error("Input sample ID is not in the config file metadata.")
+                elif next_sample not in self.samplesForROISelection:
+                    napari.utils.notifications.show_error(
+                        "Input sample ID is not in the config file metadata."
+                    )
                     return
                 if global_state.last_sample is None:
                     global_state.last_sample = sample
@@ -438,8 +459,7 @@ def selectROIs(data, self, args):
                     global_state.binarized_artifact_mask,
                     global_state.artifact_proba
                 )
-                centroids = data[['Y_centroid', 'X_centroid']
-                                 ][binarized_artifact_mask]
+                centroids = data[['Y_centroid', 'X_centroid']][binarized_artifact_mask]
                 points_layer = viewer.layers[-1]
                 points_layer.face_color_mode = 'cycle'
                 points_layer.add(centroids)
@@ -464,8 +484,7 @@ def selectROIs(data, self, args):
                     global_state.artifact_proba[global_state.binarized_artifact_mask])
                 points_layer.face_color[:, -1] = np.piecewise(
                     proba, [proba < threshold, proba > threshold],
-                    [lambda v: 0, lambda v: (
-                        v - threshold) / (1 - threshold) * (1 - 0.3) + 0.3]
+                    [lambda v: 0, lambda v: (v - threshold) / (1 - threshold) * (1 - 0.3) + 0.3]
                 )
                 # np.clip((proba - threshold) / (np.max(proba) - threshold), 0.001, 0.999)
                 points_layer.refresh()
@@ -477,7 +496,7 @@ def selectROIs(data, self, args):
                 channel_selector_dropdown = ComboBox(choices=abx_channels, label='Abx channel')
                 sensitivity_spinbox = SpinBox(value=0, label='Sensitivity', min=0, max=255)
                 sensitivity_auto_checkbox = CheckBox(value=True, label='Auto')
-                compute_mask_button = Button(label='Compute artifact mask')
+                compute_mask_button = Button(label='Compute Artifact Mask')
                 widget_combo_1 = Container(widgets=[
                     channel_selector_dropdown, 
                     sensitivity_spinbox,
@@ -490,45 +509,54 @@ def selectROIs(data, self, args):
                     tolerance_spinbox, 
                 ])
 
-                #### bind callbacks
+                # bind callbacks
                 artifacts = global_state.artifacts
                 loaded_ims = global_state.loaded_ims
 
                 @compute_mask_button.clicked.connect
                 def compute_artifact_mask():
-                    ### first remove any existing layers if exist
+                    # first remove any existing layers if exist
                     abx_channel = channel_selector_dropdown.value
                     if abx_channel in artifacts.keys():
                         try:
-                            viewer.layers.remove(viewer.layers[layer_name[f'{abx_channel}_seeds']])
-                            viewer.layers.remove(viewer.layers[layer_name[f'{abx_channel}_mask']])
+                            viewer.layers.remove(
+                                viewer.layers[layer_name[f'{abx_channel}_seeds']]
+                            )
+                            viewer.layers.remove(
+                                viewer.layers[layer_name[f'{abx_channel}_mask']]
+                            )
                         except:
                             pass
-                    ### next, compute
+                    # next, compute
                     params = {'downscale': 2}
                     if sensitivity_auto_checkbox.value:
                         h = None
                     else:
                         h = 255 - sensitivity_spinbox.value
                     artifact_mask, im_transformed, seeds, tols, opt_h = \
-                                artifact_detector_v3(loaded_ims[abx_channel],
-                                                     downscale=params['downscale'], h=h)
+                        artifact_detector_v3(
+                            loaded_ims[abx_channel], downscale=params['downscale'], h=h
+                        )
                     sensitivity_spinbox.value = 255 - opt_h
                     sensitivity_auto_checkbox.value = True
-                    artifact_info = ArtifactInfo(params, artifact_mask, im_transformed, 
-                                                dict(zip(range(len(seeds)), seeds)), tols)
+                    artifact_info = ArtifactInfo(
+                        params, artifact_mask, im_transformed, 
+                        dict(zip(range(len(seeds)), seeds)), tols
+                    )
                     artifacts[abx_channel] = artifact_info
                     artifact_info.render(viewer, loaded_ims, layer_name, abx_channel)
                     float_roi_layer_to_top()
 
-                    seed_layer, artifact_layer = artifact_info.seed_layer, artifact_info.artifact_layer
+                    seed_layer, artifact_layer = (
+                        artifact_info.seed_layer, artifact_info.artifact_layer
+                    )
                     artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
                     for layer in viewer.layers:
-                        layer.visible=False
-                    artifact_layer.visible=True
-                    # seed_layer.visible=True  Per Greg's comment, make seed points invisible by default
-                    global_state.abx_layers[abx_channel].visible=True
-                    seed_layer.selected=True
+                        layer.visible = False
+                    artifact_layer.visible = True
+                    # seed_layer.visible=True Per Greg's comment, make seeds invisible by default
+                    global_state.abx_layers[abx_channel].visible = True
+                    seed_layer.selected = True
 
                 @sensitivity_spinbox.changed.connect
                 def deselect_auto():
@@ -538,26 +566,37 @@ def selectROIs(data, self, args):
                 def update_flood_mask():
                     current_layer = global_state.current_layer
                     if current_layer is None:
-                        napari.utils.notifications.show_error("Please select a seed point. Note, you may need to re-compute the artifact mask.")
+                        napari.utils.notifications.show_error(
+                            "Please select a seed point. Note, you may need to"
+                            " re-compute the artifact mask."
+                        )
                         return
                     abx_channel = current_layer.metadata['abx_channel']
                     artifacts = global_state.artifacts
                     pt_id = current_layer.current_properties['id'][0]
                     df = artifacts[abx_channel].seed_layer.features
-                    pt_idx = df[df['id']==pt_id]['tol'].index.to_list()[0]
+                    pt_idx = df[df['id'] == pt_id]['tol'].index.to_list()[0]
                     old_tol = df.loc[pt_idx, 'tol']
                     im_transformed = artifacts[abx_channel].transformed
-                    old_fill = flood(im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
-                                                    tolerance=old_tol) 
+                    old_fill = flood(
+                        im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
+                        tolerance=old_tol
+                    ) 
                     new_tol = tolerance_spinbox.value
-                    new_fill = flood(im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
-                                                    tolerance=new_tol)
-                    artifacts[abx_channel].update_mask(artifacts[abx_channel].mask + new_fill - old_fill)
+                    new_fill = flood(
+                        im_transformed, seed_point=tuple(artifacts[abx_channel].seeds[pt_id]), 
+                        tolerance=new_tol
+                    )
+                    artifacts[abx_channel].update_mask(
+                        artifacts[abx_channel].mask + new_fill - old_fill
+                    )
                     artifacts[abx_channel].tols[pt_idx] = new_tol
                     artifacts[abx_channel].seed_layer.features.loc[pt_idx, 'tol'] = new_tol
+                
                 ################################################################
+                
                 widget_lst = [widget_combo_1, widget_combo_2]
-                widget_names = ['Automated artifact detection', 'Fine-tuning']
+                widget_names = ['Automated Artifact Detection', 'Fine-tuning']
 
                 for artifact_info in global_state.artifacts.values():
                     artifact_info.bind_listener_seeds(viewer, global_state, tolerance_spinbox)
@@ -568,17 +607,18 @@ def selectROIs(data, self, args):
             widget_names = [f'Sample {sample}', 'Arbitrary Sample Selection']
             if self.autoArtifactDetection:
                 if self.artifactDetectionMethod == 'MLP':
-                    widgets.append(label_artifacts_MLP) # think up better function name?
+                    widgets.append(label_artifacts_MLP)  # better function name?
                     widget_names.append(['Automation Module'])
-                elif self.artifactDetectionMethod == 'Classical':
+                elif self.artifactDetectionMethod == 'classical':
                     new_widget_lst, new_widget_names = generate_widgets_for_classical_method()
-                    widgets.extend(new_widget_lst) # need to implement this
+                    widgets.extend(new_widget_lst)  # need to implement this
                     widget_names.extend(new_widget_names)
             napari_widgets = []
             for widget, widget_name in zip(widgets, widget_names):
-                napari_widgets.append(viewer.window.add_dock_widget(widget=widget,
-                                                                    add_vertical_stretch=False,
-                                                                    name=widget_name))
+                napari_widgets.append(
+                    viewer.window.add_dock_widget(widget=widget, add_vertical_stretch=False,
+                                                  name=widget_name)
+                )
             next_sample.widgets.bind(napari_widgets)
             arbitrary_sample.widgets.bind(napari_widgets)
 
@@ -600,6 +640,7 @@ def selectROIs(data, self, args):
         idxs_to_drop = {}
         samples = self.samplesForROISelection
         for sample in samples:
+            
             # try:
             if extra_layers['ROI'][sample]:
 
@@ -673,46 +714,51 @@ def selectROIs(data, self, args):
                 xs, ys = zip(*sample_data['tuple'])
                 sample_data['inter1'] = False
 
-                
-            # might want to keep track if auto artifact detection is used separately in the global state
+            # may want to keep track if auto artifact detection is used separately in global state
             if self.artifactDetectionMethod == 'MLP':
                 autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
-            elif self.artifactDetectionMethod == 'Classical':
+            elif self.artifactDetectionMethod == 'classical':
                 autoArtifactDetectionUsed = len(global_state.artifacts) > 0
                 
             if self.autoArtifactDetection:
                 if self.artifactDetectionMethod == 'MLP':
                     autoArtifactDetectionUsed = len(global_state.artifact_proba) > 0
-                elif self.artifactDetectionMethod == 'Classical':
-                    autoArtifactDetectionUsed = sum([len(d) for d in list(extra_layers.values())[1:]]) > 0
+                elif self.artifactDetectionMethod == 'classical':
+                    autoArtifactDetectionUsed = sum(
+                        [len(d) for d in list(extra_layers.values())[1:]]
+                    ) > 0
 
                 if autoArtifactDetectionUsed:
                     if self.artifactDetectionMethod == 'MLP':
                         ROI2_mask = shape_layer_to_mask(extra_layers['ROI2'][sample])
                         inter2 = ~ROI2_mask[ys, xs] & (global_state.artifact_mask != 1) & \
-                        (global_state.artifact_proba > global_state.artifact_detection_threshold)
-                    elif self.artifactDetectionMethod == 'Classical':
+                            (global_state.artifact_proba > 
+                             global_state.artifact_detection_threshold)
+                    elif self.artifactDetectionMethod == 'classical':
                         masks = []
                         for abx_channel in abx_channels:
                             artifact_info = extra_layers[f'{abx_channel}_mask'].get(sample)
                             if artifact_info is None:
                                 continue
                             else:
-                                masks.append(upscale(artifact_info.mask > 0, 
-                                            global_state.loaded_ims[abx_channel][0]))
+                                masks.append(
+                                    upscale(artifact_info.mask > 0,
+                                            global_state.loaded_ims[abx_channel][0])
+                                )
                         if len(masks) == 0:
                             inter2 = False
                         else:
                             ROI2_mask = np.logical_or.reduce(masks)
                             inter2 = ROI2_mask[ys, xs]
-                        
-                        
-                    
+
                     sample_data['inter2'] = inter2
             else:
                 logger.info(f'Artifact Detection not enabled for sample: {sample}')
 
-            drop_artifact_ids = sample_data['inter2'] if self.autoArtifactDetection and autoArtifactDetectionUsed else False
+            drop_artifact_ids = (
+                sample_data['inter2'] if self.autoArtifactDetection 
+                and autoArtifactDetectionUsed else False
+            )
             
             if self.delintMode is False:
                 sample_data['inter1'] = ~sample_data['inter1']

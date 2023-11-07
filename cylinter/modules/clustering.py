@@ -47,7 +47,7 @@ def clustering(data, self, args):
     print()
 
     check, markers_filepath = input_check(self)
-
+    
     # read marker metadata
     markers, dna1, dna_moniker, abx_channels = read_markers(
         markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data

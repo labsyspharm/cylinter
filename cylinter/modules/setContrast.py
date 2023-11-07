@@ -149,7 +149,7 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
             QTimer().singleShot(0, viewer.close)
     
     next_sample.native.setSizePolicy(
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Minimum,
         QtWidgets.QSizePolicy.Maximum,
     )
 
@@ -230,7 +230,7 @@ def setContrast(data, self, args):
     next_widget = QtWidgets.QWidget()
     next_layout = QtWidgets.QVBoxLayout(next_widget)
     next_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Minimum,
         QtWidgets.QSizePolicy.Fixed,
     )
 
@@ -238,7 +238,7 @@ def setContrast(data, self, args):
     arbitrary_widget = QtWidgets.QWidget()
     arbitrary_layout = QtWidgets.QVBoxLayout(arbitrary_widget)
     arbitrary_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Minimum,
         QtWidgets.QSizePolicy.Fixed,
     )
 

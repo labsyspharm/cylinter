@@ -543,7 +543,7 @@ def callback(self, viewer, data, zeros, hist_widget, hist_layout, selection_widg
         @magicgui(
             layout='vertical',
             call_button='Refresh PDF(s)',
-            marker_name={'label': 'Marker Name (or ALL)'},
+            marker_name={'label': 'Marker Name (or "ALL")'},
         )
         def update_pdf(marker_name: str, zeros, gate_dir, dist_dir):
 
@@ -573,10 +573,12 @@ def callback(self, viewer, data, zeros, hist_widget, hist_layout, selection_widg
                     generate_pdf(data, marker, abx_channels, zeros, gate_dir, dist_dir)
                 multipage_pdf(abx_channels, dist_dir)
             else:
+                print()
                 generate_pdf(data, marker, abx_channels, zeros, gate_dir, dist_dir)
                 multipage_pdf(abx_channels, dist_dir)
 
             napari_notification('PDF(s) updated!')
+
             print()
         
         #######################################################################
@@ -867,8 +869,10 @@ def gating(data, self, args):
         axs[0].set_yticks([])
         axs[0].set_xlabel('Marker', fontsize=18, labelpad=20, fontweight='bold')
 
+        selected_vector_counts = pd.DataFrame(selected_vector_counts)
+        selected_vector_counts.rename(columns={0: 'counts'}, inplace=True)
         sns.barplot(
-            data=selected_vector_counts, x=selected_vector_counts, y=selected_vector_counts.index,
+            data=selected_vector_counts, x='counts', y=selected_vector_counts.index,
             orient='horizontal', color='grey', ax=axs[1]
         )
         plt.xscale('log')
@@ -974,7 +978,7 @@ def gating(data, self, args):
                         f"Boolean class '{class_name}' overlaps with {conflicts}"
                     )
                 data.loc[indexer] = class_name
-        
+
             data['class'] = data['class'].fillna('unclassified')
             data['class'] = data['class'].astype('str')
 
@@ -1058,8 +1062,10 @@ def gating(data, self, args):
             axs[0].set_yticks([])
             axs[0].set_xlabel('Marker', fontsize=18, labelpad=20, fontweight='bold')
 
+            unclassified_vector_counts = pd.DataFrame(unclassified_vector_counts)
+            unclassified_vector_counts.rename(columns={0: 'counts'}, inplace=True)
             sns.barplot(
-                data=unclassified_vector_counts, x=unclassified_vector_counts,
+                data=unclassified_vector_counts, x='counts',
                 y=unclassified_vector_counts.index, orient='horizontal',
                 color='grey', ax=axs[1]
             )

@@ -32,7 +32,7 @@ def frequencyStats(data, self, args):
     markers, dna1, dna_moniker, abx_channels = read_markers(
         markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
     )
-
+    
     for type in ['class', f'cluster_{self.dimensionEmbedding}d']:
         if type in data.columns:
 
@@ -163,8 +163,8 @@ def frequencyStats(data, self, args):
                             )
 
                             # round resulting values
-                            stat = round(stat, 3)
-                            pval = round(pval, 3)
+                            stat = round(stat, 6)
+                            pval = round(pval, 6)
 
                             # compute mean of test and control group values
                             cnd1_mean = np.mean(cnd1_values)
@@ -233,10 +233,9 @@ def frequencyStats(data, self, args):
                                       alpha=0.0)
                         )
 
-                    for tick in ax.xaxis.get_major_ticks():
-                        tick.label.set_fontsize(8)
-                    for tick in ax.yaxis.get_major_ticks():
-                        tick.label.set_fontsize(8)
+                    fontsize = {'size': 8}
+                    ax.xaxis.set_tick_params(which='major', reset=False, **fontsize)
+                    ax.yaxis.set_tick_params(which='major', reset=False, **fontsize)
 
                     plt.title(f'{test} vs. {control} ({stat[0]}<0.05)', fontsize=9)
                     plt.xlabel(f'abs({test} - {control})', fontsize=8)

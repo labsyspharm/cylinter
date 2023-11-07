@@ -9,7 +9,7 @@ keywords:
   - multiplex microscopy
   - quality control
   - research software
-version: 0.0.45
+version: 0.0.47
 date-released: 2021-01-21
 license: MIT
 url: https://github.com/labsyspharm/cylinter

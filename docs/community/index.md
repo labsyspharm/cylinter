@@ -19,7 +19,7 @@ nav_order: 8
 
 # Contributors
 
-CyLinter development is led by [Greg Baker](https://scholar.harvard.edu/gregoryjbaker) at the [Laboratory of Systems Pharmacology](https://hits.harvard.edu/the-program/laboratory-of-systems-pharmacology/about/), [Harvard Medical School](https://hms.harvard.edu/).
+CyLinter development is led by [Greg Baker](https://scholar.harvard.edu/gregoryjbaker) at the [Laboratory of Systems Pharmacology](https://labsyspharm.org/), [Harvard Medical School](https://hms.harvard.edu/).
 
 # Early adopters
 * [Clarence Yapp](https://scholar.harvard.edu/clarence/who-clarence)
@@ -35,6 +35,7 @@ CyLinter development is led by [Greg Baker](https://scholar.harvard.edu/gregoryj
 * [Claire Ritch](https://www.linkedin.com/in/cecily-claire-ritch-651795b7/)
 * [Shannon Coy](https://connects.catalyst.harvard.edu/Profiles/display/Person/140806)
 
-# Suggest a module
+<!-- # Suggest a module
 
 Module suggestions can be made by posting to [image.sc forums](https://forum.image.sc/tag/cylinter) and tagging your post with the `cylinter` tag.
+ -->
