@@ -7,20 +7,20 @@ has_children: false
 
 # Installation
 
-CyLinter is written in Python 3 and is compatible with MacOS, Linux, and Windows operating systems. The program can be installed via the cross-platform package manager, Mamba.
+CyLinter is written in Python 3 and is compatible with MacOS, Windows, and Linux operating systems. The program can be installed via the cross-platform package manager, Conda.
 
-## 1. Install Mamba
-Download the latest [Mambaforge installer](https://github.com/conda-forge/miniforge#mambaforge) for your operating system (e.g., Linux, MacOS, Windows).
+## 1. Install Miniconda
+Download the latest [Miniconda installer](https://docs.conda.io/projects/miniconda/en/latest/index.html) for your operating system (e.g., MacOS, Windows, Linux) then set [Libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) as the default dependency solver with the following commands:
 
-MacOS and Linux users can install Mamba using the following command:
 ``` bash
-sh <path_to_installer>
+conda update -n base conda
+conda install -n base conda-libmamba-solver
+conda config --set solver libmamba
 ```
-PC users can install Mamba by double-clicking the installer executable file and following the installation instructions.
 
 ## 2. Install CyLinter
 Install CyLinter into a dedicated virtual environment with the following command:  
 
 ``` bash
-mamba create -n cylinter -c conda-forge -c labsyspharm python=3.10 cylinter
+conda create -n cylinter -c conda-forge -c labsyspharm python=3.10 cylinter
 ```

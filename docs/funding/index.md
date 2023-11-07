@@ -5,8 +5,5 @@ nav_order: 9
 ---
 
 # Funding
-The CyLinter project is supported by:
 
-* NCI grants U54-CA22508U2C-CA233262 and U2C-CA233280 as part of the [Human Tumor Atlas Network](https://humantumoratlas.org/).
-* NIH grant 1U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs as part of the [Center For Cancer Systems Biology Consortium](https://csbconsortium.org/).
-* Ludwig Center at Harvard Medical School and the Ludwig Cancer Research Foundation
+This work was supported by Ludwig Cancer Research and the Ludwig Center at Harvard and by NIH NCI grants U2C-CA233280 (Omic and Multidimensional Spatial Atlas of Metastatic Breast and Prostate Cancers) and U2C-CA233262 (Pre-cancer atlases of cutaneous and hematologic origin—PATCH Center) as part of the [Human Tumor Atlas Network](https://humantumoratlas.org/). Development of computational methods and image processing software is supported by a Team Science Grant from the Gray Foundation, the Gates Foundation grant INV-027106, the David Liposarcoma Research Initiative, and the Emerson Collective.

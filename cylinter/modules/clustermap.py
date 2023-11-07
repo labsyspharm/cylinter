@@ -39,7 +39,7 @@ def clustermap(data, self, args):
 
         # creating new axes object
         ax_objs.append(fig.add_subplot(gs[i:i + 1, 0:]))
-
+  
         # plotting the distribution
         n, bins, patches = ax_objs[-1].hist(
             data[channel], bins=700, density=True, histtype='stepfilled',
@@ -74,7 +74,7 @@ def clustermap(data, self, args):
         ax_objs[-1].tick_params(axis='x', width=2)
 
         ax_objs[-1].text(-0.02, 0, channel, fontweight='normal', fontsize=8, ha='right')
-
+  
     gs.update(hspace=0.3)
     plt.subplots_adjust(left=0.3, bottom=0.1, right=0.9, top=0.95)
     plt.savefig(os.path.join(dim_dir, 'ridgeplots.pdf'))

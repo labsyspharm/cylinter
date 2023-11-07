@@ -308,6 +308,7 @@ def napari_notification(msg):
 def read_markers(markers_filepath, markers_to_exclude, data):
 
     markers = pd.read_csv(markers_filepath, dtype={0: 'int16', 1: 'int16', 2: 'str'}, comment='#')
+
     if data is None:
         markers_to_include = [i for i in markers['marker_name'] if i not in markers_to_exclude]
     else:

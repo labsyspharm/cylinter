@@ -7,6 +7,8 @@ parent: Workflow
 
 # Output File Structure
 
+In the below example, `<sample-name>` corresponds to the names given to tissue samples for a given analysis. `<test-name>` refers to the binary declarations specified as the fourth value elements in the `sampleMetadata` dictionary (see [general configurations](input#yaml-configuration-file)). `<chunk>` refers to a slice of the combined single-cell feature table for QC status reclassification. `<cluster-ID>` refers to clusters identified in by the `clustering` module. `<thumbnail-size>` refers to the square dimension (in pixels) of the thumbnail images cropped from multiplex images by the `curateThumbnails` module, and `<channel>` refers to the immunomarkers used in the study.
+
 ``` bash
 <output_dir>
 ├── area/
@@ -74,5 +76,3 @@ parent: Workflow
     │   └── <sample-name>.png
     └── polygon_dict.pkl
 ```
-
-In the above example, `<sample-name>` corresponds to the names given to tissue samples for a given analysis. `<test-name>` refers to the binary declarations specified as the fourth value elements in the `sampleMetadata` dictionary (see [general configurations](input#yaml-configuration-file)). `<chunk>` refers to a slice of the combined single-cell feature table for QC status reclassification. `<cluster-ID>` refers to clusters identified in by the `clustering` module. `<thumbnail-size>` refers to the square dimension (in pixels) of the thumbnail images cropped from multiplex images by the `curateThumbnails` module, and `<channel>` refers to the immunomarkers used in the study.

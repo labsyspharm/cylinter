@@ -52,19 +52,30 @@ samplesForROISelection: ["1", "15", "18", "68"]
 # (list of strs) Sample names for ROI selection specified
 # according to the first elements of sampleMetadata configuration.
 
-# intensityFilter-------------------------------------------------------------
+autoArtifactDetection: True
+# (bool) Whether to display tools for automated artifact detection in Napari window
+
+artifactDetectionMethod: "classical"
+# (str) Algorithm used for automated artifact detection (current option: "classical").
+# Multi-layer perceptron method ("MLP") currently under development.
+
+
+# intensityFilter-------------------------------------------------------------------
 numBinsIntensity: 50
 # (int) Number of bins for DNA intensity histograms.
 
-# areaFilter-------------------------------------------------------------
+
+# areaFilter-------------------------------------------------------------------
 numBinsArea: 50
 # (int) Number of bins for DNA area histograms.
 
-# cycleCorrelation-------------------------------------------------------------
+
+# cycleCorrelation-------------------------------------------------------------------
 numBinsCorrelation: 50
 # (int) Number of bins for DNA1/DNAn histograms.
 
-# pruneOutliers----------------------------------------------------------------
+
+# pruneOutliers-------------------------------------------------------------------
 hexbins: False
 # (bool) Whether to use hexbins (True) or scatter plots (False) to plot
 # single-cell signal intensities. Scatter plots allow for higher resolution,
@@ -74,7 +85,8 @@ hexbinGridSize: 20
 # (int) Hexbin grid size when hexins=True.
 # Higher values increase bin resolution.
 
-# metaQC (optional)------------------------------------------------------------
+
+# metaQC (optional)-------------------------------------------------------------------
 metaQC: False
 # (bool) Whether to perform data reclassification based on
 # unsupervised clustering results of combinations of clean and
@@ -130,8 +142,8 @@ learningRateTSNEQC: 200.0
 randomStateQC: 5
 # (int) Determines the random number generator for reproducible results
 # across multiple function calls.
-# --------------------------------------
 
+# --------------------------------------
 # UMAP-specific configurations:
 # https://umap-learn.readthedocs.io/en/latest/api.html
 nNeighborsQC: 6
@@ -157,9 +169,9 @@ repulsionStrengthQC: 5.0
 # (float) Weighting applied to negative samples in low dimensional
 # embedding optimization. Values higher than one will
 # result in greater weight being given to negative samples.
-# --------------------------------------
 
-# PCA--------------------------------------------------------------------------
+
+# PCA-------------------------------------------------------------------
 channelExclusionsPCA: []
 # (strs) Immunomarkers to exclude from PCA analysis.
 
@@ -188,9 +200,10 @@ conditionsToSilhouette: []
 # of the plot (zorder). Useful for increasing visual clarity of PCA
 # plots containing many data points.
 
-# gating (optional)------------------------------------------------------------
+
+# gating (optional)-------------------------------------------------------------------
 gating: True
-# (bool) Whether to perform data SYLARAS-style gating of data.
+# (bool) Whether to perform SYLARAS-style gating on single-cell data.
 # Cell Syst. 2020 Sep 23;11(3):272-285.e9 PMID: 32898474
 
 channelExclusionsGating: []
@@ -205,9 +218,10 @@ vectorThreshold: 100
 classes:
   Tumor: 
     definition: [+KI67, +pan-CK]
-    subsets: [CD73, CD107B, MART1]
+    subsets: []
 # (dict) Boolean immunophenotype signatures.
 # +marker = immunopositive , -marker = immunonegative, marker = don't care
+
 
 # clustering-------------------------------------------------------------------
 embeddingAlgorithm: "UMAP"
@@ -264,8 +278,8 @@ learningRateTSNE: 200.0
 randomStateTSNE: 5
 # (int) Determines the random number generator for reproducible results
 # across multiple function calls.
-# --------------------------------------
 
+# --------------------------------------
 # UMAP-specific configurations:
 # https://umap-learn.readthedocs.io/en/latest/api.html
 nNeighbors: 6
@@ -295,9 +309,9 @@ repulsionStrength: 5.0
 randomStateUMAP: 5
 # (int) Determines the random number generator for reproducible results
 # across multiple function calls.
-# --------------------------------------
 
-# frequencyStats---------------------------------------------------------------
+
+# frequencyStats-------------------------------------------------------------------
 controlGroups: ["CANCER-FALSE"]
 # (list of strs) Corresponds to control groups for each binary declaration
 # specified as the third elements of sampleMetadata values.
@@ -310,6 +324,7 @@ denominatorCluster: null
 FDRCorrection: False
 # (bool) Whether to compute p-vals and false discovery rate (FDR)-corrected
 # q-vals (True) or compute uncorrected p-vals only (False).
+
 
 # curateThumbnails-------------------------------------------------------------
 numThumbnails: 25
