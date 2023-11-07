@@ -10,18 +10,22 @@ parent: Workflow
 In the below example, `<sample-name>` corresponds to the names given to tissue samples for a given analysis. `<test-name>` refers to the binary declarations specified as the fourth value elements in the `sampleMetadata` dictionary (see [general configurations](input#yaml-configuration-file)). `<chunk>` refers to a slice of the combined single-cell feature table for QC status reclassification. `<cluster-ID>` refers to clusters identified in by the `clustering` module. `<thumbnail-size>` refers to the square dimension (in pixels) of the thumbnail images cropped from multiplex images by the `curateThumbnails` module, and `<channel>` refers to the immunomarkers used in the study.
 
 ``` bash
-<output_dir>
+<OUTPUT DIR>
 ├── area/
-│   ├── <sample-name>.pdf
-│   └── idxs_to_drop.csv
+│   ├── cutoffs.pkl
+│   plots/
+│       ├── <sample1>.pdf
+│       └── <sample2>.pdf
 ├── checkpoints/
 │   ├── aggregateData.parquet
 │   ├── areaFilter.parquet
+│   ├── clustering.csv
 │   ├── clustering.parquet
 │   ├── clustermap.parquet
 │   ├── curateThumbnails.parquet
 │   ├── cycleCorrelation.parquet
 │   ├── frequencyStats.parquet
+│   ├── gating.parquet
 │   ├── intensityFilter.parquet
 │   ├── logTransform.parquet
 │   ├── metaQC.parquet
@@ -30,28 +34,61 @@ In the below example, `<sample-name>` corresponds to the names given to tissue s
 │   ├── selectROIs.parquet
 │   └── setContrast.parquet
 ├── clustering/
-│   ├── clustermap_norm_channels.pdf
-│   ├── clustermap_norm_clusters
-│   ├── embedding.npy
-│   frequency_stats/
-│   ├── <test-name>/
-│       ├── catplot.pdf
-│       ├── plot.pdf
-│       ├── stats_sig.csv
-│       └── stats_total.csv
-│   thumbnails/
-│   ├── cluster<cluster-ID>_thumbnails.pdf
-│   ├── completed_clusters.txt
-│   zarrs/
-│   ├── clus<cluster-ID>_<sample-name>_win<thumbnail-size>.zarr/
-│   └── clus<cluster-ID>_<sample-name>_win<thumbnail-size>_seg.zarr/
+│   2d/
+│    ├── clustermap_cluster_2d_norm_channels.pdf
+│    ├── clustermap_cluster_2d_norm_clusters.pdf
+│    ├── emb_channels.png
+│    ├── embedding.npy
+│    frequency_stats/
+│       ├── class/
+│           ├── CANCER-TRUE_v_CANCER-FALSE/
+│               ├── plot.pdf
+│               ├── stats_sig.csv
+│               └── stats_total.csv
+│       └── cluster_2d
+│           ├── CANCER-TRUE_v_CANCER-FALSE/
+│               ├── plot.pdf
+│               ├── stats_sig.csv
+│               └── stats_total.csv
+│    ├── MCS.txt
+│    ├── ridgeplots.pdf
+│    thumbnails/
+│       ├── class/
+│           ├── completed.txt
+│           ├── Tumor.pdf
+│           └── zarrs/
+│                   ├── ...
+│       └── cluster_2d
+│           ├── 0.pdf
+│           ├── 1.pdf
+│           ├── 2.pdf
+│           ├── 3.pdf
+│           ├── 4.pdf
+│           ├── completed.txt
+│           └── zarrs/
+│                   ├── ...
+│    ├── UMAP_200_silho.png
+│    └── UMAP_200.png
 ├── contrast/
 │   └── contrast_limits.yml
 ├── cycles/
-│   ├── cycle_correlation(logRatio).pdf
-│   ├── cycle_correlation(perCycle).pdf
-│   ├── cycle_correlation(perSample).png
-│   └── idxs_to_drop.csv
+│   ├── cutoffs.pkl
+│   ├── plots/
+│       ├── 1.pdf
+│       ├── 15.pdf
+│       ├── 18.pdf
+│       ├── 68.pdf
+│       ├── correlation.png
+│       └── correlation(sample).png
+├── gating/
+│   ├── cutoffs.pkl
+│   ├── plots/
+│       ├── 1.pdf
+│       ├── 15.pdf
+│       ├── 18.pdf
+│       ├── 68.pdf
+│       ├── correlation.png
+│       └── correlation(sample).png
 ├── intensity/
 │   ├── <sample-name>.pdf
 │   └── idxs_to_drop.csv

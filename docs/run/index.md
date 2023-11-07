@@ -18,13 +18,13 @@ conda activate cylinter
 ```
 
 ## Step 3:
-Execute the program from the beginning of the pipeline by passing the YAML configuration file to the `cylinter` command:  
+Execute the program from the beginning of the pipeline by passing the YAML configuration file (which should be stored at the top level of the CyLinter [input directory]({{ site.baseurl }}/workflow/input/index)) to the `cylinter` command:  
 
 ``` bash
 cylinter <input_dir>/config.yml
 ```
 
-CyLinter bookmarks progress by automatically caching partially-redacted spatial feature tables in the `checkpoints/` directory of the CyLinter [output directory]({{ site.baseurl }}/workflow/output/index). To re-start the program at a desired module or re-run any of the [Modules]({{ site.baseurl }}/modules/index), pass the `--module` flag followed by a module name:
+CyLinter bookmarks progress by automatically caching partially-redacted spatial feature tables in the `checkpoints/` directory of the CyLinter [output directory]({{ site.baseurl }}/workflow/output/index). To re-run any of the [Modules]({{ site.baseurl }}/modules/index), pass the `--module` flag followed by the name of a specific module:
 
 ``` bash
 cylinter --module <module-name> <input_dir>/config.yml

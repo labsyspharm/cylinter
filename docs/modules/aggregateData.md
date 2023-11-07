@@ -5,6 +5,6 @@ nav_order: 1
 parent: Modules
 ---
 
-1\. `aggregateData`: This module aggregates single-cell data from all tissues in an analysis into a combined feature table which is passed to downstream modules (automated).
+1\. `aggregateData`: Aggregates spatial feature tables from all tissues into a combined datafame that is passed between modules. This step is fully automated.
 
 ### No YAML configurations
