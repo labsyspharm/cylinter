@@ -22,5 +22,6 @@ conda config --set solver libmamba
 Install CyLinter into a dedicated virtual environment with the following command:  
 
 ``` bash
-conda create -n cylinter -c conda-forge -c labsyspharm python=3.10 cylinter
+#conda create -n cylinter -c conda-forge -c labsyspharm python=3.10 cylinter
+conda create -n cylinter -c conda-forge -c gjbaker -c labsyspharm python=3 cylinter
 ```
