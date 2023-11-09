@@ -1175,11 +1175,11 @@ def clustering(data, self, args):
             QtWidgets.QSizePolicy.Maximum,
         )
 
-        viewer.window.add_dock_widget(cluster_and_plot, name='plot single MCS', area='right')
+        viewer.window.add_dock_widget(cluster_and_plot, name='Plot Single MCS', area='right')
 
-        viewer.window.add_dock_widget(sweep_MCS, name='sweep MCS range', area='right')
+        viewer.window.add_dock_widget(sweep_MCS, name='Sweep MCS Range', area='right')
 
-        viewer.window.add_dock_widget(cluster_widget, name='clustering result', area='right')
+        viewer.window.add_dock_widget(cluster_widget, name='Clustering Result', area='right')
 
         viewer.scale_bar.visible = True
         viewer.scale_bar.unit = 'um'

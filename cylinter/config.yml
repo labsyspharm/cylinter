@@ -217,7 +217,7 @@ vectorThreshold: 100
 
 classes:
   Tumor: 
-    definition: [+KI67, +pan-CK]
+    definition: [+pan-CK, +KI67]
     subsets: []
 # (dict) Boolean immunophenotype signatures.
 # +marker = immunopositive , -marker = immunonegative, marker = don't care

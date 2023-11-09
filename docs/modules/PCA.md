@@ -5,7 +5,7 @@ nav_order: 9
 parent: Modules
 ---
 
-9\. `PCA`: This module performs principle component analysis (PCA) on per-cell immunomarker intensities in each tissue. The PCA scores plot is saved to `<output_dir/PCA/pcaScoresPlot.pdf>`.
+9\. `PCA`: this module performs principal component analysis (PCA) on per-cell immunomarker intensities across tissues and returns per-cell and per-sample PCA scores plots, ridge plots showing the distribution of marker signal intensities, and the results of [Horn's parallel analysis](https://en.wikipedia.org/wiki/Parallel_analysis) indicating the number of PCs capturing non-random variation in the dataset.
 
 ### YAML configurations
 
