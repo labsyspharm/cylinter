@@ -6,7 +6,7 @@ nav_order: 7
 
 # Example data
 
-<img align="right" src="{{ site.baseurl }}/assets/images/cores.png" width="540" style="padding-left: 30px; padding-bottom: 20px;"> Four (4) human tissue cores are provided as CyLinter demonstration data: normal kidney cortex, mesothelioma, glioblastoma, and normal tonsil. These imaging data were collected by [CyCIF](https://www.cycif.org/) and are derived from a tissue microarray collected at the [Laboratory of Systems Pharmacology](https://labsyspharm.org/) referred to as EMIT (Exemplar Microscopy Images of Tissues) TMA22 (Synapse ID: [syn22345750](https://www.synapse.org/#!Synapse:syn22345750)). The tissues cores were imaged at 20X magnification using a 0.75 NA objective and 2x2-pixel binning.
+<img align="right" src="{{ site.baseurl }}/assets/images/cores.jpg" width="540" style="padding-left: 30px; padding-bottom: 20px;"> Four (4) human tissue cores are provided as CyLinter demonstration data: normal kidney cortex, mesothelioma, glioblastoma, and normal tonsil. These imaging data were collected by [CyCIF](https://www.cycif.org/) and are derived from a tissue microarray collected at the [Laboratory of Systems Pharmacology](https://labsyspharm.org/) referred to as EMIT (Exemplar Microscopy Images of Tissues) TMA22 (Synapse ID: [syn22345750](https://www.synapse.org/#!Synapse:syn22345750)). The tissues cores were imaged at 20X magnification using a 0.75 NA objective and 2x2-pixel binning.
 
 Access to the demonstration dataset requires free registration at the Sage Synapse data repository ([https://www.synapse.org/](https://www.synapse.org/)). Once registered, the example dataset can be downloaded using the following commands:
 
