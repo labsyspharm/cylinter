@@ -8,7 +8,7 @@ has_children: false
 # Running CyLinter
 
 ## Step 1:
-Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file). A copy of this file can be found in the virtual environment into which CyLinter was installed (`.../miniconda3/envs/cylinter/config.yml`)
+Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file). A copy of this file can be found in the virtual environment into which CyLinter was installed (`.../miniconda3/envs/cylinter/lib/pythonXX/site-packages/cylinter/config.yml`)
 
 ## Step 2:
 Activate the CyLinter virtual environment:
