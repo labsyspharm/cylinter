@@ -18,9 +18,10 @@ has_children: true
 | `pruneOutliers` | Filter channel outliers | [Details]({{ site.baseurl }}/modules/pruneOutliers) |
 | `metaQC` |  Reclassify cells according to QC status  | [Details]({{ site.baseurl }}/modules/metaQC)
 | `PCA` | Run principle component analysis | [Details]({{ site.baseurl }}/modules/PCA)
+| `setContrast` | Adjust image contrast settings | [Details]({{ site.baseurl }}/modules/setContrast)
 | `clustering` | Identify cell states | [Details]({{ site.baseurl }}/modules/clustering)
 | `clustermap` | Visualize cell state protein expression | [Details]({{ site.baseurl }}/modules/clustermap)
-| `setContrast` | Adjust image contrast settings | [Details]({{ site.baseurl }}/modules/setContrast)
+
 | `frequencyStats` | Compute cluster frequency statistics | [Details]({{ site.baseurl }}/modules/frequencyStats) |
 | `curateThumbnails` | Visualize example cells from each cluster | [Details]({{ site.baseurl }}/modules/curateThumbnails)
 

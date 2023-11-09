@@ -857,7 +857,7 @@ def metaQC(data, self, args):
 
                                     viewer.add_points(
                                         centroids, name=module,
-                                        visible=False, face_color=color,
+                                        visible=True, face_color=color,
                                         edge_width=0.0, size=4.0)
 
                                 # read segmentation outlines, add to Napari
@@ -1073,15 +1073,15 @@ def metaQC(data, self, args):
                 )
 
                 viewer.window.add_dock_widget(
-                    cluster_and_plot, name='plot single MCS',
+                    cluster_and_plot, name='Plot Single MCS',
                     area='right')
 
                 viewer.window.add_dock_widget(
-                    sweep_MCS, name='sweep MCS range',
+                    sweep_MCS, name='Sweep MCS Range',
                     area='right')
 
                 viewer.window.add_dock_widget(
-                    cluster_widget, name='clustering result', area='right')
+                    cluster_widget, name='Clustering Result', area='right')
 
                 viewer.scale_bar.visible = True
                 viewer.scale_bar.unit = 'um'

@@ -1,14 +1,11 @@
 ---
 layout: default-cylinter
 title: setContrast
-nav_order: 12
+nav_order: 10
 parent: Modules
 ---
 
-12\. `setContrast`: The Napari image viewer is used to adjust image contrast settings on a reference tissue specified by the `viewSample` parameter in `config.yml` to be applied to all tissues in a given analysis. Users toggle channels on and off by clicking their respectively labeled buttons at the left of the Napari window and moving the lower and upper sliders on the "contrast limits" control bar in the upper left of the Napari window. The lower slider thresholds background signal intensities, while the upper slider increases channel gain. Closing the Napari viewer saves the current settings as key:value pairs in `<output_dir>/contrast/contrast_limits.yml` and causes the program to proceed to the next module. Remove the `contrast_limits.yml` file (or edit specific key:value pairs) to re-define image contrast settings.
+10\. `setContrast`: in this module, image channel contrast is adjusted using the `contrast limits` slider bar in the `layer controls` dock at the top left of the Napari viewer. For each channel, contrast limits are set on a reference tissue whose median channel value is closest to the 85% quantile for the batch of tissues, such that a bright sample (but not the brightest, which tends to be driven by artifacts) is used to set the baseline contrast settings. The lower slider of the `contrast limits` slider bar is used to reduce background signal intensities, while the upper slider is used to increase channel gain. Once lower and upper sliders have been adjusted on the reference sample, the fit can be checked on other samples by entering their name in the `Sample Name` field the `Arbitrary Sample Selection` widget at the right of the Napari viewer and clicking the `Enter` button. Clicking the `Apply Limits and Move to Next Channel` button causes the module to move to the next channel for contrast adjustment. Contrast limits are applied to samples in the `gating` and `curteThumbnails` modules later in the pipeline. Channel contrast limits may be re-adjusted at any time by re-running the `setContrast` module.
 
-### YAML configurations (`config.yml`)
 
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `viewSample` | "1" | (str) Name of sample used to assign image contrast settings that will be applied to all samples in the analysis. Corresponds to first elements of sample_metadata dict values. |
+### No YAML configurations
