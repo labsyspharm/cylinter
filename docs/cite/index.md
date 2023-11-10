@@ -6,7 +6,7 @@ nav_order: 12
 
 ### If you use CyLinter in your work, please cite our preprint:
 
-*Baker et al. Quality Control for Single Cell Analysis of High-plex Tissue Profiles using CyLinter, bioRxiv 2023, DOI: https://doi.org/10.1101/2023.11.01.565120*
+*Baker et al. Quality Control for Single Cell Analysis of High-plex Tissue Profiles using CyLinter, bioRxiv 2023, DOI: [https://doi.org/10.1101/2023.11.01.565120](https://doi.org/10.1101/2023.11.01.565120)*
 
 
 ### The CyLinter GitHub repository can be cited as follows:
