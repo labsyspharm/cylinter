@@ -14,7 +14,7 @@ After gates have been applied to all combinations of markers and samples in the 
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `gating` | "True" | (bool) Whether to perform SYLARAS-style gating on single-cell data (Cell Syst. 2020 Sep 23;11(3):272-285.e9 PMID: 32898474) |
+| `gating` | "True" | (bool) Whether to perform SYLARAS-style gating on single-cell data |
 | `channelExclusionsGating` | [ ] | (list of strs) Immunomarkers to exclude from gating. |
 | `samplesToRemoveGating` | [ ] | (list of strs) Samples to exclude from gating. |
 | `vectorThreshold` | 100 | (int) vizualize Boolean vectors with cell counts >= vectorThreshold |
