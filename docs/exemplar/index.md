@@ -27,7 +27,7 @@ synapse get -r syn52859560 --downloadLocation C:\Users\<username>\Desktop\cylint
 * The demo dataset can also be downloaded directly from the Sage Synapse website here: [syn52859560](https://www.synapse.org/#!Synapse:syn52859560).
 
 ## Step 2: Configure
-After downloading the exemplar dataset, open the [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file) and update the `inDir` and `outDir` parameters with user-specific directory paths. All other settings are pre-configured for use with the demo dataset.
+After downloading the exemplar dataset, open the [YAML configuration file]({{ site.baseurl }}/structure/index#yaml-configuration-file) and update the `inDir` and `outDir` parameters with user-specific directory paths. All other settings are pre-configured for use with the demo dataset.
 
 ```yaml
 inDir: /Users/<username>/Desktop/cylinter_demo
@@ -38,7 +38,7 @@ outDir: /Users/<username>/Desktop/cylinter_demo/output
 ```
 
 ## Step 3: Run
-To run Cylinter on the demo dataset, pass the [YAML configuration file]({{ site.baseurl }}/workflow/input#yaml-configuration-file) to the `cylinter` command:
+To run Cylinter on the demo dataset, pass the [YAML configuration file]({{ site.baseurl }}/structure/index#yaml-configuration-file) to the `cylinter` command:
 
 ``` bash
 # for Mac:

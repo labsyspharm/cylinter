@@ -7,7 +7,7 @@ has_children: true
 
 # Workflow
 
-| Input Directory Structure (see [Input File Structure]({{ site.baseurl }}/input/index) for details) | Output Directory Structure
+| Input Directory Structure (see [Input File Structure]({{ site.baseurl }}/structure/index) for details) | Output Directory Structure
 | :-- | :-- |
 | <code>INPUT_DIR<br>├── config.yml<br>├── csv/<br>├── markers.csv<br>├── mask/<br>├── seg/<br>└── tif/<br></code> | <code>OUTPUT_DIR<br>├── area/<br>├── checkpoints/<br>├── clustering/<br>├── contrast/<br>├── cycles/<br>├── gating/<br>├── intensity/<br>├── metaQC/<br>├── PCA/<br>├── pruning/<br>└──  ROIs/<br></code>
 

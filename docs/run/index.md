@@ -8,7 +8,7 @@ has_children: false
 # Running CyLinter
 
 ## Step 1:
-Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/input/index#yaml-configuration-file). A copy of this file can be found in the virtual environment into which CyLinter was installed (`.../miniconda3/envs/cylinter/lib/pythonXX/site-packages/cylinter/config.yml`)
+Ensure that the desired configurations for a given analysis have been set in CyLinter's [YAML configuration file]({{ site.baseurl }}/structure/index#yaml-configuration-file). A copy of this file can be found in the virtual environment into which CyLinter was installed (`.../miniconda3/envs/cylinter/lib/pythonXX/site-packages/cylinter/config.yml`)
 
 ## Step 2:
 Activate the CyLinter virtual environment:
@@ -18,7 +18,7 @@ conda activate cylinter
 ```
 
 ## Step 3:
-Execute the program from the beginning of the pipeline by passing the YAML configuration file (which should be stored at the top level of the CyLinter [input directory]({{ site.baseurl }}/input/index)) to the `cylinter` command:  
+Execute the program from the beginning of the pipeline by passing the YAML configuration file (which should be stored at the top level of the CyLinter [input directory]({{ site.baseurl }}/structure/index)) to the `cylinter` command:  
 
 ``` bash
 cylinter <input_dir>/config.yml
