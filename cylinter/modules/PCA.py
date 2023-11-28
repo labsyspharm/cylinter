@@ -184,7 +184,7 @@ def PCA(data, self, args):
         )
         legend_handles.append(
             Line2D([0], [0], marker=None, color='tab:orange',
-                   label='average shuffled', markeredgewidth=0.7,
+                   label='shuffled', markeredgewidth=0.7,
                    markersize=5.0, linewidth=5)
         )
         ax1.legend(handles=legend_handles, prop={'size': 10.0}, bbox_to_anchor=[0.95, 1.0])
