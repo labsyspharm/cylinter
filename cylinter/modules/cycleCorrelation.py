@@ -1,7 +1,8 @@
 import os
+import re
 import sys
+import yaml
 import logging
-import pickle
 
 import numpy as np
 import pandas as pd
@@ -24,8 +25,8 @@ import napari
 from magicgui import magicgui
 
 from ..utils import (
-    input_check, read_markers, napari_notification, marker_channel_number,
-    single_channel_pyramid, categorical_cmap, get_filepath, reorganize_dfcolumns
+    input_check, read_markers, marker_channel_number, sort_qc_report,
+    single_channel_pyramid, categorical_cmap, get_filepath, reorganize_dfcolumns, compute_gmm
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ arbitrary_selection_toggle = False
 sample_index = 1
 
 
-def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback, selection_widget, selection_layout, hist_widget, hist_layout, cycles_dir): 
+def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_callback, selection_widget, selection_layout, hist_widget, hist_layout, cycles_dir, qc_report, report_path): 
     
     if sample in data['Sample'].unique():
         
@@ -43,8 +44,10 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
         check, markers_filepath = input_check(self)
 
         # read marker metadata
-        markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+        markers, abx_channels = read_markers( 
+            markers_filepath=markers_filepath,
+            counterstain_channel=self.counterstainChannel,
+            markers_to_exclude=self.markersToExclude, data=None
         )
 
         # clear existing channels from Napari window if they exist
@@ -58,7 +61,8 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
 
         # isolate ratio data
         cycle_data = group[group['cycle'] == cycle_ratio]
-        cycle_num = cycle_ratio.split('/')[1]
+        first_dna = cycle_ratio.split('/')[0]
+        last_dna = cycle_ratio.split('/')[1]
 
         # add cell segmentation outlines to Napari viewer
         file_path = get_filepath(self, check, sample, 'SEG')
@@ -68,25 +72,22 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
             opacity=0.5, colormap='gray', visible=False,
             name='segmentation', contrast_limits=(min, max)
         )
-
-        # get channel number from markers.csv
-        channel_number = marker_channel_number(markers, cycle_num)
-        
+ 
         # add last DNA image to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
+        channel_number = marker_channel_number(self, markers, last_dna)
         dna_last, min, max = single_channel_pyramid(file_path, channel=channel_number)
         viewer.add_image(
-            dna_last, rgb=False, blending='additive',
-            colormap='magenta', name=f'{cycle_num}',
+            dna_last, rgb=False, blending='additive', colormap='magenta', name=last_dna,
             contrast_limits=(min, max)
         )
 
-        # read first DNA image to Napari viewer
+        # add first DNA image to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
-        dna_first, min, max = single_channel_pyramid(file_path, channel=0)
+        channel_number = marker_channel_number(self, markers, first_dna)
+        dna_first, min, max = single_channel_pyramid(file_path, channel=channel_number)
         viewer.add_image(
-            dna_first, rgb=False, blending='additive',
-            colormap='green', name=f'{dna1}',
+            dna_first, rgb=False, blending='additive', colormap='green', name=first_dna,
             contrast_limits=(min, max)
         )
 
@@ -120,10 +121,11 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
 
         # set plot title
         log10 = '$Log_{10}$'
-        fig.suptitle(f'Sample={sample}  {log10}({dna1}/{cycle_num})', size=10)
+        fig.suptitle(f'Sample={sample}  {log10}({self.counterstainChannel}/{last_dna})', size=10)
 
         # get axis object from canvas
         ax = canvas.figure.subplots()
+        ax2 = ax.twinx()
 
         # plot log(cycle 1/n) histogram for current sample
         counts, bins, patches = ax.hist(
@@ -133,6 +135,8 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
         )
 
         ax.set_ylabel('Count', size=13)
+        ax2.set_ylabel('GMM density')
+        
         ax.tick_params(axis='x', labelsize=10)
         ax.tick_params(axis='y', labelsize=10)
 
@@ -146,22 +150,21 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
         # specify data range
         rnge = [bins.min(), bins.max()]
 
-        # load cutoffs dictionary if it exists
-        if os.path.exists(os.path.join(cycles_dir, 'cutoffs.pkl')):
-            f = open(os.path.join(cycles_dir, 'cutoffs.pkl'), 'rb')
-            cutoffs_dict = pickle.load(f)
-        else:
-            # create cutoffs dictionary
-            cutoffs_dict = {}
-            
+        # convert histogram data into 2D numpy array with 1 column to pass to GMM
+        gmm_data = cycle_data['log10(ratio)'].values.reshape(-1, 1)
+
+        # compute GMM
+        comp_lower_percentile, comp_upper_percentile = compute_gmm(
+            data=gmm_data, x_min=rnge[0], x_max=rnge[1], ax=ax2
+        )
         try:
-            lowerCutoff, upperCutoff = cutoffs_dict[sample]
-            vbars = True  # toggle to show vertical red/blue bars on plot
-            if lowerCutoff == upperCutoff:
-                vbars = False  # cutoffs were negated
-        except KeyError:
-            lowerCutoff, upperCutoff = (0.0001, 0.0001)  # avoiding -0.000 for initial slider vals
-            vbars = False
+            lowerCutoff, upperCutoff = qc_report['cycleCorrelation'][sample]
+            if lowerCutoff is None or upperCutoff is None:
+                lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
+
+        except (TypeError, KeyError, ValueError):
+            # use GMM to assign default lower and upper thresholds
+            lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
 
         # add slider functionality
         sLower = Slider(
@@ -190,8 +193,6 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
                 x=lowerCutoff, c='b', linewidth=2.5)
             redLine = ax.axvline(
                 x=upperCutoff, c='r', linewidth=2.5)
-
-            napari_notification(f'Sliders updated to ({lowerCutoff:.3f}, {upperCutoff:.3f})')
             
             return lowerCutoff, upperCutoff
 
@@ -200,8 +201,7 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
         sUpper.on_changed(update)
 
         # add vbars to plot
-        if vbars:
-            update(val=None)
+        update(val=None)
         
         # add button to show selected centroids in Napari viewer
         button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
@@ -247,7 +247,7 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
         
         # dock (or re-dock) hist_widget to Napari window 
         viewer.window.add_dock_widget(
-            hist_widget, name=f'Log(DNA1/{cycle_num}) histogram', area='right'
+            hist_widget, name=f'Log({first_dna}/{last_dna}) histogram', area='right'
         )
 
         # remove and re-dock selection_widget if it exists 
@@ -274,24 +274,32 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
 
             if lowerCutoff <= upperCutoff:
             
-                # add cutoffs to dictionary and store
-                cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
-                f = open(os.path.join(cycles_dir, 'cutoffs.pkl'), 'wb')
-                pickle.dump(cutoffs_dict, f)
-                f.close()
+                # store cutoffs in QC report
+                qc_report['cycleCorrelation'][sample] = [float(lowerCutoff), float(upperCutoff)]
 
+                # sort and dump updated qc_report to YAML file
+                qc_report_sorted = sort_qc_report(
+                    qc_report, module='cycleCorrelation', order=None
+                )
+                f = open(report_path, 'w')
+                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                
+                napari.utils.notifications.show_info(
+                    f'Sliders updated to ({lowerCutoff:.3f}, {upperCutoff:.3f})'
+                )
+                
                 # go to next sample
                 try:
                     if arbitrary_selection_toggle:
                         sample_index -= 1 
 
-                    sample = samples[sample_index]
+                    sample = samples_to_run[sample_index]
                     
                     initial_callback = False
                     callback(
-                        self, viewer, sample, samples, data, ratios_melt, initial_callback,
+                        self, viewer, sample, samples_to_run, data, ratios_melt, initial_callback,
                         selection_widget, selection_layout, hist_widget, hist_layout,
-                        cycles_dir 
+                        cycles_dir, qc_report, report_path 
                     )
 
                     sample_index += 1
@@ -300,11 +308,11 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
                 except IndexError:
 
                     print()
-                    napari_notification('Gating complete!')
+                    logger.info('Thresholding complete!')
                     QTimer().singleShot(0, viewer.close)
 
             else:
-                napari_notification(
+                napari.utils.notifications.show_warning(
                     'LowerCutoff (blue) must be lower than upperCutoff (red).'
                 )
                 pass
@@ -330,8 +338,8 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
             return sample
 
         sample_selector.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Minimum,
-            QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed
         )
         
         if initial_callback:  
@@ -347,52 +355,83 @@ def callback(self, viewer, sample, samples, data, ratios_melt, initial_callback,
 
             initial_callback = False
             callback(
-                self, viewer, sample, samples, data, ratios_melt, initial_callback,
+                self, viewer, sample, samples_to_run, data, ratios_melt, initial_callback,
                 selection_widget, selection_layout, hist_widget, hist_layout,
-                cycles_dir
+                cycles_dir, qc_report, report_path
             )
 
             arbitrary_selection_toggle = True
         
         ###########################################################################
-        napari_notification(f'Working on Sample {sample}')
+        napari.utils.notifications.show_info(f'Viewing sample {sample}')
         
     else:
         print()
-        napari_notification('Invalid entry.')
-        pass
+        napari.utils.notifications.show_warning(
+            'Sample name not in filtered data.'
+        )
 
 
+# main
 def cycleCorrelation(data, self, args):
 
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
     # create cycles directory if it doesn't already exist
     cycles_dir = os.path.join(self.outDir, 'cycles')
     if not os.path.exists(cycles_dir):
         os.makedirs(cycles_dir)
-
+    
+    # read QC report
+    report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+    try:
+        qc_report = yaml.safe_load(open(report_path))
+        reload_report = False
+        if qc_report is None:
+            qc_report = {}
+            reload_report = True
+        if 'cycleCorrelation' not in qc_report or qc_report['cycleCorrelation'] is None:
+            qc_report['cycleCorrelation'] = {}
+            reload_report = True
+        if reload_report:
+            qc_report_sorted = sort_qc_report(qc_report, module='cycleCorrelation', order=None)
+            f = open(report_path, 'w')
+            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            qc_report = yaml.safe_load(open(report_path))
+    except:
+        logger.info(
+            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
+            'from aggregateData module to initialize QC report.'
+        )
+        sys.exit()
+    
     ##########################################################
+    # get basename of DNA channels so they will not be read by Napari as immunomarker channels  
+    dna_moniker = str(re.search(r'[^\W\d]+', self.counterstainChannel).group())  
+    
     # get ordered list of DNA cycles
     dna_cycles = natsorted(data.columns[data.columns.str.contains(dna_moniker)])
 
     # compute DNA ratios
     ratios = pd.DataFrame(
-        [np.log10((data[dna1] + 0.00000000001) / (data[i] + 0.00000000001))
+        [np.log10((data[self.counterstainChannel] + 0.001) / (data[i] + 0.001))
          for i in dna_cycles]).T
 
-    # computing ratios changes columns headers,
-    # create new ratio column headers
+    # computing ratios changes columns headers, creating new ratio column headers
     unnamed_headers = [
         i for i in ratios.columns if i.startswith('Unnamed')]
-    ratio_headers = [f'{dna1}/{i}' for i in [j for j in dna_cycles[1:]]]
+    ratio_headers = [f'{self.counterstainChannel}/{i}' for i in [j for j in dna_cycles[1:]]]
     ratio_columns = dict(zip(unnamed_headers, ratio_headers))
-    ratio_columns[dna1] = f'{dna1}/{dna1}'
+    ratio_columns[self.counterstainChannel] = (
+        f'{self.counterstainChannel}/{self.counterstainChannel}'
+    )
     ratios.rename(columns=ratio_columns, inplace=True)
     ratios['sample'] = data['Sample']
 
@@ -406,13 +445,11 @@ def cycleCorrelation(data, self, args):
     # convert sample and cycle columns to ordered categoricals
     # and sort naturally on sample, cycle, and index
     ratios_melt['sample'] = pd.Categorical(
-        ratios_melt['sample'], ordered=True,
-        categories=natsorted(
-            ratios_melt['sample'].unique()))
+        ratios_melt['sample'], ordered=True, categories=natsorted(ratios_melt['sample'].unique())
+    )
     ratios_melt['cycle'] = pd.Categorical(
-        ratios_melt['cycle'], ordered=True,
-        categories=natsorted(
-            ratios_melt['cycle'].unique()))
+        ratios_melt['cycle'], ordered=True, categories=natsorted(ratios_melt['cycle'].unique())
+    )
     ratios_melt = ratios_melt.sort_values(['sample', 'cycle', 'index'])
 
     # convert columns back to strings
@@ -440,82 +477,88 @@ def cycleCorrelation(data, self, args):
         QtWidgets.QSizePolicy.Maximum
     )
     
-    # make a list of samples, select the first one, and pass it to the callback
+    # make a list of all samples in batch, select the first one
+    # for which cutoffs have not been previously assigned, and pass it to the callback
     samples = natsorted(data['Sample'].unique())
-    sample = samples[0] 
     
-    initial_callback = True
-    callback(
-        self, viewer, sample, samples, data, ratios_melt, initial_callback,
-        selection_widget, selection_layout, hist_widget, hist_layout,
-        cycles_dir
-    )
+    if len(samples) == 0:
+        print()
+        logger.info(
+            'Aborting; Single-cell data have not been selected for analysis. '
+            'Re-run selectROIs module to select data points.'
+        )
+        sys.exit()
     
-    viewer.window.add_dock_widget(
-        selection_widget, name='Arbitrary Sample Selection', area='right'
-    )
+    else:
+        samples_to_run = []
+        for sample in samples:
+            
+            try:  
+                lowerCutoff, upperCutoff = qc_report['cycleCorrelation'][sample]
+                if not isinstance(lowerCutoff, float) or not isinstance(upperCutoff, float):
+                    samples_to_run.append(sample)
+                
+            except: 
+                samples_to_run.append(sample)
+        
+    try:
+        sample = samples_to_run[0]
     
-    viewer.scale_bar.visible = True
-    viewer.scale_bar.unit = 'um'
+        initial_callback = True
+        callback(
+            self, viewer, sample, samples_to_run, data, ratios_melt, initial_callback,
+            selection_widget, selection_layout, hist_widget, hist_layout,
+            cycles_dir, qc_report, report_path
+        )
+        
+        viewer.window.add_dock_widget(
+            selection_widget, name='Arbitrary Sample Selection', area='right'
+        )
+        
+        viewer.scale_bar.visible = True
+        viewer.scale_bar.unit = 'um'
 
-    napari.run()
+        napari.run()
 
+    except IndexError:
+        logger.info('Thresholding complete!')
+        QTimer().singleShot(0, viewer.close)
+    
     print()
 
     ###########################################################################
-    # load cutoffs dictionary if it exists
-    
-    if os.path.exists(os.path.join(cycles_dir, 'cutoffs.pkl')):
-        f = open(os.path.join(cycles_dir, 'cutoffs.pkl'), 'rb')
-        cutoffs_dict = pickle.load(f)
+    # save histogram plots with selected data highlighted
 
-    else:
-        print()
-        logger.info(
-            'Aborting; DNA ratio cutoffs dictionary does not exist. '
-            'Please re-run cycleCorrelation module to select cutoffs.'
-        )
-        sys.exit()
-
-    # save plots of selected data points
     plot_dir = os.path.join(cycles_dir, 'plots')
     if not os.path.exists(plot_dir):
         os.mkdir(plot_dir)
     
     idxs_to_drop = {}
-    for sample in samples:
+    for sample in samples_to_run:
 
         # isolate sample data
         group = ratios_melt[ratios_melt['sample'] == sample]
         
         # loop over last cycle only
         cycle_ratio = group['cycle'].unique()[-1]
-        cycle_num = cycle_ratio.split('/')[1]
+        last_dna = cycle_ratio.split('/')[1]
         
         # isolate ratio data
         cycle_data = group[group['cycle'] == cycle_ratio]
 
-        try:
-            lowerCutoff, upperCutoff = cutoffs_dict[sample]
-            if lowerCutoff == upperCutoff:
-                logger.info(f'All data points selected for sample {sample}.')      
-                # select all data points if sliders were not adjusted
-                lowerCutoff = cycle_data['log10(ratio)'].min()
-                upperCutoff = cycle_data['log10(ratio)'].max()
-            else:
-                logger.info(
-                    f'Applying cutoffs ({lowerCutoff:.3f}, '
-                    f'{upperCutoff:.3f}) to sample {sample}'
-                )
-        except KeyError:
-            print()
+        lowerCutoff, upperCutoff = qc_report['cycleCorrelation'][sample]
+
+        # select all data points if sliders were not adjusted
+        if lowerCutoff == upperCutoff:
+            logger.info(f'All data points selected for sample {sample}.')
+            # select all data points if sliders were not adjusted
+            lowerCutoff = cycle_data['log10(ratio)'].min()
+            upperCutoff = cycle_data['log10(ratio)'].max()
+        else:
             logger.info(
-                f'Aborting; Cutoffs have not been ' 
-                f'selected for sample {sample}. '
-                'Please re-run areaFilter module to select '
-                'cutoffs for this sample.'
+                f'Applying cutoffs ({lowerCutoff:.3f}, '
+                f'{upperCutoff:.3f}) to sample {sample}'
             )
-            sys.exit()
 
         # plot DNA ratio histogram BEFORE filtering
         fig, ax = plt.subplots()
@@ -544,9 +587,9 @@ def cycleCorrelation(data, self, args):
         )
         
         log10 = '$Log_{10}$'
-        plt.xlabel(f'{log10}({dna1}/{cycle_num}')
+        plt.xlabel(f'{log10}({self.counterstainChannel}/{last_dna}')
         plt.ylabel('Count')
-        plt.title(f'Sample={sample} {log10}({dna1}/{cycle_num})', size=10)
+        plt.title(f'Sample = {sample})', size=10)
 
         legend_elements = []
         legend_elements.append(
@@ -577,9 +620,8 @@ def cycleCorrelation(data, self, args):
         for idx in v:
             indices_to_drop.update(set([idx]))
     data = data.loc[~data.index.isin(indices_to_drop)]
-    
-    print()
 
+    print()
     logger.info('Plotting cycle correlation graphs')
     
     # grab dna and sample columns of filtered dataframe
@@ -618,7 +660,7 @@ def cycleCorrelation(data, self, args):
     g.map(
         lambda y, color: plt.scatter(
             facet_per_cycle_melt['value'].loc[
-                facet_per_cycle_melt['cycle'] == dna1], y, s=0.15,
+                facet_per_cycle_melt['cycle'] == self.counterstainChannel], y, s=0.15,
             linewidth=0.0, marker='o', c='r'), 'value'
     )
     g.set(xlabel=None)
@@ -648,7 +690,7 @@ def cycleCorrelation(data, self, args):
         lambda sam, y, color, **kwargs: plt.scatter(
             facet_per_cycle_melt.loc[
                 (facet_per_cycle_melt['Sample'] == sam.unique()[0])
-                & (facet_per_cycle_melt['cycle'] == dna1), 'value'], y,
+                & (facet_per_cycle_melt['cycle'] == self.counterstainChannel), 'value'], y,
             c=np.reshape(sample_color_dict[sam.unique()[0]], (-1, 3)),
             s=0.15, linewidth=0.0, marker='o', **kwargs), 'Sample', 'value'
     )
@@ -658,7 +700,7 @@ def cycleCorrelation(data, self, args):
     plt.legend(markerscale=10, bbox_to_anchor=(1.1, 1.05))
 
     plt.savefig(
-        os.path.join(plot_dir, 'correlation(sample).png'), dpi=600, bbox_inches='tight'
+        os.path.join(plot_dir, 'correlation_per_sample.png'), dpi=600, bbox_inches='tight'
     )
     plt.close('all')
 

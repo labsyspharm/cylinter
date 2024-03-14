@@ -25,12 +25,14 @@ logger = logging.getLogger(__name__)
 def frequencyStats(data, self, args):
 
     print()
-    
+
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
     
     for type in ['class', f'cluster_{self.dimensionEmbedding}d']:
@@ -86,7 +88,7 @@ def frequencyStats(data, self, args):
                             
                             logger.info(
                                 f'Calculating log2({test}/{control}) of mean cell '
-                                f'density for population {str(cluster)}.')
+                                f'density for {type} {str(cluster)}.')
 
                             group = (
                                 group.groupby(['Sample', 'Replicate', type])
@@ -294,16 +296,15 @@ def frequencyStats(data, self, args):
 
                             ax = fig.add_subplot(gs[ax[0], ax[1]])
                             
-                            g = sns.barplot(
+                            group['status'] = [i.split('-')[1] for i in group['status']]
+                            
+                            sns.barplot(
                                 data=group, x='status', y='density', hue='Sample', 
-                                palette=sample_color_dict, width=0.8, lw=0.0, ax=ax
+                                palette=sample_color_dict, width=0.8, lw=0.0, ax=ax 
                             )
+                            
                             ax.grid(lw=0.5)
                             [x.set_linewidth(0.5) for x in ax.spines.values()]
-                            
-                            g.set_xticklabels(
-                                [i.get_text().split('-')[1] for i in g.get_xticklabels()]
-                            )
                             plt.tick_params(axis='x', pad=-3)
                             ax.set(xlabel=None)
                             plt.tick_params(axis='y', pad=-3)
@@ -311,7 +312,7 @@ def frequencyStats(data, self, args):
                             ax.set_title(name, size=2, pad=2)
                             ax.legend_.remove()
 
-                        plt.tight_layout()
+                            plt.tight_layout()
                          
                         file_names = [
                             get_key(i) for i in natsorted(catplot_input['Sample'].unique())

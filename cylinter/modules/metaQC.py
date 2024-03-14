@@ -1,6 +1,8 @@
 import os
+import re
 import sys
-import pickle
+import glob
+import yaml
 import logging
 
 import numpy as np
@@ -15,16 +17,20 @@ from datetime import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.colors import TwoSlopeNorm
 from matplotlib.colors import ListedColormap
-from qtpy.QtCore import QTimer
 from matplotlib.backends.qt_compat import QtWidgets
+
+from qtpy.QtCore import QTimer
+
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 )
 
+import hdbscan
 from umap import UMAP
 from sklearn.manifold import TSNE
-import hdbscan
+
 from joblib import Memory
 
 from magicgui import magicgui
@@ -33,8 +39,8 @@ import napari
 
 from ..utils import (
     input_check, read_markers, matplotlib_warnings, categorical_cmap, SelectFromCollection, 
-    cluster_expression, napari_notification, marker_channel_number, single_channel_pyramid,
-    get_filepath, reorganize_dfcolumns
+    cluster_expression, marker_channel_number, single_channel_pyramid,
+    get_filepath, reorganize_dfcolumns, sort_qc_report
 )
 
 logger = logging.getLogger(__name__)
@@ -47,8 +53,10 @@ def metaQC(data, self, args):
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
     # drop antibody channel exclusions for metaQC clustering
@@ -56,162 +64,373 @@ def metaQC(data, self, args):
         i for i in abx_channels
         if i not in self.channelExclusionsClusteringQC]
 
-    # create metaQC directory if metaQC is to be performed and
-    # the directory doesn't already exist
+    # create metaQC directory if it hasn't already
     reclass_dir = os.path.join(
         self.outDir, 'metaQC')
     if not os.path.exists(reclass_dir):
         os.makedirs(reclass_dir)
 
+    # read chunk index if it exists
+    progress_path = os.path.join(reclass_dir, 'progress.yml')
+    try:
+        progress = yaml.safe_load(open(progress_path))
+    except FileNotFoundError:
+        pass
+
+    # read QC report
+    report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+    try:
+        qc_report = yaml.safe_load(open(report_path))
+        reload_report = False
+        if qc_report is None:
+            qc_report = {}
+            reload_report = True
+        if 'metaQC' not in qc_report or qc_report['metaQC'] is None:
+            qc_report['metaQC'] = {}
+            reload_report = True
+        if reload_report:
+            qc_report_sorted = sort_qc_report(qc_report, module='metaQC', order=None)
+            f = open(report_path, 'w')
+            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            qc_report = yaml.safe_load(open(report_path))
+    except:
+        logger.info(
+            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
+            'from aggregateData module to initialize QC report.'
+        )
+        sys.exit()
+
     # specify the names of modules in the pipeline that perform
-    # data redaction prior to the metQC module
+    # data redaction prior to the metaQC module
     modules = ['aggregateData', 'selectROIs', 'intensityFilter',
                'areaFilter', 'cycleCorrelation', 'pruneOutliers']
 
-    # build a dictionary of data returned by each module (clean)
+    # build a dictionary of clean data returned by each module
     module_dict = {}
     for module_idx, module in enumerate(modules):
         data = pd.read_parquet(
             os.path.join(
                 self.outDir, f'checkpoints/{module}.parquet'))
         module_dict[module_idx] = [module, data]
-
-    #######################################################################
-    # build QCData: QCData is a combination of clean and noisy data
+    
+    ##############################################################################################
 
     if self.metaQC:
-        # loop over modules to get data redacted by each module (noisy)
-        for module_idx in [i for i in module_dict.keys()][:-1]:
-
-            # isolate data
-            noise = module_dict[module_idx][1][
-                ~module_dict[module_idx][1].index.isin(
-                    module_dict[module_idx + 1][1].index)].copy()
-
-            # if noisy data exists, add a QC stage column
-            if not noise.empty:
-                noise.loc[:, 'Filter'] = (
-                    module_dict[module_idx + 1][0])
-
-            # append to module_dict
-            module_dict[module_idx + 1].append(noise)
-
-        # combine noisy data from all modules into a single dataframe
-        if self.delintMode:
-            # if negative ROI selection, include gated cells as noisy data
-            noisyData = pd.DataFrame()
-            for module_idx, module in enumerate(modules):
-                # the number of dictionary value enteries should be 3:
-                # module name, clean data, noisy data if noisy data exists
-                if len(module_dict[module_idx]) == 3:
-                    noisyData = pd.concat(
-                        [noisyData, module_dict[module_idx][2]], axis=0
-                    )
-        else:
-            # if postive ROI selection, exlcude cells not gated on
-            noisyData = pd.DataFrame()
-            for module_idx, module in enumerate(modules):
-                if len(module_dict[module_idx]) == 3:
-                    if not module == 'selectROIs':
-                        noisyData = pd.concat(
-                            [noisyData, module_dict[module_idx][2]],
-                            axis=0
-                        )
-
-        if noisyData.empty:
-            logger.info(
-                'No data were filtered during prior QC steps. '
-                'Returning unfiltered data without reclassification.'
-            )
-            return data
-
-        # create QC_status column for combined noisy data
-        noisyData.loc[:, 'QC_status'] = 'noisy'
-
-        # get raw version (untransformed, not rescaled) of data
-        # from fully-redacted dataframe
-        first_module_idx = modules.index(modules[0])
-        last_module_idx = modules.index(modules[-1])
-
-        cleanDataRescaled = module_dict[last_module_idx][1]
-
-        cleanDataRaw = module_dict[first_module_idx][1][
-            module_dict[first_module_idx][1].index.isin(
-                cleanDataRescaled.index)].copy()
-
-        # create QC_status column for selected clean data
-        cleanDataRaw.loc[:, 'QC_status'] = 'clean'
-
+        
         # specify channels on which to perform metaQC clustering
-        abx_channels_dna = [dna1] + abx_channels
+        abx_channels_dna = [self.counterstainChannel] + abx_channels
+        
+        ##########################################################################################
+        # Build QCData: QCData is a combination of clean (retained) and noisy (dropped) data
+        
+        # if QCData exists, read the parquet file
+        if os.path.exists(os.path.join(reclass_dir, 'QCData.parquet')):
+            
+            QCData = pd.read_parquet(os.path.join(reclass_dir, 'QCData.parquet'))
+        
+        else:  # generate QCData
+             
+            # loop over modules to get data redacted by each module (noisy)
+            for module_idx in [i for i in module_dict.keys()][:-1]:
+                
+                # isolate redacted data
+                noise = module_dict[module_idx][1][
+                    ~module_dict[module_idx][1].index.isin(
+                        module_dict[module_idx + 1][1].index)].copy()
 
-        # if QCData.pkl exists, read the pickle
-        if os.path.exists(os.path.join(reclass_dir, 'QCData.pkl')):
-            f = open(os.path.join(
-                reclass_dir, 'QCData.pkl'), 'rb')
-            QCData = pickle.load(f)
+                # if noisy data exists, add a QC stage column
+                if not noise.empty:
+                    noise.loc[:, 'Filter'] = (
+                        module_dict[module_idx + 1][0])
 
-            # read current chunk index
-            with open(os.path.join(reclass_dir, 'chunk_index.txt'), 'r') as f:
-                chunk_index = f.readlines()
-                chunk_index = int(chunk_index[0])
+                # append as new value to module_dict key
+                module_dict[module_idx + 1].append(noise)
 
-            # read current chunk data if it exists
-            if os.path.exists(os.path.join(reclass_dir, 'chunk.pkl')):
-                f = open(os.path.join(
-                    reclass_dir, 'chunk.pkl'), 'rb')
-                chunk = pickle.load(f)
-        else:
-            # if QCData.pkl doesn't exist, append noisyData
-            # to cleanDataRaw, row-wise
+            # combine noisy data from all modules into a single dataframe
+            if self.delintMode:
+                # if negative ROI selection, include gated cells as noisy data
+                noisyData = pd.DataFrame()
+                for module_idx, module in enumerate(modules):
+                    if len(module_dict[module_idx]) == 3:
+                        # the number of dictionary value enteries should be 3:
+                        # module name, clean data, noisy data if noisy data exists
+                        noisyData = pd.concat(
+                            [noisyData, module_dict[module_idx][2]], axis=0
+                        )
+            else:
+                # if postive ROI selection, do not count gated cells as noisy data
+                noisyData = pd.DataFrame()
+                for module_idx, module in enumerate(modules):
+                    if len(module_dict[module_idx]) == 3:
+                        if not module == 'selectROIs':
+                            noisyData = pd.concat(
+                                [noisyData, module_dict[module_idx][2]], axis=0
+                            )
+        
+            if noisyData.empty:
+                logger.info(
+                    'No data were filtered during prior QC stages. '
+                    'Returning unfiltered data without reclassification.'
+                )
+                return data
+
+            # create QC_status column for combined noisy data
+            noisyData.loc[:, 'QC_status'] = 'noisy'
+
+            # get raw version (untransformed, not rescaled) of data
+            # from fully-redacted (clean) dataframe
+            first_module_idx = modules.index(modules[0])
+            last_module_idx = modules.index(modules[-1])
+
+            cleanDataRescaled = module_dict[last_module_idx][1]
+
+            cleanDataRaw = module_dict[first_module_idx][1][
+                module_dict[first_module_idx][1].index.isin(
+                    cleanDataRescaled.index)].copy()
+
+            # create QC_status column for selected clean data
+            cleanDataRaw.loc[:, 'QC_status'] = 'clean'
+
+            # append noisyData to cleanDataRaw, row-wise
             QCData = pd.concat([cleanDataRaw, noisyData], axis=0)
 
-            # shuffle QCData row order to randomize cells
-            # for batch clustering
+            # shuffle QCData row order to randomize cells for clustering chunks
             QCData = QCData.sample(frac=1.0, random_state=5)
             QCData.reset_index(drop=True, inplace=True)
 
             # log-transform QCData
-            QCData.loc[:, abx_channels_dna] += 0.00000000001
-            QCData.loc[:, abx_channels_dna] = np.log10(
-                QCData[abx_channels_dna])
+            QCData.loc[:, abx_channels_dna] += 0.001
+            QCData.loc[:, abx_channels_dna] = np.log10(QCData[abx_channels_dna])
 
-            # rescale channel signal intensities (0-1)
-            for marker in abx_channels_dna:
-                channel_data = QCData[marker]
+            # rescale channel signal intensities (0-1) per channel per sample
+            for channel in abx_channels_dna:
+                for sample in natsorted(data['Sample'].unique()):
+                    
+                    sample_channel_data = QCData[QCData['Sample'] == sample][channel]
 
-                scaler = (
-                    MinMaxScaler(feature_range=(0, 1), copy=True)
-                    .fit(channel_data.values.reshape(-1, 1))
+                    scaler = (
+                        MinMaxScaler(feature_range=(0, 1), copy=True)
+                        .fit(sample_channel_data.values.reshape(-1, 1))
+                    )
+                    rescaled_data = scaler.transform(
+                        sample_channel_data.values.reshape(-1, 1)
+                    )
+
+                    rescaled_data = pd.DataFrame(
+                        data=rescaled_data,
+                        index=sample_channel_data.index,
+                    ).rename(columns={0: channel})
+
+                    QCData.update(rescaled_data)
+
+            # save QCData
+            QCData.to_parquet(os.path.join(reclass_dir, 'QCData.parquet'), index=False)
+
+        ##########################################################################################
+        # handle re-starts
+
+        def check_report_structure(report_path):
+            
+            expected_structure = {
+                'MCS': 1,
+                'reclassThresholds': [1.0, 1.0]
+            }
+            
+            try:
+                with open(report_path, 'r') as file:
+                    qc_report = yaml.safe_load(file)
+                    metaQC = qc_report.get('metaQC')
+                
+                # check if metaQC section is present 
+                if metaQC is None:
+                    return False
+                
+                # check that metaQC keys match the expected structure
+                if set(metaQC.keys()) != set(expected_structure.keys()):
+                    return False
+                
+                # check that the value types in metaQC are as expected
+                for key, value in expected_structure.items():
+                    if key == 'reclassThresholds':
+                        if not (isinstance(metaQC.get(key), list) and len(metaQC.get(key)) == 2 and
+                                all(isinstance(item, float) for item in metaQC.get(key))):
+                            return False
+
+                    elif not isinstance(metaQC.get(key), type(value)):
+                        return False
+                
+                return True  # all checks pass
+            
+            except FileNotFoundError:
+                return False
+
+        if not check_report_structure(report_path):
+
+            # initialize chunk index counter at 0 and store
+            chunk_index = 0
+            progress = {}
+            progress['chunk_index'] = chunk_index
+            f = open(progress_path, 'w')
+            yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+            
+            parquet = glob.glob(os.path.join(reclass_dir, 'reclass_*.parquet'))
+            for i in parquet:
+                try:
+                    os.remove(i)
+                except FileNotFoundError:
+                    pass
+
+            try:
+                del qc_report['metaQC']['MCS']
+            except:
+                pass
+            try:
+                del qc_report['metaQC']['reclassThresholds']
+            except:
+                pass
+            
+            # dump updated qc_report to YAML file
+            qc_report_sorted = sort_qc_report(qc_report, module='metaQC', order=None)
+            f = open(report_path, 'w')
+            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+        
+        else:
+            try:
+                chunk_index = progress['chunk_index']
+                
+                if chunk_index is None:
+                    chunk_index = 0
+                    progress['chunk_index'] = chunk_index
+                    f = open(progress_path, 'w')
+                    yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+                    
+                    parquet = glob.glob(os.path.join(reclass_dir, 'reclass_*.parquet'))
+                    for i in parquet:
+                        try:
+                            os.remove(i)
+                        except FileNotFoundError:
+                            pass
+
+                    try:
+                        del qc_report['metaQC']['MCS']
+                    except:
+                        pass
+                    try:
+                        del qc_report['metaQC']['reclassThresholds']
+                    except:
+                        pass
+            
+                    # sort and dump updated qc_report to YAML file
+                    qc_report_sorted = sort_qc_report(qc_report, module='metaQC', order=None)
+                    f = open(report_path, 'w')
+                    yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            
+            except (NameError, TypeError, KeyError):
+
+                # initialize chunk index counter at 0 and store
+                chunk_index = 0
+                progress = {}
+                progress['chunk_index'] = chunk_index
+                f = open(progress_path, 'w')
+                yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+                
+                parquet = glob.glob(os.path.join(reclass_dir, 'reclass_*.parquet'))
+                for i in parquet:
+                    try:
+                        os.remove(i)
+                    except FileNotFoundError:
+                        pass
+                
+                try:
+                    del qc_report['metaQC']['MCS']
+                except:
+                    pass
+                try:
+                    del qc_report['metaQC']['reclassThresholds']
+                except:
+                    pass
+                
+                # dump updated qc_report to YAML file
+                qc_report_sorted = sort_qc_report(qc_report, module='metaQC', order=None)
+                f = open(report_path, 'w')
+                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+        
+        ##########################################################################################
+        # initialize reclassification storage dataframe
+        def check_for_reclass_dataframe():
+            
+            parquet = glob.glob(os.path.join(reclass_dir, 'reclass_*.parquet'))
+
+            if len(parquet) == 0:
+                
+                # initialize reclassified data storage dataframe for reclassified clean/noisy data
+                reclass = pd.DataFrame(
+                    columns=['Reclass', 'CellID', 'Sample', 'QC_status', 'Filter', 'ChunkIDX']
                 )
-                rescaled_data = scaler.transform(
-                    channel_data.values.reshape(-1, 1)
+
+                # initialize chunk index counter at 0 and store
+                chunk_index = 0
+                progress = {}
+                progress['chunk_index'] = chunk_index
+                f = open(progress_path, 'w')
+                yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+                
+                try:
+                    del qc_report['metaQC']['MCS']
+                except:
+                    pass
+                try:
+                    del qc_report['metaQC']['reclassThresholds']
+                except:
+                    pass
+
+                return chunk_index, reclass, None
+
+            if len(parquet) == 1:
+                
+                # reclassified data storage exists, open it
+                reclass = pd.read_parquet(parquet[0])
+                filename = os.path.basename(parquet[0])
+
+                return reclass, filename
+            
+            elif len(parquet) > 1:
+                logger.info(
+                    'Aborting; more than one reclass parquet file exists. To avoid ambiguity, '
+                    'only one should be in metaQC output directory.'
                 )
+                sys.exit()
 
-                rescaled_data = pd.DataFrame(
-                    data=rescaled_data,
-                    index=channel_data.index,
-                ).rename(columns={0: marker})
+        chunk_index, reclass, filename = check_for_reclass_dataframe()
 
-                QCData.update(rescaled_data)
+        if filename is not None:
+            
+            existing_percent_data = float(filename.split('_')[1])
+            current_percent_data = self.percentDataPerChunk
+            
+            if not isinstance(current_percent_data, float):
+                logger.info(
+                    'Aborting; CyLinter configuration "percentDataPerChunk" not in '
+                    'floating point format. Adjust and re-run metaQC module'
+                )
+                sys.exit()
+            
+            if existing_percent_data != current_percent_data:
+                logger.info(
+                    'Aborting; Chunk size of current reclass parquet is '
+                    f'{existing_percent_data*100}%, but "percentDataPerChunk" parameter '
+                    f'in CyLinter config file is {current_percent_data*100}%. '
+                    'Update CyLinter config to match or remove reclass parquet. '
+                    'Then re-run metaQC module.'
+                )
+                sys.exit()
 
-            # initialize chunk index counter at 0
-            chunk_index = '0'
-            with open(os.path.join(reclass_dir, 'chunk_index.txt'), 'w') as f:
-                f.write(chunk_index)
-            chunk_index = int(chunk_index)
-
-            # save QCData.pkl
-            f = open(os.path.join(reclass_dir, 'QCData.pkl'), 'wb')
-            pickle.dump(QCData, f)
-            f.close()
-
-        ###################################################################
+        ##########################################################################################
         # chunk QCData
 
-        # specify the number of cells in each clustering batch
-        # (this limits clustering times and memory pressure)
-        batch_size = 500000
+        # specify the number of cells in each clustering batch (i.e. chunk)
+        # (this limits clustering time and memory pressure)
+        batch_size = len(QCData) * self.percentDataPerChunk
 
         # ensure minimun batch size equals the batch_size variable
         # otherwise cluster all data at once
@@ -221,44 +440,17 @@ def metaQC(data, self, args):
         else:
             num_chunks = math.ceil(len(QCData) / batch_size)
             chunks = np.array_split(QCData, num_chunks)
-
-        # replace the specific chunk in the chunks list
-        # associated with the current chunk_index with
-        # the chunk.pkl which has clustering labels if it exits.
-        # This allows the program to avoid re-clustering the first chunk
-        try:
-            chunks[chunk_index] = chunk
-        except UnboundLocalError:
-            pass
-
-        ###################################################################
-        # initialize reclassification storage
-
-        # if reclassified data storage dict exists, open it
-        if os.path.exists(os.path.join(reclass_dir, 'reclass_storage_dict.pkl')):
-            f = open(os.path.join(
-                reclass_dir, 'reclass_storage_dict.pkl'), 'rb')
-            reclass_storage_dict = pickle.load(f)
-
-        # else, initialize reclassified data storage dict for
-        # reclassified clean and noisy data
-        else:
-            reclass_storage_dict = {}
-            for reclass in ['clean', 'noisy']:
-                reclass_storage_dict[reclass] = pd.DataFrame()
-            f = open(os.path.join(
-                reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
-            pickle.dump(reclass_storage_dict, f)
-            f.close()
-        ###################################################################
-
+        
+        ##########################################################################################
         # loop over QCData chunks
+
         for chunk in chunks[chunk_index:]:
 
-            logger.info(f'Clustering: {chunk_index + 1} of {len(chunks)} data chunks')
+            print()
+            logger.info(f'Working on data chunk {chunk_index + 1} of {len(chunks)}')
 
             # make directory for current chunk if it hasn't already
-            chunk_dir = os.path.join(reclass_dir, str(chunk_index + 1))
+            chunk_dir = os.path.join(reclass_dir, f'chunk_{str(chunk_index + 1)}')
             if not os.path.exists(chunk_dir):
                 os.makedirs(chunk_dir)
 
@@ -270,9 +462,12 @@ def metaQC(data, self, args):
                 chunk = chunk[~chunk['Sample'].isin(
                     self.samplesToRemoveClusteringQC)]
                 chunk = chunk.sample(
-                    frac=self.fracForEmbeddingQC, random_state=5)
+                    frac=1.0, random_state=5)
 
-                print(chunk[abx_channels_dna])
+                logger.info(
+                    f'Embedding for chunk {chunk_index + 1} of {len(chunks)} already exists; '
+                    'appending embedding values to chunk.'
+                )
 
                 embedding = np.load(os.path.join(chunk_dir, 'embedding.npy'))
                 chunk['emb1'] = embedding[:, 0]
@@ -285,14 +480,14 @@ def metaQC(data, self, args):
                 chunk = chunk[~chunk['Sample'].isin(
                     self.samplesToRemoveClusteringQC)]
                 chunk = chunk.sample(
-                    frac=self.fracForEmbeddingQC, random_state=5)
+                    frac=1.0, random_state=5)
 
                 print(chunk[abx_channels_dna])
 
                 if self.embeddingAlgorithmQC == 'TSNE':
                     logger.info('Computing TSNE embedding...')
                     embedding = TSNE(
-                        n_components=self.dimensionEmbeddingQC,
+                        n_components=2,
                         perplexity=self.perplexityQC,
                         early_exaggeration=self.earlyExaggerationQC,
                         learning_rate=self.learningRateTSNEQC,
@@ -304,7 +499,7 @@ def metaQC(data, self, args):
                 elif self.embeddingAlgorithmQC == 'UMAP':
                     logger.info('Computing UMAP embedding...')
                     embedding = UMAP(
-                        n_components=self.dimensionEmbeddingQC,
+                        n_components=2,
                         n_neighbors=self.nNeighborsQC,
                         learning_rate=self.learningRateUMAPQC,
                         output_metric=self.metricQC,
@@ -357,11 +552,11 @@ def metaQC(data, self, args):
 
                 clean = pd.DataFrame()
                 noisy = pd.DataFrame()
-                for name, cluster in chunk.groupby(f'cluster_{self.dimensionEmbeddingQC}d'):
+                for name, cluster in chunk.groupby('cluster_2d'):
                     if name != -1:
                         
                         # if a cluster contains >= n% clean data,
-                        # reclassify all clustering cells as noisy
+                        # reclassify all clustering cells as clean
                         if (
                            (len(cluster[cluster[
                             'QC_status'] == 'clean']) / len(cluster)) >=
@@ -369,258 +564,610 @@ def metaQC(data, self, args):
                             clean = pd.concat([clean, cluster], axis=0)
                         
                         # elif a cluster contains >= n% noisy data,
-                        # reclassify all clustering cells as clean
+                        # reclassify all clustering cells as noisy
                         elif (
                              (len(cluster[cluster[
                               'QC_status'] == 'noisy']) / len(cluster)) >=
                                 noisy_cutoff):
                             noisy = pd.concat([noisy, cluster], axis=0)
+                        
+                        # else use original QC_status assignments
                         else:
-                            noisy = pd.concat(
-                                [noisy, cluster[cluster['QC_status'] == 'noisy']], axis=0
-                            )
                             clean = pd.concat(
                                 [clean, cluster[cluster['QC_status'] == 'clean']], axis=0
                             )
+                            noisy = pd.concat(
+                                [noisy, cluster[cluster['QC_status'] == 'noisy']], axis=0
+                            )
 
-                # consider -1 cells from clean data
-                # to be "noisy"
+                # consider -1 cells from clean data as noisy
                 clean_outliers = chunk[
-                    (chunk[f'cluster_{self.dimensionEmbeddingQC}d'] == -1)
-                    &
+                    (chunk['cluster_2d'] == -1) &
                     (chunk['QC_status'] == 'clean')].copy()
                 noisy = pd.concat([noisy, clean_outliers], axis=0)
 
-                # consider -1 cells from noisy data
-                # to be "noisy"
+                # consider -1 cells from noisy data to be noisy
                 noisy_outliers = chunk[
-                    (chunk[f'cluster_{self.dimensionEmbeddingQC}d'] == -1)
-                    &
+                    (chunk['cluster_2d'] == -1) &
                     (chunk['QC_status'] == 'noisy')].copy()
                 noisy = pd.concat([noisy, noisy_outliers], axis=0)
 
-                chunk['Reclass'] = 'init'
-                chunk.loc[
-                    chunk.index.isin(clean.index),
-                    'Reclass'] = 'clean'
-                chunk.loc[
-                    chunk.index.isin(noisy.index),
-                    'Reclass'] = 'noisy'
+                clean['Reclass'] = 'clean'
+                noisy['Reclass'] = 'noisy'
+                
+                chunk.loc[chunk.index.isin(clean.index), 'Reclass'] = 'clean'
+                chunk.loc[chunk.index.isin(noisy.index), 'Reclass'] = 'noisy'
 
                 return chunk, clean, noisy
 
             # interact with plots to identify optimal min cluster size
-            while not os.path.isfile(os.path.join(reclass_dir, 'MCS.txt')):
+            while not check_report_structure(report_path):
+                    
+                if chunk_index == 0:
+                
+                    # initial Napari viewer without images
+                    viewer = napari.Viewer(title='CyLinter')
 
-                # initial Napari viewer without images
-                viewer = napari.Viewer(title='CyLinter')
+                    # generate Qt widget
+                    cluster_widget = QtWidgets.QWidget()
 
-                # generate Qt widget
-                cluster_widget = QtWidgets.QWidget()
+                    # generate vertical widget layout
+                    cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
 
-                # generate vertical widget layout
-                cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
+                    cluster_widget.setSizePolicy(
+                        QtWidgets.QSizePolicy.Fixed,
+                        QtWidgets.QSizePolicy.Maximum,
+                    )
 
-                cluster_widget.setSizePolicy(
-                    QtWidgets.QSizePolicy.Fixed,
-                    QtWidgets.QSizePolicy.Maximum,
-                )
+                    ###########################################################
+                    @magicgui(
+                        layout='horizontal',
+                        call_button='Cluster and Plot',
+                        MCS={'label': 'Min Cluster Size (MCS)', 'step': 1},
+                    )
+                    def cluster_and_plot(MCS: int = 200.0):
 
-                ###########################################################
-                @magicgui(
-                    layout='horizontal',
-                    call_button='Cluster and Plot',
-                    MCS={'label': 'Min Cluster Size (MCS)', 'step': 1},
-                )
-                def cluster_and_plot(MCS: int = 200.0):
+                        # placeholder for lasso selection
+                        selector = None
 
-                    # placeholder for lasso selection
-                    selector = None
+                        sns.set_style('whitegrid')
 
-                    sns.set_style('whitegrid')
+                        fig = plt.figure(figsize=(3.5, 8))
+                        matplotlib_warnings(fig)
 
-                    fig = plt.figure(figsize=(3.5, 8))
-                    matplotlib_warnings(fig)
+                        gs = plt.GridSpec(2, 4, figure=fig)
 
-                    gs = plt.GridSpec(2, 4, figure=fig)
+                        # define axes
+                        ax_cluster = fig.add_subplot(gs[0, 0])
+                        ax_status = fig.add_subplot(gs[0, 1])
+                        ax_reclass = fig.add_subplot(gs[0, 2])
+                        ax_sample = fig.add_subplot(gs[0, 3])
 
-                    # define axes
-                    ax_cluster = fig.add_subplot(gs[0, 0])
-                    ax_status = fig.add_subplot(gs[0, 1])
-                    ax_reclass = fig.add_subplot(gs[0, 2])
-                    ax_sample = fig.add_subplot(gs[0, 3])
+                        ax_cluster_lbs = fig.add_subplot(gs[1, 0])
+                        ax_status_lbs = fig.add_subplot(gs[1, 1])
+                        ax_reclass_lbs = fig.add_subplot(gs[1, 2])
+                        ax_sample_lbs = fig.add_subplot(gs[1, 3])
 
-                    ax_cluster_lbs = fig.add_subplot(gs[1, 0])
-                    ax_status_lbs = fig.add_subplot(gs[1, 1])
-                    ax_reclass_lbs = fig.add_subplot(gs[1, 2])
-                    ax_sample_lbs = fig.add_subplot(gs[1, 3])
+                        plt.subplots_adjust(
+                            left=0.01, right=0.99, bottom=0.0,
+                            top=0.9, wspace=0.0, hspace=0.0)
 
-                    plt.subplots_adjust(
-                        left=0.01, right=0.99, bottom=0.0,
-                        top=0.9, wspace=0.0, hspace=0.0)
+                        clustering = hdbscan.HDBSCAN(
+                            min_cluster_size=MCS,
+                            min_samples=None,
+                            metric='euclidean', alpha=1.0, p=None,
+                            algorithm='best', leaf_size=40,
+                            memory=Memory(location=None),
+                            approx_min_span_tree=True,
+                            gen_min_span_tree=False,
+                            core_dist_n_jobs=-1,
+                            cluster_selection_method='eom',
+                            allow_single_cluster=False,
+                            prediction_data=False,
+                            match_reference_implementation=False).fit(
+                                chunk[['emb1', 'emb2']])
 
-                    clustering = hdbscan.HDBSCAN(
-                        min_cluster_size=MCS,
-                        min_samples=None,
-                        metric='euclidean', alpha=1.0, p=None,
-                        algorithm='best', leaf_size=40,
-                        memory=Memory(location=None),
-                        approx_min_span_tree=True,
-                        gen_min_span_tree=False,
-                        core_dist_n_jobs=-1,
-                        cluster_selection_method='eom',
-                        allow_single_cluster=False,
-                        prediction_data=False,
-                        match_reference_implementation=False).fit(
-                            chunk[['emb1', 'emb2']])
+                        chunk['cluster_2d'] = clustering.labels_
 
-                    chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = clustering.labels_
+                        # scatter point selection tool assumes a
+                        # sorted index, but the index of QCdata is
+                        # shuffled to acheive a mix of clean and
+                        # noisy data per chunk
+                        chunk.sort_index(inplace=True)
 
-                    # scatter point selection tool assumes a
-                    # sorted index, but the index of QCdata is
-                    # shuffled to acheive a mix of clean and
-                    # noisy data per chunk
-                    chunk.sort_index(inplace=True)
+                        print()
+                        logger.info(f'min_cluster_size = {MCS} {np.unique(clustering.labels_)}')
+                       
+                        # PLOT embedding
+                        for color_by in ['cluster_2d', 'QC_status', 'Reclass', 'annotation']:
 
-                    print()
-                    logger.info(f'min_cluster_size = {MCS} {np.unique(clustering.labels_)}')
-                   
-                    # PLOT embedding
-                    for color_by in [
-                        f'cluster_{self.dimensionEmbeddingQC}d',
-                            'QC_status', 'Reclass', 'annotation']:
+                            highlight = 'none'
 
-                        highlight = 'none'
+                            if color_by == 'cluster_2d':
 
-                        if color_by == f'cluster_{self.dimensionEmbeddingQC}d':
-
-                            # build cmap
-                            cmap = categorical_cmap(
-                                numUniqueSamples=len(chunk[color_by].unique()),
-                                numCatagories=10, cmap='tab10', continuous=False
-                            )
-
-                            # make black the first color to specify
-                            # unclustered cells (cluster -1)
-                            if -1 in chunk[color_by].unique():
-
-                                cmap = ListedColormap(
-                                    np.insert(
-                                        arr=cmap.colors, obj=0,
-                                        values=[0, 0, 0], axis=0))
-
-                                # trim cmap to # unique samples
-                                trim = (
-                                    len(cmap.colors) - len(
-                                        chunk[color_by].unique()))
-                                cmap = ListedColormap(
-                                    cmap.colors[:-trim])
-
-                            sample_dict = dict(
-                                zip(natsorted(chunk[color_by].unique()),
-                                    list(range(len(chunk[color_by].unique())))))
-
-                            c = [sample_dict[i] for i in chunk[color_by]]
-
-                            ax_cluster.cla()
-
-                            cluster_paths = ax_cluster.scatter(
-                                chunk['emb1'], chunk['emb2'], c=c, alpha=1.0, s=point_size,
-                                cmap=cmap, ec='k', linewidth=0.0
-                            )
-
-                            ax_cluster.set_title(
-                                'HDBSCAN (lasso)', fontsize=7)
-                            ax_cluster.axis('equal')
-                            ax_cluster.axes.xaxis.set_visible(False)
-                            ax_cluster.axes.yaxis.set_visible(False)
-                            ax_cluster.grid(False)
-
-                            legend_elements = []
-                            for e, i in enumerate(natsorted(chunk[color_by].unique())):
-
-                                norm_ax, hi_markers = cluster_expression(
-                                    df=chunk, markers=abx_channels,
-                                    cluster=i, num_proteins=3,
-                                    clus_dim=self.dimensionEmbeddingQC,
-                                    norm_ax=self.topMarkersQC
+                                # build cmap
+                                cmap = categorical_cmap(
+                                    numUniqueSamples=len(chunk[color_by].unique()),
+                                    numCatagories=10, cmap='tab10', continuous=False
                                 )
 
-                                legend_elements.append(
-                                    Line2D([0], [0], marker='o',
-                                           color='none',
-                                           label=(f'Cluster {i}: 'f'{hi_markers} by {norm_ax}'),
-                                           markerfacecolor=cmap.colors[e],
-                                           markeredgecolor='none',
-                                           lw=0.001, markersize=2)
+                                # make black the first color to specify
+                                # unclustered cells (cluster -1)
+                                if -1 in chunk[color_by].unique():
+
+                                    cmap = ListedColormap(
+                                        np.insert(
+                                            arr=cmap.colors, obj=0,
+                                            values=[0, 0, 0], axis=0))
+
+                                    # trim cmap to # unique samples
+                                    trim = (
+                                        len(cmap.colors) - len(
+                                            chunk[color_by].unique()))
+                                    cmap = ListedColormap(
+                                        cmap.colors[:-trim])
+
+                                sample_dict = dict(
+                                    zip(natsorted(chunk[color_by].unique()),
+                                        list(range(len(chunk[color_by].unique())))))
+
+                                c = [sample_dict[i] for i in chunk[color_by]]
+
+                                ax_cluster.cla()
+
+                                cluster_paths = ax_cluster.scatter(
+                                    chunk['emb1'], chunk['emb2'], c=c, alpha=1.0, s=point_size,
+                                    cmap=cmap, ec='k', linewidth=0.0
                                 )
 
-                            ax_cluster_lbs.legend(
-                                handles=legend_elements, prop={'size': 3}, loc='upper left',
-                                frameon=False
-                            )
+                                ax_cluster.set_title(
+                                    'HDBSCAN (lasso)', fontsize=7)
+                                ax_cluster.axis('equal')
+                                ax_cluster.axes.xaxis.set_visible(False)
+                                ax_cluster.axes.yaxis.set_visible(False)
+                                ax_cluster.grid(False)
 
-                            ax_cluster_lbs.axis('off')
+                                legend_elements = []
+                                for e, i in enumerate(natsorted(chunk[color_by].unique())):
 
-                        elif color_by == 'QC_status':
+                                    hi_markers = cluster_expression(
+                                        df=chunk, markers=abx_channels,
+                                        cluster=i, num_proteins=3,
+                                        clus_dim=2
+                                    )
 
-                            # build cmap
-                            cmap = ListedColormap(
-                                np.array([[0.91, 0.29, 0.235],
-                                          [0.18, 0.16, 0.15]]))
+                                    legend_elements.append(
+                                        Line2D([0], [0], marker='o',
+                                               color='none',
+                                               label=(f'Cluster {i}: {hi_markers}'),
+                                               markerfacecolor=cmap.colors[e],
+                                               markeredgecolor='none',
+                                               lw=0.001, markersize=2)
+                                    )
 
-                            sample_dict = dict(
-                                zip(natsorted(
-                                    chunk['QC_status'].unique()),
-                                    list(range(len(chunk['QC_status']
-                                         .unique())))))
+                                ax_cluster_lbs.legend(
+                                    handles=legend_elements, prop={'size': 3}, loc='upper left',
+                                    frameon=False
+                                )
 
-                            c = [sample_dict[i] for i in chunk['QC_status']]
+                                ax_cluster_lbs.axis('off')
 
-                            ax_status.cla()
+                            elif color_by == 'QC_status':
 
-                            ax_status.scatter(
-                                chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
-                                s=point_size, ec='k', linewidth=0.0
-                            )
+                                # build cmap
+                                cmap = ListedColormap(
+                                    np.array([[0.91, 0.29, 0.235],
+                                              [0.18, 0.16, 0.15]]))
 
-                            ax_status.set_title('QC Status', fontsize=7)
-                            ax_status.axis('equal')
-                            ax_status.axes.xaxis.set_visible(False)
-                            ax_status.axes.yaxis.set_visible(False)
-                            ax_status.grid(False)
+                                sample_dict = dict(
+                                    zip(natsorted(
+                                        chunk['QC_status'].unique()),
+                                        list(range(len(chunk['QC_status']
+                                             .unique())))))
 
-                            legend_elements = []
-                            for e, i in enumerate(natsorted(chunk['QC_status'].unique())):
+                                c = [sample_dict[i] for i in chunk['QC_status']]
 
-                                if i == highlight:
-                                    markeredgecolor = 'k'
+                                ax_status.cla()
+
+                                ax_status.scatter(
+                                    chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
+                                    s=point_size, ec='k', linewidth=0.0
+                                )
+
+                                ax_status.set_title('QC Status', fontsize=7)
+                                ax_status.axis('equal')
+                                ax_status.axes.xaxis.set_visible(False)
+                                ax_status.axes.yaxis.set_visible(False)
+                                ax_status.grid(False)
+
+                                legend_elements = []
+                                for e, i in enumerate(natsorted(chunk['QC_status'].unique())):
+
+                                    if i == highlight:
+                                        markeredgecolor = 'k'
+                                    else:
+                                        markeredgecolor = 'none'
+
+                                    sample_to_map = (
+                                        chunk['Sample'][
+                                            chunk['QC_status'] == i]
+                                        .unique()[0])
+
+                                    legend_elements.append(
+                                        Line2D([0], [0], marker='o',
+                                               color='none',
+                                               label=i,
+                                               markerfacecolor=cmap.colors[e],
+                                               markeredgecolor=markeredgecolor,
+                                               lw=0.001,
+                                               markersize=2)
+                                    )
+
+                                ax_status_lbs.legend(
+                                    handles=legend_elements, prop={'size': 5}, loc='upper left',
+                                    frameon=False
+                                )
+
+                                ax_status_lbs.axis('off')
+
+                            elif color_by == 'Reclass':
+
+                                # build cmap
+                                cmap = ListedColormap(
+                                    np.array([[0.91, 0.29, 0.235],
+                                              [0.18, 0.16, 0.15]]))
+
+                                sample_dict = dict(
+                                    zip(natsorted(chunk['QC_status'].unique()),
+                                        list(range(len(chunk['QC_status'].unique())))))
+
+                                c = [sample_dict[i] for i in chunk['QC_status']]
+
+                                ax_reclass.cla()
+
+                                ax_reclass.scatter(
+                                    chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
+                                    s=point_size, ec='k', linewidth=0.0
+                                )
+
+                                ax_reclass.set_title('Reclassification', fontsize=7)
+                                ax_reclass.axis('equal')
+                                ax_reclass.axes.xaxis.set_visible(False)
+                                ax_reclass.axes.yaxis.set_visible(False)
+                                ax_reclass.grid(False)
+
+                                legend_elements = []
+                                for e, i in enumerate(natsorted(chunk['QC_status'].unique())):
+
+                                    if i == highlight:
+                                        markeredgecolor = 'k'
+                                    else:
+                                        markeredgecolor = 'none'
+
+                                    sample_to_map = (
+                                        chunk['Sample'][
+                                            chunk['QC_status'] == i]
+                                        .unique()[0])
+
+                                    legend_elements.append(
+                                        Line2D([0], [0], marker='o',
+                                               color='none',
+                                               label=i,
+                                               markerfacecolor=cmap.colors[e],
+                                               markeredgecolor=markeredgecolor,
+                                               lw=0.001,
+                                               markersize=2)
+                                    )
+
+                                ax_reclass_lbs.legend(
+                                    handles=legend_elements, prop={'size': 5}, loc='upper left',
+                                    frameon=False
+                                )
+
+                                ax_reclass_lbs.axis('off')
+
+                            elif color_by == 'annotation':
+
+                                # build cmap
+                                cmap = categorical_cmap(
+                                    numUniqueSamples=len(
+                                        chunk[self.colormapAnnotationQC].unique()),
+                                    numCatagories=10, cmap='tab10', continuous=False
+                                )
+
+                                sample_dict = dict(
+                                    zip(natsorted(chunk[self.colormapAnnotationQC].unique()),
+                                        list(range(len(chunk[self.colormapAnnotationQC].unique()))))
+                                )
+
+                                c = [sample_dict[i] for i in chunk[self.colormapAnnotationQC]]
+
+                                ax_sample.cla()
+
+                                ax_sample.scatter(
+                                    chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
+                                    s=point_size, ec='k', linewidth=0.0
+                                )
+
+                                ax_sample.set_title(self.colormapAnnotationQC, fontsize=7)
+                                ax_sample.axis('equal')
+                                ax_sample.axes.xaxis.set_visible(False)
+                                ax_sample.axes.yaxis.set_visible(False)
+                                ax_sample.grid(False)
+
+                                legend_elements = []
+                                for e, i in enumerate(
+                                        natsorted(chunk[self.colormapAnnotationQC].unique())):
+
+                                    if i == highlight:
+                                        markeredgecolor = 'k'
+                                    else:
+                                        markeredgecolor = 'none'
+
+                                    legend_elements.append(
+                                        Line2D([0], [0], marker='o',
+                                               color='none',
+                                               label=i,
+                                               markerfacecolor=cmap.colors[e],
+                                               markeredgecolor=markeredgecolor,
+                                               lw=0.001, markersize=2)
+                                    )
+
+                                ax_sample_lbs.legend(
+                                    handles=legend_elements, prop={'size': 3}, loc='upper left',
+                                    frameon=False
+                                )
+
+                                ax_sample_lbs.axis('off')
+
+                        count = cluster_layout.count()
+                        # logger.info('widget children:', pruned_widget.children())
+
+                        # remove old widgets from widget layout
+                        for i in range(count - 1, -1, -1):
+                            item = cluster_layout.itemAt(i)
+                            widget = item.widget()
+                            # logger.info('    item:', item)
+                            # logger.info('        widget:', widget)
+                            if widget:
+                                widget.setParent(None)
+
+                        # add updated widgets to widget layout
+                        cluster_canvas = FigureCanvas(fig)
+                        cluster_layout.addWidget(
+                            NavigationToolbar(cluster_canvas, cluster_widget))
+                        cluster_layout.addWidget(cluster_canvas)
+
+                        # must call draw() before creating selector,
+                        # or alpha setting doesn't work.
+                        fig.canvas.draw()
+
+                        if selector:
+                            selector.disconnect()
+                        selector = SelectFromCollection(
+                            ax_cluster, cluster_paths)
+
+                        #######################################################
+                        @magicgui(
+                            layout='horizontal',
+                            call_button='View Lassoed Points',
+                            sample_name={'label': 'Sample Name'},
+                        )
+                        def sample_selector(sample_name: str):
+
+                            return sample_name
+                        #######################################################
+
+                        #######################################################
+                        @sample_selector.called.connect
+                        def sample_selector_callback(value: str):
+
+                            print()
+                            logger.info(f'Sample selection: {value}')
+
+                            # if cells lassoed
+                            if not (selector.ind is not None and len(selector.ind) >= 1):
+
+                                print()
+                                napari.utils.notifications.show_warning(
+                                    'Cells must be lassoed in HDBSCAN plot before '
+                                    'sample inspection.'
+                                )
+                                pass
+
+                            else:
+                                # if valid sample name entered
+                                if value in chunk['Sample'].unique():
+
+                                    # show highest expression channels
+                                    lasso = chunk.loc[chunk.index.isin(selector.ind)].copy()
+
+                                    # assign lassoed data a dummy
+                                    # cluster variable and get highest
+                                    # expressed markers across channels
+                                    lasso['cluster_2d'] = 1000
+
+                                    hi_markers = cluster_expression(
+                                        df=lasso, markers=abx_channels, cluster=1000,
+                                        num_proteins=3, clus_dim=2
+                                    )
+
+                                    print()
+                                    logger.info(
+                                        f'Top three expressed markers {hi_markers} '
+                                        '(raw expression values, not z-scores'
+                                    )
+
+                                    # superimpose centroids of lassoed noisy cells colored 
+                                    # by stage removed over channel images
+
+                                    # remove previous samples' image layers
+                                    for i in reversed(range(0, len(viewer.layers))):
+                                        viewer.layers.pop(i)
+
+                                    if self.showAbChannels:
+
+                                        for ch in reversed(abx_channels):
+                                            channel_number = (
+                                                marker_channel_number(
+                                                    self, markers, ch))
+
+                                            # read antibody image
+                                            file_path = get_filepath(self, check, value, 'TIF')
+                                            img, min, max = single_channel_pyramid(
+                                                file_path, channel=channel_number
+                                            )
+                                            viewer.add_image(
+                                                img, rgb=False, blending='additive',
+                                                colormap='green', visible=False, name=ch,
+                                                contrast_limits=(min, max)
+                                            )
+                                    
+                                    # color noisy data points by
+                                    # module used to redact them
+                                    cmap = categorical_cmap(
+                                        numUniqueSamples=len(modules[1:]), numCatagories=10,
+                                        cmap='tab10', continuous=False
+                                    )
+
+                                    # reverse module order so they appear in
+                                    # correct order in Napari
+                                    QC_color_dict = dict(zip(modules[1:], cmap.colors))
+
+                                    for module, color in reversed(QC_color_dict.items()):
+
+                                        centroids = chunk[
+                                            ['Y_centroid', 'X_centroid']][
+                                                (chunk.index.isin(
+                                                 selector.ind))
+                                                & (chunk['Sample'] ==
+                                                   value)
+                                                & (chunk['QC_status'] ==
+                                                   'noisy')
+                                                & (chunk['Filter'] ==
+                                                   module)]
+
+                                        viewer.add_points(
+                                            centroids, name=module,
+                                            visible=True, face_color=color,
+                                            edge_width=0.0, size=4.0)
+
+                                    # read segmentation outlines, add to Napari
+                                    file_path = get_filepath(self, check, value, 'SEG')
+                                    seg, min, max = single_channel_pyramid(file_path, channel=0)
+                                    viewer.add_image(
+                                        seg, rgb=False, blending='additive', colormap='gray',
+                                        visible=False, name='segmentation', 
+                                        contrast_limits=(min, max)
+                                    )
+                                    
+                                    # get ordered list of DNA cycles
+                                    dna_moniker = (
+                                        str(re.search(r'[^\W\d]+',
+                                            self.counterstainChannel).group())
+                                    )
+                                    dna_cycles = natsorted(
+                                        data.columns[data.columns.str.contains(dna_moniker)]
+                                    )
+                                    
+                                    # read last DNA, add to Napari
+                                    last_dna = dna_cycles[-1]
+                                    channel_number = marker_channel_number(self, markers, last_dna)
+                                    file_path = get_filepath(self, check, value, 'TIF')
+                                    dna_last, min, max = single_channel_pyramid(
+                                        file_path, channel=channel_number
+                                    )
+                                    viewer.add_image(
+                                        dna_last, rgb=False, blending='additive',
+                                        opacity=0.5, colormap='gray', visible=False, name=last_dna,
+                                        contrast_limits=(min, max)
+                                    )
+
+                                    # read first DNA, add to Napari
+                                    first_dna = dna_cycles[0]
+                                    channel_number = marker_channel_number(
+                                        self, markers, first_dna
+                                    )
+                                    file_path = get_filepath(self, check, value, 'TIF')
+                                    dna_first, min, max = single_channel_pyramid(
+                                        file_path, channel=channel_number
+                                    )
+                                    viewer.add_image(
+                                        dna_first, rgb=False, blending='additive',
+                                        opacity=0.5, colormap='gray', visible=True, name=first_dna,
+                                        contrast_limits=(min, max)
+                                    )
+
+                                    # apply previously defined contrast limits if they exist
+                                    try:
+                                        viewer.layers[
+                                            f'{self.counterstainChannel}'].contrast_limits = (
+                                            qc_report['setContrast'][self.counterstainChannel]
+                                            [0],
+                                            qc_report['setContrast'][self.counterstainChannel]
+                                            [1]
+                                        )
+
+                                        for ch in reversed(abx_channels):
+                                            viewer.layers[ch].contrast_limits = (
+                                                qc_report['setContrast'][ch][0],
+                                                qc_report['setContrast'][ch][1]
+                                            ) 
+                                        logger.info(
+                                            'Existing contrast settings applied.'
+                                        )
+                                    except:
+                                        pass
+
+                                    print()
+                                    napari.utils.notifications.show_info(
+                                        f'Viewing sample {value}.'
+                                    )
+
                                 else:
-                                    markeredgecolor = 'none'
+                                    print()
+                                    napari.utils.notifications.show_warning(
+                                        'Sample name not in filtered data.'
+                                    )
+                                    pass
 
-                                sample_to_map = (
-                                    chunk['Sample'][
-                                        chunk['QC_status'] == i]
-                                    .unique()[0])
+                        #######################################################
 
-                                legend_elements.append(
-                                    Line2D([0], [0], marker='o',
-                                           color='none',
-                                           label=i,
-                                           markerfacecolor=cmap.colors[e],
-                                           markeredgecolor=markeredgecolor,
-                                           lw=0.001,
-                                           markersize=2)
-                                )
+                        sample_selector.native.setSizePolicy(
+                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Maximum,
+                        )
 
-                            ax_status_lbs.legend(
-                                handles=legend_elements, prop={'size': 5}, loc='upper left',
-                                frameon=False
+                        #######################################################
+                        @magicgui(
+                            layout='horizontal',
+                            call_button='Reclass Cutoffs',
+                            cleanReclass={
+                                'label': 'Clean Reclass', 'max': 1.0},
+                            noisyReclass={
+                                'label': 'Noisy Reclass', 'max': 1.0},
+                        )
+                        def reclass_selector(
+                            cleanReclass: float = 1.0,
+                            noisyReclass: float = 1.0,
+                        ):
+
+                            return cleanReclass, noisyReclass, chunk
+                        #######################################################
+
+                        #######################################################
+                        @reclass_selector.called.connect
+                        def reclass_selector_callback(value: str):
+
+                            print()
+                            napari.utils.notifications.show_info(
+                                f'reclass cutoffs: clean={round(value[0], 2)}, ' 
+                                f'noisy={round(value[1], 2)}'
                             )
 
-                            ax_status_lbs.axis('off')
-
-                        elif color_by == 'Reclass':
+                            chunk, clean, noisy = reclassify_chunk(
+                                chunk=value[2], clean_cutoff=value[0], noisy_cutoff=value[1]
+                            )
 
                             # build cmap
                             cmap = ListedColormap(
@@ -628,10 +1175,10 @@ def metaQC(data, self, args):
                                           [0.18, 0.16, 0.15]]))
 
                             sample_dict = dict(
-                                zip(natsorted(chunk['QC_status'].unique()),
-                                    list(range(len(chunk['QC_status'].unique())))))
+                                zip(natsorted(chunk['Reclass'].unique()),
+                                    list(range(len(chunk['Reclass'].unique())))))
 
-                            c = [sample_dict[i] for i in chunk['QC_status']]
+                            c = [sample_dict[i] for i in chunk['Reclass']]
 
                             ax_reclass.cla()
 
@@ -646,409 +1193,242 @@ def metaQC(data, self, args):
                             ax_reclass.axes.yaxis.set_visible(False)
                             ax_reclass.grid(False)
 
-                            legend_elements = []
-                            for e, i in enumerate(natsorted(chunk['QC_status'].unique())):
+                            fig.canvas.draw()
 
-                                if i == highlight:
-                                    markeredgecolor = 'k'
-                                else:
-                                    markeredgecolor = 'none'
+                        #######################################################
 
-                                sample_to_map = (
-                                    chunk['Sample'][
-                                        chunk['QC_status'] == i]
-                                    .unique()[0])
+                        reclass_selector.native.setSizePolicy(
+                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Maximum,
+                        )
 
-                                legend_elements.append(
-                                    Line2D([0], [0], marker='o',
-                                           color='none',
-                                           label=i,
-                                           markerfacecolor=cmap.colors[e],
-                                           markeredgecolor=markeredgecolor,
-                                           lw=0.001,
-                                           markersize=2)
-                                )
+                        #######################################################
 
-                            ax_reclass_lbs.legend(
-                                handles=legend_elements, prop={'size': 5}, loc='upper left',
-                                frameon=False
+                        #######################################################
+                        @magicgui(layout='horizontal', call_button='Save')
+                        def save_selector(reclass):
+
+                            current_MCS = cluster_and_plot[0].value
+                            current_cleanReclass = reclass_selector[0].value
+                            current_noisyReclass = reclass_selector[1].value
+                            
+                            # save reclass storage
+                            reclass.to_parquet(
+                                os.path.join(reclass_dir, 
+                                             f'reclass_{self.percentDataPerChunk}'
+                                             f'_{current_MCS}'
+                                             f'_{current_cleanReclass}'
+                                             f'_{current_noisyReclass}.parquet')
                             )
 
-                            ax_reclass_lbs.axis('off')
-
-                        elif color_by == 'annotation':
-
-                            # build cmap
-                            cmap = categorical_cmap(
-                                numUniqueSamples=len(
-                                    chunk[self.colormapAnnotationQC].unique()),
-                                numCatagories=10, cmap='tab10', continuous=False
-                            )
-
-                            sample_dict = dict(
-                                zip(natsorted(chunk[self.colormapAnnotationQC].unique()),
-                                    list(range(len(chunk[self.colormapAnnotationQC].unique())))))
-
-                            c = [sample_dict[i] for i in chunk[self.colormapAnnotationQC]]
-
-                            ax_sample.cla()
-
-                            ax_sample.scatter(
-                                chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
-                                s=point_size, ec='k', linewidth=0.0
-                            )
-
-                            ax_sample.set_title(self.colormapAnnotationQC, fontsize=7)
-                            ax_sample.axis('equal')
-                            ax_sample.axes.xaxis.set_visible(False)
-                            ax_sample.axes.yaxis.set_visible(False)
-                            ax_sample.grid(False)
-
-                            legend_elements = []
-                            for e, i in enumerate(
-                                    natsorted(chunk[self.colormapAnnotationQC].unique())):
-
-                                if i == highlight:
-                                    markeredgecolor = 'k'
-                                else:
-                                    markeredgecolor = 'none'
-
-                                legend_elements.append(
-                                    Line2D([0], [0], marker='o',
-                                           color='none',
-                                           label=i,
-                                           markerfacecolor=cmap.colors[e],
-                                           markeredgecolor=markeredgecolor,
-                                           lw=0.001, markersize=2)
-                                )
-
-                            ax_sample_lbs.legend(
-                                handles=legend_elements, prop={'size': 3}, loc='upper left',
-                                frameon=False
-                            )
-
-                            ax_sample_lbs.axis('off')
-
-                    count = cluster_layout.count()
-                    # logger.info('widget children:', pruned_widget.children())
-
-                    # remove old widgets from widget layout
-                    for i in range(count - 1, -1, -1):
-                        item = cluster_layout.itemAt(i)
-                        widget = item.widget()
-                        # logger.info('    item:', item)
-                        # logger.info('        widget:', widget)
-                        if widget:
-                            widget.setParent(None)
-
-                    # add updated widgets to widget layout
-                    cluster_canvas = FigureCanvas(fig)
-                    cluster_layout.addWidget(
-                        NavigationToolbar(cluster_canvas, cluster_widget))
-                    cluster_layout.addWidget(cluster_canvas)
-
-                    # must call draw() before creating selector,
-                    # or alpha setting doesn't work.
-                    fig.canvas.draw()
-
-                    if selector:
-                        selector.disconnect()
-                    selector = SelectFromCollection(
-                        ax_cluster, cluster_paths)
-
-                    #######################################################
-                    @magicgui(
-                        layout='horizontal',
-                        call_button='View Lassoed Points',
-                        sample_name={'label': 'Sample Name'},
-                    )
-                    def sample_selector(sample_name: str):
-
-                        return sample_name
-                    #######################################################
-
-                    #######################################################
-                    @sample_selector.called.connect
-                    def sample_selector_callback(value: str):
-
-                        print()
-                        logger.info(f'Sample selection: {value}')
-
-                        # if cells lassoed
-                        if not (selector.ind is not None and len(selector.ind) >= 1):
+                            # write current MCS to QC report 
+                            logger.info(f'Saving current min cluster size: {current_MCS}')
+                            qc_report['metaQC']['MCS'] = current_MCS
 
                             print()
+                            # write current reclass cutoffs to QC report
                             logger.info(
-                                'Cells must be lassoed in HDBSCAN plot before sample inspection.'
+                                'Saving current clean reclassification ' +
+                                f'cutoff: {current_cleanReclass}'
                             )
-                            pass
+                            logger.info(
+                                'Saving current noisy reclassification ' +
+                                f'cutoff: {current_noisyReclass}'
+                            )
+                            qc_report['metaQC']['reclassThresholds'] = [
+                                current_cleanReclass, current_noisyReclass
+                            ]
+                            
+                            qc_report_sorted = sort_qc_report(
+                                qc_report, module='metaQC', order=None
+                            )
 
-                        else:
-                            # if valid sample name entered
-                            if value in chunk['Sample'].unique():
+                            # dump updated qc_report to YAML file
+                            f = open(report_path, 'w')
+                            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
 
-                                # show highest expression channels
-                                lasso = chunk.loc[chunk.index.isin(selector.ind)].copy()
+                            print()
+                            logger.info('Saving cluster plot')
+                            if selector:
+                                selector.disconnect()
+                            fig.savefig(os.path.join(
+                                reclass_dir,
+                                f'{self.embeddingAlgorithm}_'
+                                f'{current_MCS}.png'),
+                                bbox_inches='tight', dpi=1000)
 
-                                # assign lassoed data a dummy
-                                # cluster variable and get highest
-                                # expressed markers across channels
-                                lasso[f'cluster_{self.dimensionEmbeddingQC}d'] = 1000
+                            QTimer().singleShot(0, viewer.close)
+                        
+                        # give save_selector access to reclass dataframe
+                        save_selector.reclass.bind(reclass)
+                        
+                        #######################################################
 
-                                norm_ax, hi_markers = cluster_expression(
-                                    df=lasso, markers=abx_channels, cluster=1000,
-                                    num_proteins=3, clus_dim=self.dimensionEmbeddingQC,
-                                    norm_ax='channels'
-                                )
+                        save_selector.native.setSizePolicy(
+                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Maximum,
+                        )
 
-                                print()
-                                logger.info(f'Top three expressed markers {hi_markers} channels')
+                        #######################################################
 
-                                # superimpose centroids of lassoed noisy cells colored 
-                                # by stage removed over channel images
-                                print()
-                                logger.info(f'Opening sample {value} in Napari...')
+                        cluster_layout.addWidget(sample_selector.native)
 
-                                # remove previous samples' image layers
-                                for i in reversed(range(0, len(viewer.layers))):
-                                    viewer.layers.pop(i)
+                        cluster_layout.addWidget(reclass_selector.native)
 
-                                if self.showAbChannels:
+                        cluster_layout.addWidget(save_selector.native)
 
-                                    for ch in reversed(abx_channels):
-                                        channel_number = (
-                                            marker_channel_number(
-                                                markers, ch))
+                        #######################################################
 
-                                        # read antibody image
-                                        file_path = get_filepath(self, check, value, 'TIF')
-                                        img, min, max = single_channel_pyramid(
-                                            file_path, channel=channel_number
-                                        )
-                                        viewer.add_image(
-                                            img, rgb=False, blending='additive',
-                                            colormap='green', visible=False, name=ch,
-                                            contrast_limits=(min, max)
-                                        )
-
-                                # color noisy data points by
-                                # module used to redact them
-                                cmap = categorical_cmap(
-                                    numUniqueSamples=len(modules[1:]), numCatagories=10,
-                                    cmap='tab10', continuous=False
-                                )
-
-                                # reverse module order so they appear in
-                                # correct order in Napari
-                                QC_color_dict = dict(zip(modules[1:], cmap.colors))
-
-                                for module, color in reversed(QC_color_dict.items()):
-
-                                    centroids = chunk[
-                                        ['Y_centroid', 'X_centroid']][
-                                            (chunk.index.isin(
-                                             selector.ind))
-                                            & (chunk['Sample'] ==
-                                               value)
-                                            & (chunk['QC_status'] ==
-                                               'noisy')
-                                            & (chunk['Filter'] ==
-                                               module)]
-
-                                    viewer.add_points(
-                                        centroids, name=module,
-                                        visible=True, face_color=color,
-                                        edge_width=0.0, size=4.0)
-
-                                # read segmentation outlines, add to Napari
-                                file_path = get_filepath(self, check, value, 'SEG')
-                                seg, min, max = single_channel_pyramid(file_path, channel=0)
-                                viewer.add_image(
-                                    seg, rgb=False, blending='additive', colormap='gray',
-                                    visible=False, name='segmentation', 
-                                    contrast_limits=(min, max)
-                                )
-
-                                # read last DNA, add to Napari
-                                last_dna_cycle = natsorted(
-                                    [i for i in chunk.columns
-                                     if dna_moniker in i])[-1]
-                                channel_number = marker_channel_number(
-                                    markers, last_dna_cycle)
-                                
-                                file_path = get_filepath(self, check, value, 'TIF')
-                                dna_last, min, max = single_channel_pyramid(
-                                    file_path, channel=channel_number
-                                )
-                                viewer.add_image(
-                                    dna_last, rgb=False, blending='additive',
-                                    opacity=0.5, colormap='gray', visible=False,
-                                    name=f'{last_dna_cycle}: {value}',
-                                    contrast_limits=(min, max)
-                                )
-
-                                # read first DNA, add to Napari
-                                file_path = get_filepath(self, check, value, 'TIF')
-                                dna_first, min, max = single_channel_pyramid(file_path, channel=0)
-                                viewer.add_image(
-                                    dna_first, rgb=False, blending='additive',
-                                    opacity=0.5, colormap='gray', visible=True,
-                                    name=f'{dna1}: {value}', contrast_limits=(min, max)
-                                )
-
-                            else:
-                                print()
-                                logger.info('Invalid sample name entered.')
-                                pass
-
-                    #######################################################
-
-                    sample_selector.native.setSizePolicy(
-                        QtWidgets.QSizePolicy.Maximum,
+                    cluster_and_plot.native.setSizePolicy(
+                        QtWidgets.QSizePolicy.Fixed,
                         QtWidgets.QSizePolicy.Maximum,
                     )
 
                     #######################################################
                     @magicgui(
                         layout='horizontal',
-                        call_button='Reclass Cutoffs',
-                        cleanReclass={
-                            'label': 'Clean Reclass', 'max': 1.0},
-                        noisyReclass={
-                            'label': 'Noisy Reclass', 'max': 1.0},
+                        call_button='Sweep Range',
+                        lowerMCS={'label': 'Lower MCS', 'step': 1},
+                        upperMCS={'label': 'Upper MCS', 'step': 1},
                     )
-                    def reclass_selector(
-                        cleanReclass: float = 1.0,
-                        noisyReclass: float = 1.0,
-                    ):
+                    def sweep_MCS(lowerMCS: int = 200.0, upperMCS: int = 200.0,):
 
-                        return cleanReclass, noisyReclass, chunk
-                    #######################################################
-
-                    #######################################################
-                    @reclass_selector.called.connect
-                    def reclass_selector_callback(value: str):
+                        rnge = list(range(lowerMCS, upperMCS + 1, 1))
 
                         print()
-                        napari_notification(f'Lower reclassification selection: {value[0]}')
-                        napari_notification(f'Upper reclassification selection: {value[1]}')
+                        for i in rnge:
 
-                        chunk, clean, noisy = reclassify_chunk(
-                            chunk=value[2], clean_cutoff=value[0], noisy_cutoff=value[1]
-                        )
+                            clustering = hdbscan.HDBSCAN(
+                                min_cluster_size=i,
+                                min_samples=None,
+                                metric='euclidean', alpha=1.0, p=None,
+                                algorithm='best', leaf_size=40,
+                                memory=Memory(location=None),
+                                approx_min_span_tree=True,
+                                gen_min_span_tree=False,
+                                core_dist_n_jobs=-1,
+                                cluster_selection_method='eom',
+                                allow_single_cluster=False,
+                                prediction_data=False,
+                                match_reference_implementation=False).fit(
+                                    chunk[['emb1', 'emb2']])
 
-                        # build cmap
-                        cmap = ListedColormap(
-                            np.array([[0.91, 0.29, 0.235],
-                                      [0.18, 0.16, 0.15]]))
+                            chunk['cluster_2d'] = clustering.labels_
 
-                        sample_dict = dict(
-                            zip(natsorted(chunk['Reclass'].unique()),
-                                list(range(len(chunk['Reclass'].unique())))))
+                            logger.info(f'min_cluster_size = {i} {np.unique(clustering.labels_)}')
+                    ##########################################################
 
-                        c = [sample_dict[i] for i in chunk['Reclass']]
-
-                        ax_reclass.cla()
-
-                        ax_reclass.scatter(
-                            chunk['emb1'], chunk['emb2'], c=c, cmap=cmap, alpha=1.0,
-                            s=point_size, ec='k', linewidth=0.0
-                        )
-
-                        ax_reclass.set_title('Reclassification', fontsize=7)
-                        ax_reclass.axis('equal')
-                        ax_reclass.axes.xaxis.set_visible(False)
-                        ax_reclass.axes.yaxis.set_visible(False)
-                        ax_reclass.grid(False)
-
-                        fig.canvas.draw()
-
-                    #######################################################
-
-                    reclass_selector.native.setSizePolicy(
+                    sweep_MCS.native.setSizePolicy(
                         QtWidgets.QSizePolicy.Maximum,
                         QtWidgets.QSizePolicy.Maximum,
                     )
 
-                    #######################################################
+                    viewer.window.add_dock_widget(
+                        cluster_and_plot, name='Plot Single MCS',
+                        area='right')
 
-                    #######################################################
-                    @magicgui(layout='horizontal', call_button='Save')
-                    def save_selector():
+                    viewer.window.add_dock_widget(
+                        sweep_MCS, name='Sweep MCS Range',
+                        area='right')
 
-                        current_MCS = cluster_and_plot[0].value
-                        current_cleanReclass = reclass_selector[0].value
-                        current_noisyReclass = reclass_selector[1].value
+                    viewer.window.add_dock_widget(
+                        cluster_widget, name='Clustering Result', area='right')
 
-                        print()
-                        logger.info(f'Saving current min cluster size: {current_MCS}')
-                        with open(os.path.join(reclass_dir, 'MCS.txt'), 'w') as f:
-                            f.write(str(current_MCS))
+                    viewer.scale_bar.visible = True
+                    viewer.scale_bar.unit = 'um'
 
-                        print()
-                        logger.info(
-                            'Saving current clean reclassification ' +
-                            f'cutoff: {current_cleanReclass}'
-                        )
-                        logger.info(
-                            'Saving current noisy reclassification ' +
-                            f'cutoff: {current_noisyReclass}'
-                        )
-                        with open(os.path.join(reclass_dir, 'RECLASS_TUPLE.txt'), 'w') as f:
-                            f.write(str((current_cleanReclass, current_noisyReclass)))
-
-                        print()
-                        logger.info('Saving cluster plot')
-                        if selector:
-                            selector.disconnect()
-                        fig.savefig(os.path.join(
-                            reclass_dir,
-                            f'{self.embeddingAlgorithm}_'
-                            f'{current_MCS}.png'),
-                            bbox_inches='tight', dpi=1000)
-
-                        QTimer().singleShot(0, viewer.close)
-
-                    #######################################################
-
-                    save_selector.native.setSizePolicy(
-                        QtWidgets.QSizePolicy.Maximum,
-                        QtWidgets.QSizePolicy.Maximum,
-                    )
-
-                    #######################################################
-
-                    cluster_layout.addWidget(sample_selector.native)
-
-                    cluster_layout.addWidget(reclass_selector.native)
-
-                    cluster_layout.addWidget(save_selector.native)
-
-                    return MCS
-
-                    #######################################################
-
-                cluster_and_plot.native.setSizePolicy(
-                    QtWidgets.QSizePolicy.Fixed,
-                    QtWidgets.QSizePolicy.Maximum,
-                )
-
-                #######################################################
-                @magicgui(
-                    layout='horizontal',
-                    call_button='Sweep Range',
-                    lowerMCS={'label': 'Lower MCS', 'step': 1},
-                    upperMCS={'label': 'Upper MCS', 'step': 1},
-                )
-                def sweep_MCS(lowerMCS: int = 200.0, upperMCS: int = 200.0,):
-
-                    rnge = list(range(lowerMCS, upperMCS + 1, 1))
-
+                    napari.run()
+                
+                else:
                     print()
-                    for i in rnge:
+                    logger.info(
+                        'MCS and/or reclassThresholds not found in QC report. '
+                        'Reinitializing reclass.parquet, setting chunk index to 0, '
+                        'and opening Napari window so these values can be assigned.'
+                    )
+                    
+                    try:
+                        os.remove(os.path.join(reclass_dir, 'reclass.parquet'))
+                    except FileNotFoundError:
+                        pass
+                    
+                    reclass = pd.DataFrame(
+                        columns=['Reclass', 'CellID', 'Sample', 'QC_status', 'Filter', 'ChunkIDX']
+                    )
+                    
+                    # initialize chunk index counter at 0 and store
+                    chunk_index = 0
+                    progress['chunk_index'] = chunk_index
+                    f = open(progress_path, 'w')
+                    yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+
+                    # Napari window will open now that chunk_index = 0
+
+            ###############################################################
+            # once optimal MCS has been saved
+            try:
+                if check_report_structure(report_path):
+                    qc_report = yaml.safe_load(open(report_path))
+                    final_mcs_entry = qc_report['metaQC']['MCS']
+                    final_reclass_entry = qc_report['metaQC']['reclassThresholds']
+                else:
+                    print()
+                    logger.info(
+                        'Aborting; metaQC keys in QC report not formatted correctly.'
+                        'Reinitializing reclass.parquet, setting chunk index to 0. Please '
+                        're-run metaQC module to make MCS and reclass threshold selections.'
+                    )
+
+                    parquet = glob.glob(os.path.join(reclass_dir, 'reclass_*.parquet'))
+                    for i in parquet:
+                        try:
+                            os.remove(i)
+                        except FileNotFoundError:
+                            pass
+                    
+                    # initialize chunk index counter at 0 and store
+                    chunk_index = 0
+                    progress['chunk_index'] = chunk_index
+                    f = open(progress_path, 'w')
+                    yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+                    sys.exit()
+            
+            except FileNotFoundError:
+                print()
+                logger.info(
+                    'Aborting; QC report not found. Ensure cylinter_report.yml is stored at '
+                    'top-level of CyLinter output file or re-start pipeline '
+                    'to start filtering data.'
+                )
+                sys.exit()
+
+            expected_filename = (
+                f'reclass_{self.percentDataPerChunk}'
+                f'_{final_mcs_entry}'
+                f'_{final_reclass_entry[0]}'
+                f'_{final_reclass_entry[1]}.parquet'
+            )
+            
+            if filename is None:  # MCS and reclassThresholds were just defined in Napari
+                filename = expected_filename
+
+            if filename == expected_filename:
+                if chunk_index not in reclass['ChunkIDX'].unique():
+                
+                    ######################################################################
+                    # cluster chunk using selected MCS
+
+                    if 'cluster_2d' not in chunk.columns:
+                        # (not applicable to first chunk,
+                        # gets clustered during plotting above)
+                        
+                        print()
+                        logger.info(
+                            f'Applying saved minimum cluster size: {final_mcs_entry}'
+                        )
 
                         clustering = hdbscan.HDBSCAN(
-                            min_cluster_size=i,
+                            min_cluster_size=final_mcs_entry,
                             min_samples=None,
                             metric='euclidean', alpha=1.0, p=None,
                             algorithm='best', leaf_size=40,
@@ -1060,236 +1440,232 @@ def metaQC(data, self, args):
                             allow_single_cluster=False,
                             prediction_data=False,
                             match_reference_implementation=False).fit(
-                                chunk[['emb1', 'emb2']])
-
-                        chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = clustering.labels_
-
-                        logger.info(f'min_cluster_size = {i} {np.unique(clustering.labels_)}')
-                ##########################################################
-
-                sweep_MCS.native.setSizePolicy(
-                    QtWidgets.QSizePolicy.Maximum,
-                    QtWidgets.QSizePolicy.Maximum,
-                )
-
-                viewer.window.add_dock_widget(
-                    cluster_and_plot, name='Plot Single MCS',
-                    area='right')
-
-                viewer.window.add_dock_widget(
-                    sweep_MCS, name='Sweep MCS Range',
-                    area='right')
-
-                viewer.window.add_dock_widget(
-                    cluster_widget, name='Clustering Result', area='right')
-
-                viewer.scale_bar.visible = True
-                viewer.scale_bar.unit = 'um'
-
-                napari.run()
-
-            ###############################################################
-            # once optimal MCS has been saved
-            if os.path.exists(os.path.join(reclass_dir, 'MCS.txt')):
-
-                with open(os.path.join(reclass_dir, 'MCS.txt'), 'r') as f:
-                    final_mcs_entry = f.readlines()
-                    final_mcs_entry = int(final_mcs_entry[0])
-
-                with open(os.path.join(reclass_dir, 'RECLASS_TUPLE.txt'), 'r') as f:
-                    final_reclass_entry = f.readlines()
-                    final_reclass_entry = (
-                        final_reclass_entry[0]
-                        .lstrip('([')
-                        .rstrip('])')
-                        .split(', '))
-                    final_reclass_entry = [
-                        float(i) for i in final_reclass_entry]
-
-                ###########################################################
-                # cluster chunk using selected MCS
-                # (not applicable to first chunk, which gets
-                # clustered during plotting above)
-
-                if f'cluster_{self.dimensionEmbeddingQC}d' not in chunk.columns:
-
+                            chunk[['emb1', 'emb2']]
+                        )
+                        chunk['cluster_2d'] = clustering.labels_
+                    
+                    # exit program if all cells are considered ambiguous by the
+                    # clustering algorithm (likely too few cells per chunk)
+                    if chunk['cluster_2d'].eq(-1).all():
+                        logger.warning(
+                            f'Aborting; all cells in chunk {chunk_index + 1} ' +
+                            'were deemed ambiguous by clustering algorithm ' +
+                            '(i.e. assigned to cluster -1). ' +
+                            'Try using larger batch size.')
+                        sys.exit()
+                    
+                    ######################################################################
+                    # add clean and noisy data to reclass storage dataframe 
+                    # according to reclassification thresholds
+        
                     print()
-                    logger.info(f'Applying saved minimum cluster size: {final_mcs_entry}')
+                    logger.info(
+                        f'Applying saved clean reclassification cutoff {final_reclass_entry[0]} '
+                        f'to chunk {chunk_index + 1} of {len(chunks)}'
+                    )
+                    logger.info(
+                        f'Applying saved clean reclassification cutoff {final_reclass_entry[1]} '
+                        f'to chunk {chunk_index + 1} of {len(chunks)}'
+                    )
+                    
+                    chunk, clean, noisy = reclassify_chunk(
+                        chunk=chunk, clean_cutoff=final_reclass_entry[0],
+                        noisy_cutoff=final_reclass_entry[1]
+                    )
+                    clean['ChunkIDX'] = chunk_index
+                    noisy['ChunkIDX'] = chunk_index
 
-                    clustering = hdbscan.HDBSCAN(
-                        min_cluster_size=final_mcs_entry,
-                        min_samples=None,
-                        metric='euclidean', alpha=1.0, p=None,
-                        algorithm='best', leaf_size=40,
-                        memory=Memory(location=None),
-                        approx_min_span_tree=True,
-                        gen_min_span_tree=False,
-                        core_dist_n_jobs=-1,
-                        cluster_selection_method='eom',
-                        allow_single_cluster=False,
-                        prediction_data=False,
-                        match_reference_implementation=False).fit(chunk[['emb1', 'emb2']])
-                    chunk[f'cluster_{self.dimensionEmbeddingQC}d'] = clustering.labels_
+                    ######################################################################
+                    # generate clustermap for chunk data
 
-                ###########################################################
-                # add clean and noisy data (based on final reclass_tuple)
-                # to reclass_storage_dict
+                    clustermap_input = chunk[
+                        chunk['cluster_2d'] != -1].copy()
 
-                print()
-                logger.info(
-                    'Applying saved clean reclassification ' +
-                    f'cutoff: {final_reclass_entry[0]}')
-                logger.info(
-                    'Applying saved noisy reclassification ' +
-                    f'cutoff: {final_reclass_entry[1]}')
+                    cluster_heatmap_input = (
+                        clustermap_input[
+                            abx_channels +
+                            ['cluster_2d']]
+                        .groupby('cluster_2d')
+                        .mean()
+                    )
+                    
+                    # compute per channel z-scores across clusters
+                    cluster_heatmap_input = (
+                        (cluster_heatmap_input - cluster_heatmap_input.mean()) / 
+                        cluster_heatmap_input.std()
+                    )
+                    # assign NaNs (channels with no variation in signal) to 0
+                    cluster_heatmap_input[cluster_heatmap_input.isna()] = 0
 
-                chunk, clean, noisy = reclassify_chunk(
-                    chunk=chunk, clean_cutoff=final_reclass_entry[0],
-                    noisy_cutoff=final_reclass_entry[1]
-                )
-
-                # update clean and noisy storage dataframes and save
-                reclass_storage_dict['clean'] = pd.concat(
-                    [reclass_storage_dict['clean'], clean], axis=0
-                )
-                reclass_storage_dict['noisy'] = pd.concat(
-                    [reclass_storage_dict['noisy'], noisy], axis=0
-                )
-
-                f = open(os.path.join(
-                    reclass_dir, 'reclass_storage_dict.pkl'), 'wb')
-                pickle.dump(reclass_storage_dict, f)
-                f.close()
-
-                print()
-                logger.info(f"Reclassified clean tally: {len(reclass_storage_dict['clean'])}")
-                logger.info(f"Reclassified noisy tally: {len(reclass_storage_dict['noisy'])}")
-                print()
-
-                ###########################################################
-                # get clustermap
-
-                # exit program if all cells are considered ambiguous by the
-                # clustering algorithm (likely too few cells per chunk)
-                if chunk[f'cluster_{self.dimensionEmbeddingQC}d'].eq(-1).all():
-                    logger.warning(
-                        f'Aborting; all cells in chunk {chunk_index + 1} ' +
-                        'were deemed ambiguous by clustering algorithm ' +
-                        '(i.e. assigned to cluster -1). '
-                        + 'Try using larger batch size.')
-                    sys.exit()
-
-                clustermap_input = chunk[chunk[f'cluster_{self.dimensionEmbeddingQC}d'] != -1]
-
-                cluster_heatmap_input = (
-                    clustermap_input[
-                        abx_channels +
-                        [f'cluster_{self.dimensionEmbeddingQC}d']]
-                    .groupby(f'cluster_{self.dimensionEmbeddingQC}d')
-                    .mean()
-                )
-
-                sns.set(font_scale=0.8)
-                for name, axis in zip(['within', 'across'], [0, 1]):
-                    sns.clustermap(
-                        cluster_heatmap_input, cmap='viridis', standard_scale=axis,
-                        square=False, yticklabels=1, linewidth=0.1, cbar=True
+                    # zero-center colorbar
+                    norm = TwoSlopeNorm(
+                        vcenter=0, vmin=cluster_heatmap_input.min().min(),
+                        vmax=cluster_heatmap_input.max().max()
                     )
 
-                    plt.gcf().set_size_inches(8.0, 8.0)
+                    sns.set(font_scale=0.8)
+                    g = sns.clustermap(
+                        cluster_heatmap_input, cmap='coolwarm', standard_scale=None,
+                        square=False, yticklabels=1, linewidth=0.1, cbar=True, norm=norm
+                    )
+                    
+                    g.fig.suptitle('channel_z-scores.pdf}', y=0.995, fontsize=10)
+                    g.fig.set_size_inches(8.0, 8.0)
 
                     plt.savefig(
-                        os.path.join(chunk_dir, f'clustermap_{name}.pdf'),
+                        os.path.join(chunk_dir, 'channel_z-scores.pdf'),
                         bbox_inches='tight'
                     )
                     plt.close('all')
 
-                ###########################################################
-                # increment chunk_index
-                chunk_index = chunk_index + 1
+                    ######################################################################
+                    # update reclass storage and save
+                    
+                    reclass = pd.concat(
+                        [reclass,
+                         clean[['Reclass', 'CellID', 'Sample', 'QC_status',
+                                'Filter', 'ChunkIDX']]
+                         ], axis=0
+                    )
+                    reclass = pd.concat(
+                        [reclass,
+                         noisy[['Reclass', 'CellID', 'Sample', 'QC_status',
+                                'Filter', 'ChunkIDX']]
+                         ], axis=0
+                    )
 
-                with open(os.path.join(reclass_dir, 'chunk_index.txt'), 'w') as f:
-                    f.write(str(chunk_index))
+                    reclass.to_parquet(os.path.join(reclass_dir, f'{filename}'))
 
-                # remove saved chunk.pkl
-                if os.path.exists(os.path.join(reclass_dir, 'chunk.pkl')):
-                    os.remove(os.path.join(reclass_dir, 'chunk.pkl'))
-
-        ###################################################################
-        # perform data reclassification
-
-        # create explicit global labels for raw data
-        for module_idx, module in enumerate(modules):
-            if module_dict[module_idx][0] == 'aggregateData':
-                pre_qc = module_dict[module_idx][1].copy()
-                pre_qc['handle'] = (
-                    pre_qc['CellID'].map(str) + '_' + pre_qc['Sample']
+                    print()
+                    
+                    logger.info(
+                        f"Clean data reclassified as noisy tally: {len(reclass[(reclass['Reclass'] == 'noisy') & (reclass['QC_status'] == 'clean')])}"
+                    )
+                    logger.info(
+                        f"Noisy data reclassified as clean tally: {len(reclass[(reclass['Reclass'] == 'clean') & (reclass['QC_status'] == 'noisy')])}"
+                    )
+                
+                else:
+                    logger.info(
+                        f'Reclassified data for chunk {chunk_index + 1} already ' 
+                        'added to reclass parquet. Moving to next chunk.'
+                    )
+            else:
+                print()
+                logger.info(
+                    f'Aborting; reclass parquet was built using '
+                    f'MCS = {filename.split("_")[2]}, '
+                    f'clean reclass threshold = {filename.split("_")[3]}, and '
+                    f'noisy reclass threshold = {filename.split("_")[4].split(".parquet")[0]}. '
+                    f'However, current QC report values are MCS = {final_mcs_entry}, clean '
+                    f'reclass threshold = {final_reclass_entry[0]}, and noisy reclass '
+                    f'threshold = {final_reclass_entry[1]}. Update values in QC report to '
+                    'match or remove QC metadata values. Then re-run metaQC module.'
                 )
+                sys.exit()
 
-        # create explicit global labels for
-        # cleaned data (before reclassifiction)
-        post_qc = module_dict[
-            [i for i in module_dict.keys()][-1]][1].copy()
-        post_qc['handle'] = (
-            post_qc['CellID'].map(str) + '_' + post_qc['Sample']
-        )
+            ######################################################################################
+            # increment chunk_index
+            
+            chunk_index = chunk_index + 1
+            progress['chunk_index'] = chunk_index
+            f = open(progress_path, 'w')
+            yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
 
-        # get raw values of cells in post_qc data
-        cleaned_raw = pre_qc[pre_qc['handle'].isin(post_qc['handle'])]
+            ######################################################################################
+            
+        print()
 
-        # convert clean data in predominantly noisy clusters to noisy
-        # to yield final clean data
-        drop = reclass_storage_dict['noisy'][
-            reclass_storage_dict['noisy']['QC_status'] == 'clean'].copy()
-        
-        if not drop.empty:    
-            drop['handle'] = drop['CellID'].map(str) + '_' + drop['Sample']
-        else:
-            drop['handle'] = pd.Series()
-        
-        dropped = cleaned_raw[~cleaned_raw['handle'].isin(drop['handle'])]
+        ##########################################################################################
+        # ensure all chunks have been reclassified before reclassifying final dataframe
+        if reclass['ChunkIDX'].max() == len(chunks) - 1:
 
-        # convert noisy data in predominantly clean clusters to clean
-        # to yield final replace data
-        replace = reclass_storage_dict['clean'][
-            reclass_storage_dict['clean']['QC_status'] == 'noisy'].copy()
-        
-        if not replace.empty:
-            replace['handle'] = replace['CellID'].map(str) + '_' + replace['Sample']
-        else:
-            replace['handle'] = pd.Series()
-        
-        replaced = pre_qc[pre_qc['handle'].isin(replace['handle'])]
+            # create unique cell labels for raw data
+            for module_idx, module in enumerate(modules):
+                if module_dict[module_idx][0] == 'aggregateData':
+                    pre_qc = module_dict[module_idx][1].copy()
+                    pre_qc['handle'] = (
+                        pre_qc['CellID'].map(str) + '_' + pre_qc['Sample']
+                    )
 
-        data = pd.concat([dropped, replaced], axis=0)
-
-        ###################################################################
-        # transform data
-
-        data.loc[:, abx_channels] += 0.00000000001
-        data.loc[:, abx_channels] = np.log10(data[abx_channels])
-
-        ###################################################################
-        # rescale antibody signal intensities (0-1)
-
-        for ab in abx_channels:
-            channel_data = data[ab]
-
-            # rescale channel signal intensities
-            scaler = (
-                MinMaxScaler(feature_range=(0, 1), copy=True)
-                .fit(channel_data.values.reshape(-1, 1))
+            # create unique cell labels for cleaned data (before reclassifiction)
+            post_qc = module_dict[[i for i in module_dict.keys()][-1]][1].copy()
+            post_qc['handle'] = (
+                post_qc['CellID'].map(str) + '_' + post_qc['Sample']
             )
-            rescaled_data = scaler.transform(channel_data.values.reshape(-1, 1))
 
-            rescaled_data = pd.DataFrame(
-                data=rescaled_data, index=channel_data.index
-            ).rename(columns={0: ab})
+            # get raw values of cells in post_qc data
+            cleaned_raw = pre_qc[pre_qc['handle'].isin(post_qc['handle'])]
 
-            # data to return from metQC module
-            data.update(rescaled_data)
+            # isolate clean cells reclassified as noisy
+            drop = reclass[
+                (reclass['Reclass'] == 'noisy') & (reclass['QC_status'] == 'clean')
+            ].copy()
 
-    #######################################################################
+            if not drop.empty:    
+                drop['handle'] = drop['CellID'].map(str) + '_' + drop['Sample']
+            else:
+                drop['handle'] = pd.Series()
+            
+            dropped = cleaned_raw[~cleaned_raw['handle'].isin(drop['handle'])]
+
+            # isolate noisy cells reclassified as clean
+            replace = reclass[
+                (reclass['Reclass'] == 'clean') & (reclass['QC_status'] == 'noisy')
+            ].copy()
+            
+            if not replace.empty:
+                replace['handle'] = replace['CellID'].map(str) + '_' + replace['Sample']
+            else:
+                replace['handle'] = pd.Series()
+            
+            replaced = pre_qc[pre_qc['handle'].isin(replace['handle'])]
+
+            data = pd.concat([dropped, replaced], axis=0)
+
+            ######################################################################################
+            # transform data
+
+            data.loc[:, abx_channels] += 0.001
+            data.loc[:, abx_channels] = np.log10(data[abx_channels])
+
+            ######################################################################################
+            # rescale channel signal intensities (0-1) per channel per sample
+
+            for channel in abx_channels:
+                for sample in natsorted(data['Sample'].unique()):
+                    
+                    sample_channel_data = data[data['Sample'] == sample][channel]
+
+                    # rescale channel signal intensities
+                    scaler = (
+                        MinMaxScaler(feature_range=(0, 1), copy=True)
+                        .fit(sample_channel_data.values.reshape(-1, 1))
+                    )
+                    rescaled_data = scaler.transform(
+                        sample_channel_data.values.reshape(-1, 1)
+                    )
+
+                    rescaled_data = pd.DataFrame(
+                        data=rescaled_data,
+                        index=sample_channel_data.index
+                    ).rename(columns={0: channel})
+
+                    # data to return from metQC module
+                    data.update(rescaled_data)
+        else:
+            logger.info(
+                f'Aborting; only {reclass["ChunkIDX"].max() + 1} of {len(chunks)} chunks '
+                'have been reclassified. Updating chunk_index in QC report to ' 
+                f'{reclass["ChunkIDX"].max() + 2}. Please re-run metaQC ' 
+                'module to reclassify remaining chunks.'
+            )
+            progress['chunk_index'] = reclass['ChunkIDX'].max() + 1
+            f = open(progress_path, 'w')
+            yaml.dump(progress, f, sort_keys=False, allow_unicode=False)
+            sys.exit()
+    
+    ##############################################################################################
     # compute number of cells remaining after each QC stage.
 
     # Consider reclassified data if self.metaQC is True.
@@ -1373,7 +1749,7 @@ def metaQC(data, self, args):
     if self.metaQC:
         data.drop('handle', axis=1, inplace=True)
 
-    data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
+    data = reorganize_dfcolumns(data, markers, 2)
 
     print()
     print()

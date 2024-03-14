@@ -44,8 +44,9 @@ class Config:
         config.inDir = pathlib.Path(data['inDir']).resolve()
         config.outDir = pathlib.Path(data['outDir']).resolve()
         config._parse_sample_metadata(data['sampleMetadata'])
-        config.samplesToExclude = (data['samplesToExclude'])
-        config.markersToExclude = (data['markersToExclude'])
+        config.samplesToExclude = list(data['samplesToExclude'])
+        config.counterstainChannel = str(data['counterstainChannel'])
+        config.markersToExclude = list(data['markersToExclude'])
 
         # CLASS MODULE CONFIGURATIONS
         
@@ -96,12 +97,9 @@ class Config:
             data['samplesToRemoveClustering']
         )
         config.normalizeTissueCounts = bool(data['normalizeTissueCounts'])
-        config.fracForEmbeddingQC = float(data['fracForEmbeddingQC'])
+        config.percentDataPerChunk = float(data['percentDataPerChunk'])
         config.fracForEmbedding = float(data['fracForEmbedding'])
-        config.dimensionEmbeddingQC = int(data['dimensionEmbeddingQC'])
         config.dimensionEmbedding = int(data['dimensionEmbedding'])
-        config.topMarkersQC = str(data['topMarkersQC'])
-        config.topMarkers = str(data['topMarkers'])
         config.colormapAnnotationQC = str(
             data['colormapAnnotationQC'])
         config.colormapAnnotationClustering = str(
@@ -136,7 +134,6 @@ class Config:
         config.FDRCorrection = bool(data['FDRCorrection'])
 
         config.numThumbnails = int(data['numThumbnails'])
-        config.topMarkersThumbnails = str(data['topMarkersThumbnails'])
         config.windowSize = int(data['windowSize'])
         config.segOutlines = bool(data['segOutlines'])
 

@@ -5,6 +5,7 @@ import math
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
 
 from ..utils import input_check, read_markers, reorganize_dfcolumns
 
@@ -16,8 +17,10 @@ def clustermap(data, self, args):
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
     # create clustering dimension directory if it hasn't already
@@ -42,13 +45,13 @@ def clustermap(data, self, args):
   
         # plotting the distribution
         n, bins, patches = ax_objs[-1].hist(
-            data[channel], bins=700, density=True, histtype='stepfilled',
+            data[channel], bins=50, density=True, histtype='stepfilled',
             linewidth=2.0, ec='k', alpha=1.0, color='k'
         )
 
         # setting uniform x and y lims
         ax_objs[-1].set_xlim(0, 1)
-        ax_objs[-1].set_ylim(0, math.ceil(n.max())+1)
+        ax_objs[-1].set_ylim(0, math.ceil(n.max()) + 1)
 
         # make background transparent
         rect = ax_objs[-1].patch
@@ -100,24 +103,43 @@ def clustermap(data, self, args):
                 clustermap_input = clustermap_input[abx_channels + [type]].groupby(type).mean()
 
             if len(clustermap_input) > 1:
-                sns.set(font_scale=0.8)
-                for name, axis in zip(['channels', 'clusters'], [0, 1]):
+                
+                sns.set(font_scale=0.7)
 
-                    g = sns.clustermap(
-                        clustermap_input, cmap='viridis', standard_scale=axis,
-                        square=False, yticklabels=1, linewidth=0.0, cbar=True
-                    )
+                # Compute per channel z-scores across clusters
+                clustermap_input = (
+                    (clustermap_input - clustermap_input.mean()) / clustermap_input.std()
+                )
+                # assign NaNs (channels with no variation in signal) to 0
+                clustermap_input[clustermap_input.isna()] = 0
+                
+                # Zero-center colorbar
+                norm = TwoSlopeNorm(
+                    vcenter=0, vmin=clustermap_input.min().min(),
+                    vmax=clustermap_input.max().max()
+                )
 
-                    g.fig.suptitle(f'Normalized across {name}', y=0.995, fontsize=10)
-                    g.fig.set_size_inches(6.0, 6.0)
-                    g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), rotation=0)
+                g = sns.clustermap(
+                    clustermap_input, cmap='coolwarm', standard_scale=None, square=False,
+                    xticklabels=1, yticklabels=1, linewidth=0.0, cbar=True, norm=norm 
+                )
+                
+                # g = sns.clustermap(
+                #     clustermap_input, cmap='viridis', standard_scale=1, square=False,
+                #     xticklabels=1, yticklabels=1, linewidth=0.0, cbar=True 
+                # )
 
-                    plt.savefig(
-                        os.path.join(dim_dir, f'clustermap_{type}_norm_{name}.pdf'),
-                        bbox_inches='tight'
-                    )
+                g.fig.suptitle('channel_z-scores.pdf', y=0.995, fontsize=10)
+                g.fig.set_size_inches(6.0, 6.0)
+                g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), rotation=0)
+
+                plt.savefig(
+                    os.path.join(dim_dir, f'{type}_channel_z-scores.pdf'), bbox_inches='tight'
+                )
             else:
-                logger.info('Clustermap cannot be generated with only one cluster/class.')
+                logger.info(
+                    f' {type} clustermap cannot be generated with only one cell population.'
+                )
 
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
