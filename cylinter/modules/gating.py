@@ -177,7 +177,7 @@ def multipage_pdf(abx_channels, dist_dir):
         output_pdf.write(file)
 
 
-def callback(self, viewer, data, hist_widget, hist_layout, selection_widget,selection_layout, gate_dir, sample, marker, initial_callback, dist_dir, abx_channels, markers,qc_report, report_path):
+def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, selection_layout, gate_dir, sample, marker, initial_callback, dist_dir, abx_channels, markers, qc_report, report_path):
 
     # if valid sample and marker entered
     if (sample in data['Sample'].unique()) and (marker in abx_channels):
@@ -428,9 +428,11 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget,sele
 
         @magicgui(layout='horizontal', call_button='Apply Gate and Move to Next Sample -->')
         def next_sample():
+                
+            print()
             
             adjusted_gate = update(val=None)
-            
+
             # save gate value
             qc_report['gating'][f'{marker}, {sample}, {cond}, {rep}'] = float(adjusted_gate)
 
@@ -460,7 +462,23 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget,sele
                 )
             else:
                 print()
+                
                 logger.info('Gating complete!')
+
+                ##################################################################################
+                # ensure all PDFs are updated with current gates
+                
+                print()
+                logger.info('Updating gates in PDF pages.')
+                
+                for ch in abx_channels:
+                    generate_pdf(data, ch, abx_channels, qc_report, gate_dir, dist_dir)
+                multipage_pdf(abx_channels, dist_dir)
+
+                ##################################################################################
+                
+                print()
+                
                 QTimer().singleShot(0, viewer.close)
 
         next_sample.native.setSizePolicy(
@@ -536,28 +554,27 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget,sele
         @update_pdf.called.connect
         def update_pdf_callback(marker: str):
 
-            print()
             if marker not in abx_channels + ['ALL']:
                 napari.utils.notifications.show_warning('Marker name not in filtered data.')
                 pass
             else:
+                print()
                 if marker == 'ALL':
                     for marker in abx_channels:
                         generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
                     multipage_pdf(abx_channels, dist_dir)
                 else:
-                    print()
                     generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
                     multipage_pdf(abx_channels, dist_dir)
 
                 napari.utils.notifications.show_info('PDF(s) updated!')
-                print()
         
         #######################################################################
 
         napari.utils.notifications.show_info(f'Gating {marker} in sample {sample}')
     
     else:
+        print()
         if marker not in abx_channels and sample not in data['Sample'].unique():
             napari.utils.notifications.show_warning(
                 'Marker and sample names not in filtered data.'
@@ -707,23 +724,11 @@ def gating(data, self, args):
 
             napari.run()
 
-            print()
-
         else:
-            logger.info('Gating complete!')
-            print()
-        
-        ##########################################################################################
-        # ensure all PDFs are updated with current gates
-
-        for marker in abx_channels:
-            generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
-        multipage_pdf(abx_channels, dist_dir)
+            pass
 
         ##########################################################################################
         # subtract gates and binarize data
-        
-        print()
         
         gated = pd.DataFrame()
 

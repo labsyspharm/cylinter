@@ -1189,6 +1189,9 @@ def clustering(data, self, args):
                 f = open(report_path, 'w')
                 yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
                 
+                # ensure silhouette plot is closed 
+                plt.close('all')  
+                
                 if embedding.shape[1] == 2:
                     print()
                     logger.info('Saving 2D cluster plot')
@@ -1394,7 +1397,7 @@ def clustering(data, self, args):
 
     # save dataframe in standard CSV format for analysis outside CyLinter
     data.to_csv(os.path.join(self.outDir, 'checkpoints', 'clustering.csv'), index=False)
-
+    
     print()
     print()
     return data
