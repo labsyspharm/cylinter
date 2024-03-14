@@ -12,23 +12,30 @@ CyLinter is written in Python 3 and is compatible with MacOS, Windows, and Linux
 ## 1. Install Miniconda
 The folllowing are examples of commands for quickly and quietly installing the latest version of the Miniconda installer for your operating system (MacOS, Windows, Linux). To install a different version or architecture of Miniconda for any platform, change the name of the .sh (or .exe) installer in the curl (or wget) command to the one appropriate for your machine. The latest Miniconda installers can be found [here](https://docs.conda.io/projects/miniconda/en/latest/index.html).
 
-``` bash
-# MacOS:
+### MacOS
+Open Terminal and paste the following commands:
+```bash
 mkdir -p ~/miniconda3
 curl https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh -o ~/miniconda3/miniconda.sh
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-rm -rf ~/miniconda3/miniconda.sh
+rm -f ~/miniconda3/miniconda.sh
+```
 
-# Windows:
+### Windows
+Open a Command Prompt and paste the following commands:
+```cmd
 curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe -o miniconda.exe
 start /wait "" miniconda.exe /S
 del miniconda.exe
+```
 
-# Linux:
+### Linux
+Open a terminal window and paste the following commands:
+```bash
 mkdir -p ~/miniconda3
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-rm -rf ~/miniconda3/miniconda.sh
+rm -f ~/miniconda3/miniconda.sh
 ```
 
 ## 2. Set Libmamba as the default dependency solver
