@@ -46,6 +46,7 @@ def run_pipeline(config, start_module_name):
         sampleStatuses=config.sampleStatuses,
         sampleReplicates=config.sampleReplicates,
         samplesToExclude=config.samplesToExclude,
+        counterstainChannel=config.counterstainChannel,
         markersToExclude=config.markersToExclude,
 
         delintMode=config.delintMode,
@@ -86,12 +87,9 @@ def run_pipeline(config, start_module_name):
         normalizeTissueCounts=config.normalizeTissueCounts,
         samplesToRemoveClusteringQC=config.samplesToRemoveClusteringQC,
         samplesToRemoveClustering=config.samplesToRemoveClustering,
-        fracForEmbeddingQC=config.fracForEmbeddingQC,
+        percentDataPerChunk=config.percentDataPerChunk,
         fracForEmbedding=config.fracForEmbedding,
-        dimensionEmbeddingQC=config.dimensionEmbeddingQC,
         dimensionEmbedding=config.dimensionEmbedding,
-        topMarkersQC=config.topMarkersQC,
-        topMarkers=config.topMarkers,
         colormapAnnotationQC=config.colormapAnnotationQC,
         colormapAnnotationClustering=config.colormapAnnotationClustering,
 
@@ -121,7 +119,6 @@ def run_pipeline(config, start_module_name):
         FDRCorrection=config.FDRCorrection,
 
         numThumbnails=config.numThumbnails,
-        topMarkersThumbnails=config.topMarkersThumbnails,
         windowSize=config.windowSize,
         segOutlines=config.segOutlines,
     )

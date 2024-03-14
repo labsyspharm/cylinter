@@ -75,6 +75,7 @@ class QC(object):
                  sampleStatuses=None,
                  sampleReplicates=None,
                  samplesToExclude=None,
+                 counterstainChannel=None,
                  markersToExclude=None,
 
                  # selectROIs -
@@ -104,9 +105,7 @@ class QC(object):
                  embeddingAlgorithmQC=None,
                  channelExclusionsClusteringQC=None,
                  samplesToRemoveClusteringQC=None,
-                 fracForEmbeddingQC=None,
-                 dimensionEmbeddingQC=None,
-                 topMarkersQC=None,
+                 percentDataPerChunk=None,
                  colormapAnnotationQC=None,
                  metricQC=None,
                  perplexityQC=None,
@@ -142,7 +141,6 @@ class QC(object):
                  normalizeTissueCounts=None,
                  fracForEmbedding=None,
                  dimensionEmbedding=None,
-                 topMarkers=None,
                  colormapAnnotationClustering=None,
                  colormapAnnotation=None,
                  perplexity=None,
@@ -163,13 +161,9 @@ class QC(object):
 
                  # curateThumbnails —
                  numThumbnails=None,
-                 topMarkersThumbnails=None,
                  windowSize=None,
                  segOutlines=None,
                  ):
-
-        assert topMarkers in ['channels', 'clusters'], \
-            'Invalid input for topMarkers configuration parameter.'
 
         self.inDir = inDir
         self.outDir = outDir
@@ -180,6 +174,7 @@ class QC(object):
         self.sampleStatuses = sampleStatuses
         self.sampleReplicates = sampleReplicates
         self.samplesToExclude = samplesToExclude
+        self.counterstainChannel = counterstainChannel
         self.markersToExclude = markersToExclude
 
         self.delintMode = delintMode
@@ -203,9 +198,7 @@ class QC(object):
         self.embeddingAlgorithmQC = embeddingAlgorithmQC
         self.channelExclusionsClusteringQC = channelExclusionsClusteringQC
         self.samplesToRemoveClusteringQC = samplesToRemoveClusteringQC
-        self.fracForEmbeddingQC = fracForEmbeddingQC
-        self.dimensionEmbeddingQC = dimensionEmbeddingQC
-        self.topMarkersQC = topMarkersQC
+        self.percentDataPerChunk = percentDataPerChunk
         self.colormapAnnotationQC = colormapAnnotationQC
         self.metricQC = metricQC
         self.perplexityQC = perplexityQC
@@ -237,7 +230,6 @@ class QC(object):
         self.normalizeTissueCounts = normalizeTissueCounts
         self.fracForEmbedding = fracForEmbedding
         self.dimensionEmbedding = dimensionEmbedding
-        self.topMarkers = topMarkers
         self.colormapAnnotationClustering = colormapAnnotationClustering
         self.perplexity = perplexity
         self.earlyExaggeration = earlyExaggeration
@@ -255,7 +247,6 @@ class QC(object):
         self.FDRCorrection = FDRCorrection
 
         self.numThumbnails = numThumbnails
-        self.topMarkersThumbnails = topMarkersThumbnails
         self.windowSize = windowSize
         self.segOutlines = segOutlines
 

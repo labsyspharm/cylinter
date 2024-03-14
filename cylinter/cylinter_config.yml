@@ -2,8 +2,8 @@
 
 inDir: /Users/<username>/Desktop/cylinter_demo
 # Path to CyLinter input directory containing multi-channel
-# image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF),
-# segmentation masks (TIFF), and corresponding single-cell feature tables (CSV)
+# image files (TIF or OME-TIF), segmentation outlines (OME-TIF),
+# segmentation masks (TIF), and corresponding single-cell feature tables (CSV)
 
 outDir: /Users/<username>/Desktop/cylinter_demo/output
 # CyLinter output directory. Path is created if it does not exist.
@@ -25,6 +25,9 @@ sampleMetadata:
 samplesToExclude: []
 # (list of strs) Sample names to exclude from analysis specified
 # according to the first elements of sampleMetadata configuration.
+
+counterstainChannel: "DNA1"
+# (str) Name of marker in markers.csv file for use in visualizing nuclear counterstain
 
 markersToExclude: ["Rabbit IgG", "Goat IgG", "Mouse IgG", "CD56", "CD13",
                    "pAUR", "CCNE", "CDKN2A", "PCNA_1", "CDKN1B_2",

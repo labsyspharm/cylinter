@@ -1,6 +1,7 @@
 import os
-import yaml
+import sys
 import ast
+import yaml
 import logging
 
 import numpy as np
@@ -34,12 +35,30 @@ def curateThumbnails(data, self, args):
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
+    # read QC report
+    report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+    try:
+        qc_report = yaml.safe_load(open(report_path))
+    except FileNotFoundError:
+        print()
+        logger.info(
+            'Aborting; QC report not found. Ensure cylinter_report.yml is stored at '
+            'top-level of CyLinter output file or re-start pipeline '
+            'to start filtering data.'
+        )
+        sys.exit()
+
     for type in ['class', f'cluster_{self.dimensionEmbedding}d']:
-        if type in data.columns:
+
+        df = data.copy()
+        
+        if type in df.columns:
 
             if type == f'cluster_{self.dimensionEmbedding}d':
                 
@@ -49,7 +68,7 @@ def curateThumbnails(data, self, args):
                 ]
 
                 # drop unclustered cells from data
-                data = data[data[type] != -1]
+                df = df[df[type] != -1]
 
             elif type == 'class':
                 
@@ -59,7 +78,7 @@ def curateThumbnails(data, self, args):
                 ]
 
                 # drop unclassified cells from data
-                data = data[data[type] != 'unclassified']
+                df = df[df[type] != 'unclassified']
 
             # create thumbnails directory
             thumbnails_dir = os.path.join(
@@ -72,12 +91,6 @@ def curateThumbnails(data, self, args):
             zarr_dir = os.path.join(thumbnails_dir, 'zarrs')
             if not os.path.exists(zarr_dir):
                 os.makedirs(zarr_dir)
-
-            # read image contrast settings
-            contrast_dir = os.path.join(self.outDir, 'contrast')
-            if os.path.exists(f'{contrast_dir}/contrast_limits.yml'):
-                contrast_limits = yaml.safe_load(
-                    open(f'{contrast_dir}/contrast_limits.yml'))
 
             ######################################################################################
 
@@ -96,7 +109,7 @@ def curateThumbnails(data, self, args):
 
                     completed = set([i for i in completed])
 
-                total = set(data[type].unique())
+                total = set(df[type].unique())
 
                 to_run = natsorted(total.difference(completed))
 
@@ -109,23 +122,22 @@ def curateThumbnails(data, self, args):
             else:
                 # create a list of populations to run
                 completed = []
-                to_run = natsorted(data[type].unique())
+                to_run = natsorted(df[type].unique())
 
                 logger.info(f'{len(to_run)} {type} image gallery(s) to create.')
 
             ###################################################################
-
             for pop in to_run:
 
                 # create dataframe to collect thumbnail images and metadata
                 long_table = pd.DataFrame()
 
                 if type == f'cluster_{self.dimensionEmbedding}d':
-                    
+
                     # identify top expressed markers
-                    norm_ax, hi_markers = cluster_expression(
-                        df=data, markers=abx_channels, cluster=pop, num_proteins=3,
-                        clus_dim=self.dimensionEmbedding, norm_ax=self.topMarkersThumbnails
+                    hi_markers = cluster_expression(
+                        df=df, markers=abx_channels, cluster=pop, num_proteins=3,
+                        clus_dim=self.dimensionEmbedding
                     )
                 elif type == 'class':
 
@@ -134,12 +146,12 @@ def curateThumbnails(data, self, args):
                     hi_markers = gate_expression(pop=pop, gate_dir=gate_dir)
                 
                 # combine DNA1 with top expressed markers
-                markers_to_show = [dna1] + hi_markers
+                markers_to_show = [self.counterstainChannel] + hi_markers
 
                 # get marker channel numbers from markers.csv
                 channel_nums = []
                 for marker in markers_to_show:
-                    channel_number = marker_channel_number(markers, marker)
+                    channel_number = marker_channel_number(self, markers, marker)
                     channel_nums.append(str(channel_number + 1))  # cellcutter 1-based indexing 
 
                 # create marker LUT
@@ -153,10 +165,10 @@ def curateThumbnails(data, self, args):
 
                     color_dict[i] = j
 
-                for sample in [i for i in data['Sample'].unique()]:
+                for sample in [i for i in df['Sample'].unique()]:
 
                     # isolate data for current cluster and sample
-                    cellcutter_input = data[(data[type] == pop) & (data['Sample'] == sample)]
+                    cellcutter_input = df[(df[type] == pop) & (df['Sample'] == sample)]
 
                     if len(cellcutter_input) == 0:
                         continue
@@ -169,48 +181,47 @@ def curateThumbnails(data, self, args):
                         )
 
                     # generate cellcutter zarr file if it doesn't already exist
-                    if not os.path.exists(
-                       os.path.join(
-                            zarr_dir, f'{type}_{pop}_sample_{sample}'
-                            f'_win{self.windowSize}.zarr', '0.0.0.0')):
+                    # if not os.path.exists(
+                    #    os.path.join(
+                    #         zarr_dir, f'{type}_{pop}_sample_{sample}'
+                    #         f'_win{self.windowSize}.zarr', '0.0.0.0')):
 
-                        # write cellcutter_input to disk
-                        cellcutter_input.to_csv(
-                            os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                    # write cellcutter_input to disk
+                    cellcutter_input.to_csv(
+                        os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                    )
+
+                    print()
+                    
+                    if type == f'cluster_{self.dimensionEmbedding}d':
+                        logger.info(
+                            f'Cutting {len(cellcutter_input)} '
+                            f'{type} {pop} cell(s) '
+                            f'showing {markers_to_show} channels '
+                            f'from sample {sample}...'
+                        )
+                    else:
+                        logger.info(
+                            f'Cutting {len(cellcutter_input)} '
+                            f'{type} {pop} cell(s) '
+                            f'showing {markers_to_show} channels '
+                            f'from sample {sample}...'
                         )
 
-                        print()
-                        
-                        if type == f'cluster_{self.dimensionEmbedding}d':
-                            logger.info(
-                                f'Cutting {len(cellcutter_input)} '
-                                f'{type} {pop} cell(s) '
-                                f'showing {markers_to_show} channels '
-                                f'normalized across {norm_ax} '
-                                f'from sample {sample}...'
-                            )
-                        else:
-                            logger.info(
-                                f'Cutting {len(cellcutter_input)} '
-                                f'{type} {pop} cell(s) '
-                                f'showing {markers_to_show} channels '
-                                f'from sample {sample}...'
-                            )
-
-                        # run cellcutter on sample image
-                        tif_file_path = get_filepath(self, check, sample, 'TIF')
-                        mask_file_path = get_filepath(self, check, sample, 'MASK')
-                        run(
-                            ["cut_cells", "--force", "--window-size",
-                             f"{self.windowSize}", "--cells-per-chunk",
-                             "200", "--cache-size", "57711",
-                             f"{tif_file_path}",
-                             f"{mask_file_path}",
-                             f"{thumbnails_dir}/csv_data.csv",
-                             f"{zarr_dir}/{type}_{pop}_sample_{sample}"
-                             f"_win{self.windowSize}.zarr",
-                             "--channels"] + channel_nums
-                        )
+                    # run cellcutter on sample image
+                    tif_file_path = get_filepath(self, check, sample, 'TIF')
+                    mask_file_path = get_filepath(self, check, sample, 'MASK')
+                    run(
+                        ["cut_cells", "--force", "--window-size",
+                         f"{self.windowSize}", "--cells-per-chunk",
+                         "200", "--cache-size", "57711",
+                         f"{tif_file_path}",
+                         f"{mask_file_path}",
+                         f"{thumbnails_dir}/csv_data.csv",
+                         f"{zarr_dir}/{type}_{pop}_sample_{sample}"
+                         f"_win{self.windowSize}.zarr",
+                         "--channels"] + channel_nums
+                    )
 
                     # read multi-channel zarr file created by cellcutter
                     z_path_img = os.path.join(
@@ -222,51 +233,50 @@ def curateThumbnails(data, self, args):
 
                     if self.segOutlines:
 
-                        if not os.path.exists(
-                           os.path.join(
-                                zarr_dir, f'{type}_{pop}_sample_{sample}'
-                                f'_win{self.windowSize}_seg.zarr', '0.0.0.0')):
+                        # if not os.path.exists(
+                        #    os.path.join(
+                        #         zarr_dir, f'{type}_{pop}_sample_{sample}'
+                        #         f'_win{self.windowSize}_seg.zarr', '0.0.0.0')):
 
-                            # write cellcutter_input to disk
-                            cellcutter_input.to_csv(
-                                os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                        # write cellcutter_input to disk
+                        cellcutter_input.to_csv(
+                            os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                        )
+
+                        print()
+                        
+                        if type == f'cluster_{self.dimensionEmbedding}d':
+                            logger.info(
+                                'Cutting segmentation outlines for '
+                                f'{len(cellcutter_input)} '
+                                f'{type} {pop} cell(s) '
+                                f'showing {markers_to_show} channels '
+                                f'from sample {sample}...'
+                            )
+                        else:
+                            logger.info(
+                                'Cutting segmentation outlines for '
+                                f'{len(cellcutter_input)} '
+                                f'{type} {pop} cell(s) '
+                                f'showing {markers_to_show} channels '
+                                f'from sample {sample}...'
                             )
 
-                            print()
-                            
-                            if type == f'cluster_{self.dimensionEmbedding}d':
-                                logger.info(
-                                    'Cutting segmentation outlines for '
-                                    f'{len(cellcutter_input)} '
-                                    f'{type} {pop} cell(s) '
-                                    f'showing {markers_to_show} channels '
-                                    f'normalized across {norm_ax} '
-                                    f'from sample {sample}...'
-                                )
-                            else:
-                                logger.info(
-                                    'Cutting segmentation outlines for '
-                                    f'{len(cellcutter_input)} '
-                                    f'{type} {pop} cell(s) '
-                                    f'showing {markers_to_show} channels '
-                                    f'from sample {sample}...'
-                                )
-
-                            # run cellcutter on segmentation outlines image
-                            seg_file_path = get_filepath(self, check, sample, 'SEG')
-                            mask_file_path = get_filepath(self, check, sample, 'MASK')
-                            run(
-                                ["cut_cells", "--force", "--window-size",
-                                 f"{self.windowSize}",
-                                 "--cells-per-chunk", "200",
-                                 "--cache-size", "57711",
-                                 f"{seg_file_path}",
-                                 f"{mask_file_path}",
-                                 f"{thumbnails_dir}/csv_data.csv",
-                                 f"{zarr_dir}/{type}_{pop}_sample_{sample}"
-                                 f"_win{self.windowSize}_seg.zarr",
-                                 "--channels", "1"]
-                            )
+                        # run cellcutter on segmentation outlines image
+                        seg_file_path = get_filepath(self, check, sample, 'SEG')
+                        mask_file_path = get_filepath(self, check, sample, 'MASK')
+                        run(
+                            ["cut_cells", "--force", "--window-size",
+                             f"{self.windowSize}",
+                             "--cells-per-chunk", "200",
+                             "--cache-size", "57711",
+                             f"{seg_file_path}",
+                             f"{mask_file_path}",
+                             f"{thumbnails_dir}/csv_data.csv",
+                             f"{zarr_dir}/{type}_{pop}_sample_{sample}"
+                             f"_win{self.windowSize}_seg.zarr",
+                             "--channels", "1"]
+                        )
 
                         # read segmentation outlines zarr file
                         # created by cellcutter
@@ -307,11 +317,15 @@ def curateThumbnails(data, self, args):
                             elif z_img.dtype == 'uint8':
                                 divisor = 255
                             
-                            slice -= (contrast_limits[marker][0] / divisor)
-                            slice /= (
-                                (contrast_limits[marker][1] / divisor)
-                                - (contrast_limits[marker][0] / divisor)
-                            )
+                            # apply contrast settings if they exist in QC report
+                            try:  
+                                slice -= (qc_report['setContrast'][marker][0] / divisor)
+                                slice /= (
+                                    (qc_report['setContrast'][marker][1] / divisor) -
+                                    (qc_report['setContrast'][marker][0] / divisor)
+                                )
+                            except:
+                                pass
                             
                             slice = np.clip(slice, 0, 1)
 

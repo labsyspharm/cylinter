@@ -1,7 +1,7 @@
 import os
 import sys
+import yaml
 import logging
-import pickle
 
 import pandas as pd
 import numpy as np
@@ -24,8 +24,8 @@ from matplotlib.backends.backend_qt5agg import (
 from qtpy.QtCore import QTimer
 
 from ..utils import (
-    input_check, read_markers, napari_notification, 
-    single_channel_pyramid, get_filepath, reorganize_dfcolumns, 
+    input_check, read_markers, marker_channel_number, sort_qc_report, 
+    single_channel_pyramid, get_filepath, reorganize_dfcolumns, compute_gmm 
 )
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,8 @@ arbitrary_selection_toggle = False
 sample_index = 1
 
 
-def callback(self, viewer, sample, samples, data, initial_callback, selection_widget, selection_layout, hist_widget, hist_layout, area_dir): 
-    
+def callback(self, viewer, sample, samples_to_run, data, initial_callback, selection_widget, selection_layout, hist_widget, hist_layout, area_dir, qc_report, report_path):
+
     if sample in data['Sample'].unique():
         
         print()
@@ -48,8 +48,10 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
         check, markers_filepath = input_check(self)
 
         # read marker metadata
-        markers, dna1, dna_moniker, abx_channels = read_markers(
-            markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+        markers, abx_channels = read_markers( 
+            markers_filepath=markers_filepath,
+            counterstain_channel=self.counterstainChannel,
+            markers_to_exclude=self.markersToExclude, data=None
         )
 
         # clear existing channels from Napari window if they exist
@@ -65,10 +67,11 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
 
         # read DNA1 and add to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
-        dna, min, max = single_channel_pyramid(file_path, channel=0)
+        channel_number = marker_channel_number(self, markers, self.counterstainChannel)
+        dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
         viewer.add_image(
             dna, rgb=False, blending='additive',
-            name=f'{dna1}: {sample}', contrast_limits=(min, max)
+            name=self.counterstainChannel, contrast_limits=(min, max)
         )
         
         # remove hist_widget and layout attributes from Napari viewer if they exist
@@ -99,14 +102,17 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
 
         fig.subplots_adjust(left=0.25, bottom=0.25)
 
-        fig.suptitle(f'Sample={sample} Cell Segmentation Area', size=10)
+        fig.suptitle(f'Sample = {sample}', size=10)
 
         # get axis object from canvas
         ax = canvas.figure.subplots()
-
+        ax2 = ax.twinx()
+        
         # grab sample data
         group = data[data['Sample'] == sample].copy()
-        group['Area'] = group['Area'] + 0.00000000001  # avoiding log(0) errors
+
+        # avoiding log(0) errors
+        group['Area'] = group['Area'] + 0.001  
         
         n, bins, patches = ax.hist(
             np.log(group['Area']), bins=self.numBinsArea,
@@ -116,6 +122,7 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
         )
 
         ax.set_ylabel('Count')
+        ax2.set_ylabel('GMM density')
 
         # add sliders to plot
         axcolor = 'lightgoldenrodyellow'
@@ -127,22 +134,22 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
         # specify data range
         rnge = [bins.min(), bins.max()]
 
-        # load cutoffs dictionary if it exists
-        if os.path.exists(os.path.join(area_dir, 'cutoffs.pkl')):
-            f = open(os.path.join(area_dir, 'cutoffs.pkl'), 'rb')
-            cutoffs_dict = pickle.load(f)
-        else:
-            # create cutoffs dictionary
-            cutoffs_dict = {}
-            
+        # convert histogram data into 2D numpy array with 1 column to pass to GMM
+        gmm_data = np.log(group['Area']).values.reshape(-1, 1)
+        
+        # compute GMM
+        comp_lower_percentile, comp_upper_percentile = compute_gmm(
+            data=gmm_data, x_min=rnge[0], x_max=rnge[1], ax=ax2
+        )
+        
         try:
-            lowerCutoff, upperCutoff = cutoffs_dict[sample]
-            vbars = True  # toggle to show vertical red/blue bars on plot
-            if lowerCutoff == upperCutoff:
-                vbars = False  # cutoffs were negated
-        except KeyError:
-            lowerCutoff, upperCutoff = (0.0, 0.0)
-            vbars = False
+            lowerCutoff, upperCutoff = qc_report['areaFilter'][sample]
+            if lowerCutoff is None or upperCutoff is None:
+                lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
+
+        except (TypeError, KeyError, ValueError):
+            # use GMM to assign default lower and upper thresholds
+            lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
 
         # add slider functionality
         sLower = Slider(
@@ -172,8 +179,6 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
                 x=lowerCutoff, c='b', linewidth=2.5)
             redLine = ax.axvline(
                 x=upperCutoff, c='r', linewidth=2.5)
-
-            napari_notification(f'Sliders updated to ({lowerCutoff:.3f}, {upperCutoff:.3f})')
             
             return lowerCutoff, upperCutoff
 
@@ -182,8 +187,7 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
         sUpper.on_changed(update)
         
         # add vbars to plot
-        if vbars:
-            update(val=None)
+        update(val=None)
         
         # add button to show selected centroids in Napari viewer
         button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
@@ -236,7 +240,7 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
         if not initial_callback:
             viewer.window.remove_dock_widget(selection_widget)
             viewer.window.add_dock_widget(
-                selection_widget, name='Arbitrary Sample Selection', area='right'
+                selection_widget, name='Arbitrary Sample Selector', area='right'
             )
         
         ###########################################################################
@@ -255,24 +259,30 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
 
             if lowerCutoff <= upperCutoff:
            
-                # add cutoffs to dictionary and store
-                cutoffs_dict[sample] = (lowerCutoff, upperCutoff)
-                f = open(os.path.join(area_dir, 'cutoffs.pkl'), 'wb')
-                pickle.dump(cutoffs_dict, f)
-                f.close()
+                # store cutoffs in QC report
+                qc_report['areaFilter'][sample] = [float(lowerCutoff), float(upperCutoff)]
 
+                # sort and dump updated qc_report to YAML file
+                qc_report_sorted = sort_qc_report(qc_report, module='areaFilter', order=None)
+                f = open(report_path, 'w')
+                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                
+                napari.utils.notifications.show_info(
+                    f'Sliders updated to ({lowerCutoff:.3f}, {upperCutoff:.3f})'
+                )
+                
                 # go to next sample
                 try:
                     if arbitrary_selection_toggle:
                         sample_index -= 1 
 
-                    sample = samples[sample_index]
+                    sample = samples_to_run[sample_index]
                     
                     initial_callback = False
                     callback(
-                        self, viewer, sample, samples, data, initial_callback,
+                        self, viewer, sample, samples_to_run, data, initial_callback,
                         selection_widget, selection_layout, hist_widget, hist_layout,
-                        area_dir 
+                        area_dir, qc_report, report_path
                     )
 
                     sample_index += 1
@@ -281,11 +291,11 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
                 except IndexError:
 
                     print()
-                    napari_notification('Gating complete!')
+                    logger.info('Thresholding complete!')
                     QTimer().singleShot(0, viewer.close)
             
             else:
-                napari_notification(
+                napari.utils.notifications.show_warning(
                     'LowerCutoff (blue) must be lower than upperCutoff (red).'
                 )
                 pass
@@ -311,8 +321,8 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
             return sample
 
         sample_selector.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Minimum,
-            QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed
         )
         
         if initial_callback:  
@@ -328,20 +338,21 @@ def callback(self, viewer, sample, samples, data, initial_callback, selection_wi
 
             initial_callback = False
             callback(
-                self, viewer, sample, samples, data, initial_callback,
+                self, viewer, sample, samples_to_run, data, initial_callback,
                 selection_widget, selection_layout, hist_widget, hist_layout,
-                area_dir
+                area_dir, qc_report, report_path
             )
 
             arbitrary_selection_toggle = True
         
         ###########################################################################
-        napari_notification(f'Working on Sample {sample}')
-        
+        napari.utils.notifications.show_info(f'Viewing Sample {sample}')  
+    
     else:
         print()
-        napari_notification('Invalid entry.')
-        pass
+        napari.utils.notifications.show_warning(
+            'Sample name not in filtered data.'
+        )
 
 
 # main
@@ -350,14 +361,39 @@ def areaFilter(data, self, args):
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
     # create area directory if it doesn't already exist
     area_dir = os.path.join(self.outDir, 'area')
     if not os.path.exists(area_dir):
         os.makedirs(area_dir)
+
+    # read QC report
+    report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+    try:
+        qc_report = yaml.safe_load(open(report_path))
+        reload_report = False
+        if qc_report is None:
+            qc_report = {}
+            reload_report = True
+        if 'areaFilter' not in qc_report or qc_report['areaFilter'] is None:
+            qc_report['areaFilter'] = {}
+            reload_report = True
+        if reload_report:
+            qc_report_sorted = sort_qc_report(qc_report, module='areaFilter', order=None)
+            f = open(report_path, 'w')
+            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            qc_report = yaml.safe_load(open(report_path))
+    except:
+        logger.info(
+            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
+            'from aggregateData module to initialize QC report.'
+        )
+        sys.exit()
 
     # initialize Napari viewer
     viewer = napari.Viewer(title='CyLinter')
@@ -378,74 +414,78 @@ def areaFilter(data, self, args):
         QtWidgets.QSizePolicy.Maximum
     )
     
-    # make a list of samples, select the first one, and pass it to the callback
+    # make a list of all samples in batch, select the first one
+    # for which cutoffs have not been previously assigned, and pass it to the callback
     samples = natsorted(data['Sample'].unique())
-    sample = samples[0] 
     
-    initial_callback = True
-    callback(
-        self, viewer, sample, samples, data, initial_callback,
-        selection_widget, selection_layout, hist_widget, hist_layout,
-        area_dir
-    )
+    if len(samples) == 0:
+        print()
+        logger.info(
+            'Aborting; Single-cell data have not been selected for analysis. '
+            'Re-run selectROIs module to select data points.'
+        )
+        sys.exit()
     
-    viewer.window.add_dock_widget(
-        selection_widget, name='Arbitrary Sample Selection', area='right'
-    )
+    else:
+        samples_to_run = []
+        for sample in samples:
+            
+            try:  
+                lowerCutoff, upperCutoff = qc_report['areaFilter'][sample]
+                if not isinstance(lowerCutoff, float) or not isinstance(upperCutoff, float):
+                    samples_to_run.append(sample)
+                
+            except: 
+                samples_to_run.append(sample)
     
-    viewer.scale_bar.visible = True
-    viewer.scale_bar.unit = 'um'
+    try:
+        sample = samples_to_run[0]
+        
+        initial_callback = True
+        callback(
+            self, viewer, sample, samples_to_run, data, initial_callback,
+            selection_widget, selection_layout, hist_widget, hist_layout,
+            area_dir, qc_report, report_path
+        )
+        
+        viewer.window.add_dock_widget(
+            selection_widget, name='Arbitrary Sample Selector', area='right'
+        )
+        
+        viewer.scale_bar.visible = True
+        viewer.scale_bar.unit = 'um'
 
-    napari.run()
+        napari.run()
+
+    except IndexError:
+        logger.info('Thresholding complete!')
+        QTimer().singleShot(0, viewer.close)
 
     print()
 
     ###########################################################################
-    # load cutoffs dictionary if it exists
-    
-    if os.path.exists(os.path.join(area_dir, 'cutoffs.pkl')):
-        f = open(os.path.join(area_dir, 'cutoffs.pkl'), 'rb')
-        cutoffs_dict = pickle.load(f)
+    # save histogram plots with selected data highlighted
 
-    else:
-        print()
-        logger.info(
-            'Aborting; cell segmentation area cutoffs dictionary does not exist. '
-            'Please re-run areaFilter module to select cutoffs.'
-        )
-        sys.exit()
-
-    # save plots of selected data points
     plot_dir = os.path.join(area_dir, 'plots')
     if not os.path.exists(plot_dir):
         os.mkdir(plot_dir)
     
     idxs_to_drop = {}
-    for sample in samples:
-
+    for sample in samples_to_run:
         group = data[data['Sample'] == sample]
         
-        try:
-            lowerCutoff, upperCutoff = cutoffs_dict[sample]
-            if lowerCutoff == upperCutoff:
-                logger.info(f'All data points selected for sample {sample}.')
-                # select all data points if sliders were not adjusted
-                lowerCutoff = np.log(group['Area']).min()
-                upperCutoff = np.log(group['Area']).max()
-            else:
-                logger.info(
-                    f'Applying cutoffs ({lowerCutoff:.3f}, '
-                    f'{upperCutoff:.3f}) to sample {sample}'
-                )
-        except KeyError:
-            print()
+        lowerCutoff, upperCutoff = qc_report['areaFilter'][sample]
+
+        # select all data points if sliders were not adjusted
+        if lowerCutoff == upperCutoff:
+            logger.info(f'All data points selected for sample {sample}.')
+            lowerCutoff = np.log(group[self.counterstainChannel]).min()
+            upperCutoff = np.log(group[self.counterstainChannel]).max()
+        else:
             logger.info(
-                f'Aborting; Cutoffs have not been ' 
-                f'selected for sample {sample}. '
-                'Please re-run areaFilter module to select '
-                'cutoffs for this sample.'
+                f'Applying cutoffs ({lowerCutoff:.3f}, '
+                f'{upperCutoff:.3f}) to sample {sample}'
             )
-            sys.exit()
 
         # plot cell segmentation area histogram BEFORE filtering
         fig, ax = plt.subplots()
@@ -470,7 +510,7 @@ def areaFilter(data, self, args):
         )
         plt.xlabel('Cell Segementation Area')
         plt.ylabel('Count')
-        plt.title(f'Sample={sample} Cell Segmentation Area', size=10)
+        plt.title(f'Sample = {sample}', size=10)
 
         legend_elements = []
         legend_elements.append(

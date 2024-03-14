@@ -1,3 +1,6 @@
+import os
+import sys
+import yaml
 import logging
 
 import pandas as pd
@@ -13,10 +16,18 @@ def aggregateData(data, self, args):
     
     check, markers_filepath = input_check(self)
 
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=None
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
+    # initialize CyLinter QC report if it hasn't been already
+    report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+    if not os.path.exists(report_path):
+        f = open(report_path, 'w')
+        yaml.dump({}, f)
+    
     df_list = []
     channel_setlist = []
     sample_keys = [i for i in self.sampleNames.keys()]
@@ -41,11 +52,10 @@ def aggregateData(data, self, args):
 
             # select boilerplate columns
             cols = (
-                ['CellID', 'X_centroid', 'Y_centroid', 'Area',
-                 'MajorAxisLength', 'MinorAxisLength',
-                 'Eccentricity', 'Solidity', 'Extent',
-                 'Orientation'] +
-                [i for i in markers['marker_name'] if i in csv.columns]
+                [i for i in [j for j in markers['marker_name']] +
+                 [i for i in ['CellID', 'X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
+                              'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent', 
+                              'Orientation'] if i in csv.columns]]
             )
 
             # (for BAF project)
@@ -98,8 +108,16 @@ def aggregateData(data, self, args):
             #      'Orientation'] +
             #     [f'{i}_{mask_dict[i]}' for i
             #      in markers['marker_name']])
-
-            csv = csv[cols]
+            
+            try:
+                csv = csv[cols]
+            except KeyError as e:
+                logger.info(
+                    'Aborting; some (or all) marker names in markers.csv do not appear '
+                    'as columns in the single-cell data table. Check for spelling and case.'
+                )
+                print(e)
+                sys.exit()
 
             # (for SARDANA)
             # trim mask object names from column headers
@@ -159,7 +177,7 @@ def aggregateData(data, self, args):
     data.reset_index(drop=True, inplace=True)
 
     # ensure MCMICRO-generated columns come first and
-    # are in the same order as csv input
+    # are in the same order as csv feature tables
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
     print()

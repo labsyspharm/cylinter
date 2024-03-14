@@ -29,8 +29,10 @@ def PCA(data, self, args):
     check, markers_filepath = input_check(self)
 
     # read marker metadata
-    markers, dna1, dna_moniker, abx_channels = read_markers(
-        markers_filepath=markers_filepath, markers_to_exclude=self.markersToExclude, data=data
+    markers, abx_channels = read_markers( 
+        markers_filepath=markers_filepath,
+        counterstain_channel=self.counterstainChannel,
+        markers_to_exclude=self.markersToExclude, data=None
     )
 
     # drop antibody channel exclusions for PCA
@@ -188,7 +190,7 @@ def PCA(data, self, args):
                    markersize=5.0, linewidth=5)
         )
         ax1.legend(handles=legend_handles, prop={'size': 10.0}, bbox_to_anchor=[0.95, 1.0])
-        fig1.savefig(os.path.join(pca_dir, 'variance.pdf'), bbox_inches='tight')
+        fig1.savefig(os.path.join(pca_dir, 'horns_analysis.pdf'), bbox_inches='tight')
         plt.close(fig1)
 
         ###################################################################
@@ -216,7 +218,7 @@ def PCA(data, self, args):
         ax2.tick_params(axis='both', which='major', labelsize=7.0)
 
         fig2.savefig(
-            os.path.join(pca_dir, 'pcaScoresPlotCells.png'), dpi=600, bbox_inches='tight'
+            os.path.join(pca_dir, 'pca_cells.png'), dpi=600, bbox_inches='tight'
         )
         plt.close(fig2)
 
@@ -492,13 +494,16 @@ def PCA(data, self, args):
 
             # save figure
             plt.savefig(
-                os.path.join(pca_dir, 'pcaScoresPlotSamples.pdf'),
+                os.path.join(pca_dir, 'pca_samples.pdf'),
                 bbox_inches='tight')
             plt.close('all')
 
             data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
     else:
-        logging.info("n_components = 1, skipping PCA and Horn's parallel analysis.")
+        logging.info(
+            "n_components = 1. Only 1 sample (or 1 marker) in analysis. "
+            "Skipping PCA and Horn's parallel analysis."
+        )
 
     print()
     print()

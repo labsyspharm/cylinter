@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import glob
-import pickle
+import yaml
 import logging
 from dataclasses import dataclass
 from typing import Dict
@@ -12,29 +12,31 @@ import numpy as np
 import pandas as pd
 
 import math
+from natsort import natsorted
 
-import matplotlib.pyplot as plt
-from matplotlib.widgets import LassoSelector
-from matplotlib.path import Path
+import seaborn as sns
 from matplotlib import colors
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+from matplotlib.widgets import LassoSelector
+from matplotlib.colors import TwoSlopeNorm
 
-from sklearn.preprocessing import MinMaxScaler
-
+import napari
 import zarr
 import dask.array as da
 import tifffile
-import skimage
 
-## these imports are for classical artifact detection
-import napari
+import skimage
 from skimage.filters.rank import minimum as rank_min
 from skimage.filters.rank import maximum as rank_max
 from skimage.filters.rank import gradient, mean
 from skimage.measure import label 
 
-from skimage.morphology import disk, erosion, dilation, h_maxima, flood, local_maxima
+from skimage.morphology import disk, h_maxima, flood, local_maxima
 from skimage.exposure import rescale_intensity
-############
+
+from scipy.stats import norm
+from sklearn.mixture import GaussianMixture
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
 
@@ -45,6 +47,7 @@ SUPPORTED_EXTENSIONS = ['.csv']
 
 def log_banner(log_function, msg):
     """Call log_function with a blank line, msg, and an underline."""
+    
     log_function("")
     log_function(msg)
     log_function("-" * len(msg))
@@ -52,6 +55,7 @@ def log_banner(log_function, msg):
 
 def log_multiline(log_function, msg):
     """Call log_function once for each line of msg."""
+    
     for line in msg.split("\n"):
         log_function(line)
 
@@ -67,7 +71,7 @@ def input_check(self):
 
     # check whether input directory contains expected files and folders:
     if any(element not in contents for element in
-           ['config.yml', 'markers.csv', 'csv', 'tif', 'seg', 'mask']):
+           ['cylinter_config.yml', 'markers.csv', 'csv', 'tif', 'seg', 'mask']):
 
         ##########################################################################################
         # if not, check for mcmicro input directory
@@ -77,7 +81,10 @@ def input_check(self):
             try:
                 markers = pd.read_csv(os.path.join(self.inDir, 'markers.csv'))
             except FileNotFoundError:
-                logger.info('Aborting; markers.csv file not found.')
+                logger.info(
+                    'Aborting; markers.csv file not found. Include markers.csv '
+                    'or ensure input file path ("inDir") is correct in config.yml'
+                )
                 sys.exit()
             
             for key in self.sampleNames.keys():
@@ -131,6 +138,15 @@ def input_check(self):
 
         else:
             # test for WSI data
+
+            try:
+                markers = pd.read_csv(os.path.join(self.inDir, 'markers.csv'))
+            except FileNotFoundError:
+                logger.info(
+                    'Aborting; markers.csv file not found. Include markers.csv '
+                    'or ensure input file path ("inDir") in correct in config.yml')
+                sys.exit()
+            
             # check that samples specified in config.yml each have a csv, tif, seg, and mask file
             markers_list = []
             for key in self.sampleNames.keys():
@@ -199,27 +215,77 @@ def input_check(self):
 
     # next, check that csv, tif, seg, and mask subdirectories each contain files for all samples
     csv_names = set(
-        [os.path.basename(path).split('.')[0] for path
+        [os.path.basename(path).rsplit('.', 1)[0] for path
          in glob.glob(os.path.join(self.inDir, 'csv', '*.csv'))]
     )
 
     tif_names = set(
-        [os.path.basename(path).split('.')[0] for path
-         in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
+        [os.path.basename(path) for path in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
     )
-    
-    seg_names = set(
-        [os.path.basename(path).split('.')[0] for path
-         in glob.glob(os.path.join(self.inDir, 'seg', '*.tif'))]
-    )
-    
-    mask_names = set(
-        [os.path.basename(path).split('.')[0] for path
-         in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
-    )
-    if not all(s == csv_names for s in [csv_names, tif_names, seg_names, mask_names]):
+    if all('ome.tif' in s for s in tif_names):
+        tif_names = set(
+            [os.path.basename(path).rsplit('.ome.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
+        )
+    elif all('.tif' in s for s in tif_names):
+        tif_names = set(
+            [os.path.basename(path).rsplit('.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'tif', '*.tif'))]
+        )
+    else:
+        logger.info(
+            'Aborting; file names in "tif" folder have different extensions. '
+            'Ensure consistent use of file extensions (".tif" or ".ome.tif")'
+        )
+        sys.exit()
 
-        return False
+    seg_names = set(
+        [os.path.basename(path) for path in glob.glob(os.path.join(self.inDir, 'seg', '*.tif'))]
+    )
+    if all('ome.tif' in s for s in seg_names):
+        seg_names = set(
+            [os.path.basename(path).rsplit('.ome.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'seg', '*.tif'))]
+        )
+    elif all('.tif' in s for s in seg_names):
+        seg_names = set(
+            [os.path.basename(path).rsplit('.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'seg', '*.tif'))]
+        )
+    else:
+        logger.info(
+            'Aborting; file names in "seg" folder have different extensions. '
+            'Ensure consistent use of file extensions (".tif" or ".ome.tif")'
+        )
+        sys.exit()
+
+    mask_names = set(
+        [os.path.basename(path) for path in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
+    )
+    if all('ome.tif' in s for s in mask_names):
+        mask_names = set(
+            [os.path.basename(path).rsplit('.ome.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
+        )
+    elif all('.tif' in s for s in mask_names):
+        mask_names = set(
+            [os.path.basename(path).rsplit('.tif', 1)[0] for path
+             in glob.glob(os.path.join(self.inDir, 'mask', '*.tif'))]
+        )
+    else:
+        logger.info(
+            'Aborting; file names in "mask" folder have different extensions. '
+            'Ensure consistent use of file extensions (".tif" or ".ome.tif")'
+        )
+        sys.exit()
+
+    if not all(s == csv_names for s in [csv_names, tif_names, seg_names, mask_names]):
+        logger.info(
+            'Aborting; check that "csv", "tif", "seg", and "mask" folders all contain the same '
+            'number of files with matching names. TIF/OME-TIFF files should end in '
+            '".tif", not ".tiff")'
+        )
+        sys.exit()
     
     # check that file names specified in config.yml are contained in input directory
     if not set(self.sampleNames.keys()).issubset(csv_names):
@@ -301,11 +367,12 @@ def get_filepath(self, check, sample, file_type):
 
 
 def napari_notification(msg):
+    
     notification_ = Notification(msg, severity=NotificationSeverity.INFO)
     notification_manager.dispatch(notification_)
 
 
-def read_markers(markers_filepath, markers_to_exclude, data):
+def read_markers(markers_filepath, counterstain_channel, markers_to_exclude, data):
 
     markers = pd.read_csv(markers_filepath, dtype={0: 'int16', 1: 'int16', 2: 'str'}, comment='#')
 
@@ -318,18 +385,32 @@ def read_markers(markers_filepath, markers_to_exclude, data):
 
     markers = markers[markers['marker_name'].isin(markers_to_include)]
 
-    dna1 = markers['marker_name'][markers['channel_number'] == markers['channel_number'].min()][0]
-    dna_moniker = str(re.search(r'[^\W\d]+', dna1).group())
-
+    # get basename of DNA channels so they will not be read by Napari as immunomarker channels  
+    dna_moniker = str(re.search(r'[^\W\d]+', counterstain_channel).group())  
+    
     # abx channels
     abx_channels = [i for i in markers['marker_name'] if dna_moniker not in i]
 
-    return markers, dna1, dna_moniker, abx_channels
+    return markers, abx_channels
 
 
-def marker_channel_number(markers, marker_name):
+def marker_channel_number(self, markers, marker_name):
 
-    channel_number = markers.index[markers['marker_name'] == marker_name].item()
+    try:
+        channel_number = markers.index[markers['marker_name'] == marker_name].item()
+    
+    except ValueError:
+        if marker_name == self.counterstainChannel:
+            logger.info(
+                'Aborting; "counterstainChannel" parameter used in '
+                'config.yml not found in markers.csv'
+            )
+            sys.exit()
+        else:
+            logger.info(
+                f'Aborting; {marker_name} not found in markers.csv'
+            )
+            sys.exit()
 
     return channel_number
 
@@ -342,9 +423,9 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
          i in data.columns] +
         [f'{i}_bool' for i in markers['marker_name'] if
          f'{i}_bool' in data.columns] +
-        ['X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
-         'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent',
-         'Orientation', 'Sample', 'Condition', 'Replicate']
+        [i for i in ['X_centroid', 'Y_centroid', 'Area', 'MajorAxisLength',
+                     'MinorAxisLength', 'Eccentricity', 'Solidity', 'Extent',
+                     'Orientation', 'Sample', 'Condition', 'Replicate'] if i in data.columns]
     )
 
     # (for BAF project)
@@ -377,7 +458,6 @@ def single_channel_pyramid(tiff_path, channel):
 
             min_val = pyramid[-1].min()
             max_val = pyramid[-1].max()
-            vmin, vmax = da.compute(min_val, max_val)
 
         else:
 
@@ -389,8 +469,10 @@ def single_channel_pyramid(tiff_path, channel):
 
             min_val = pyramid[-1].min()
             max_val = pyramid[-1].max()
-            vmin, vmax = da.compute(min_val, max_val)
 
+        max_val = max(max_val, min_val + 1)
+        vmin, vmax = da.compute(min_val, max_val)
+        
         return pyramid, vmin, vmax
 
     else:  # support legacy OME-TIFF format
@@ -403,7 +485,6 @@ def single_channel_pyramid(tiff_path, channel):
 
             min_val = pyramid[-1].min()
             max_val = pyramid[-1].max()
-            vmin, vmax = da.compute(min_val, max_val)
 
         else:
             img = tiff.pages[channel].asarray()
@@ -414,27 +495,29 @@ def single_channel_pyramid(tiff_path, channel):
 
             min_val = pyramid[-1].min()
             max_val = pyramid[-1].max()
-            vmin, vmax = da.compute(min_val, max_val)
 
+        max_val = max(max_val, min_val + 1)
+        vmin, vmax = da.compute(min_val, max_val)
+        
         return pyramid, vmin, vmax
 
 
 def matplotlib_warnings(fig):
-
-    # suppress pyplot warning:
-    # MatplotlibDeprecationWarning: Toggling axes navigation
-    # from the keyboard is deprecated since 3.3 and will be
-    # removed two minor releases later.
+    """suppress pyplot warning:
+    MatplotlibDeprecationWarning: Toggling axes navigation
+    from the keyboard is deprecated since 3.3 and will be
+    # removed two minor releases later."""
+    
     fig.canvas.mpl_disconnect(
         fig.canvas.manager.key_press_handler_id)
 
 
 def napari_warnings():
-
-    # suppress warning:
+    """suppress warning:
     # vispy_camera.py:109: RuntimeWarning: divide by
     # zero encountered in true_divide
-    # zoom = np.min(canvas_size / scale)
+    # zoom = np.min(canvas_size / scale)"""
+    
     np.seterr(divide='ignore')
 
 
@@ -573,7 +656,7 @@ def categorical_cmap(numUniqueSamples, numCatagories, cmap='tab10', continuous=F
     return cmap
 
 
-def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
+def cluster_expression(df, markers, cluster, num_proteins, clus_dim):
 
     if cluster != -1:
 
@@ -584,60 +667,55 @@ def cluster_expression(df, markers, cluster, num_proteins, clus_dim, norm_ax):
             .groupby(f'cluster_{clus_dim}d').mean()
         )
 
-        scaler = MinMaxScaler(feature_range=(0, 1), copy=True)
+        if cluster_means.shape[0] > 1:
+            
+            # Compute per channel z-scores across clusters
+            cluster_means = (
+                (cluster_means - cluster_means.mean()) / cluster_means.std()
+            )
+            # assign NaNs (channels with no variation in signal) to 0
+            cluster_means[cluster_means.isna()] = 0
 
-        if norm_ax == 'clusters':
-
-            # rescale across clusters
-            vectors = cluster_means.values.T
-            scaled_rows = scaler.fit_transform(vectors.T)
-            scaled_cluster_means = pd.DataFrame(
-                data=scaled_rows, index=cluster_means.index,
-                columns=cluster_means.columns
+            # Zero-center colorbar
+            norm = TwoSlopeNorm(
+                vcenter=0, vmin=cluster_means.min().min(), vmax=cluster_means.max().max()
             )
 
+            g = sns.clustermap(
+                cluster_means, cmap='coolwarm', standard_scale=None, square=False,
+                yticklabels=1, linewidth=0.0, cbar=True, norm=norm 
+            )
+            
             # isolate markers with highest expression values across clusters
             hi_markers = (
-                scaled_cluster_means
+                g.data2d
                 .loc[cluster]
                 .sort_values(ascending=False)[:num_proteins]
                 .index.tolist()
             )
 
-            return norm_ax, hi_markers
-
-        elif norm_ax == 'channels':
-
-            # rescale across channels
-            vectors = cluster_means.values
-            scaled_rows = scaler.fit_transform(vectors.T).T
-            scaled_cluster_means = pd.DataFrame(
-                data=scaled_rows, index=cluster_means.index,
-                columns=cluster_means.columns
-            )
-
-            # isolate markers with highest expression values across channels
+        else:
+            # isolate markers with highest expression values across clusters
             hi_markers = (
-                scaled_cluster_means
+                cluster_means
                 .loc[cluster]
                 .sort_values(ascending=False)[:num_proteins]
                 .index.tolist()
             )
 
-            return norm_ax, hi_markers
+        return hi_markers
 
     else:
         hi_markers = 'unclustered cells'
 
-        return norm_ax, hi_markers
+        return hi_markers
 
 
 def gate_expression(pop, gate_dir):
 
-    if os.path.exists(os.path.join(gate_dir, 'signatures.pkl')):
-        f = open(os.path.join(gate_dir, 'signatures.pkl'), 'rb')
-        signatures = pickle.load(f)
-        hi_markers = [str(i) for i in signatures[pop] if i.negated is False]
+    if os.path.exists(os.path.join(gate_dir, 'signatures.yml')):
+        signatures = yaml.safe_load(open(f'{gate_dir}/signatures.yml'))
+        hi_markers = [str(i) for i in signatures[pop] if '~' not in i]
         return hi_markers
     else:
         logger.info('Aborting; Cell classification dictionary does not exit in gating output.')
@@ -827,24 +905,124 @@ def triangulate_ellipse(corners, num_segments=100):
     return vertices, triangles
 
 
-def artifact_detector_v3(pyramid, 
-                      downscale=2, 
-                      erosion_kernel_size=5,
-                      lower_quantile_cutoff=0.2,
-                      max_contrast=20,
-                      h=None,
-                      debug=False):
+def sort_qc_report(qc_report, module, order=None):
+    
+    # sort top-level (module) keys
+    module_order = [
+        'selectROIs', 'intensityFilter', 'areaFilter', 'cycleCorrelation',
+        'pruneOutliers', 'metaQC', 'setContrast', 'gating', 'clustering'
+    ]
+    qc_report = {
+        outer_key: qc_report[outer_key] for outer_key in module_order if outer_key in qc_report
+    }
+
+    # sort ROI-type keys 
+    roi_order = [
+        'Manual ROI Selections (pos.)', 'Manual ROI Selections (neg.)',
+        'Automated ROI Selections (neg.)'
+    ]
+    sorted_subkeys = sorted(
+        [i for i in qc_report['selectROIs'].keys()], key=lambda x: roi_order.index(x)
+    )
+    qc_report['selectROIs'] = {
+        subkey: qc_report['selectROIs'][subkey] for subkey in sorted_subkeys
+    }
+
+    # preserve channel order defined in markers.csv
+    if module in ['pruneOutliers', 'setContrast'] and order is not None:
+        qc_report[module] = dict(
+            sorted(qc_report[module].items(), key=lambda x: order.index(x[0]))
+        )
+
+    # preserve original order of gate_dict keys
+    if module in ['gating'] and order is not None:
+        qc_report[module] = dict(
+            sorted(qc_report[module].items(), key=lambda x: order.index(x[0]))
+        )
+
+    # natually sort sample keys
+    if module in ['intensityFilter', 'areaFilter', 'cycleCorrelation'] and order is None:
+        qc_report[module] = dict(
+            natsorted(qc_report[module].items(), key=lambda x: x[0])
+        )
+
+    return qc_report
+
+
+def compute_gmm(data, x_min, x_max, ax):
+    
+    # select number components based on Bayesian Information Criterion (BIC)
+    
+    best_bic = np.inf  # initializing with a high value for minimization
+    best_n_components = -1
+
+    for n_components in range(1, 3 + 1):
+        gmm = GaussianMixture(n_components=n_components, random_state=0)
+        gmm.fit(data)
+        bic = gmm.bic(data)  # calculate BIC
+
+        if bic < best_bic:
+            best_bic = bic
+            best_n_components = n_components
+    
+    # fit a Gaussian mixture model to histogram data using best_n_components
+    gmm = GaussianMixture(n_components=best_n_components, random_state=0)
+    gmm.fit(data)
+
+    # generate points (along the DNA intensity histogram X range) for plotting the GMM 
+    x = np.linspace(x_min, x_max, 100)
+    log_prob = gmm.score_samples(x.reshape(-1, 1))
+    pdf = np.exp(log_prob)
+
+    # plot overall GMM fit
+    # ax.plot(x, pdf, c='k', lw=3, alpha=0.75, label='GMM fit')
+
+    # plot individual GMM components
+    peak_maxs = []
+    for i in range(gmm.n_components):
+        pdf = (
+            (gmm.weights_[i] * 
+             norm.pdf(x, gmm.means_[i, 0], np.sqrt(gmm.covariances_[i, 0, 0])))
+        )
+        ax.plot(x, pdf, '--', lw=3, alpha=0.75, label=f'GMM {i+1}')
+        peak_maxs.append(pdf.max())
+    
+    ax.set_ylim(0, None)  # ensuring GMM y-axis starts at 0
+    
+    leg = ax.legend(prop={'size': 7})
+    for legobj in leg.legendHandles:
+        legobj.set_linewidth(5.0)
+
+    ax.grid(False)
+
+    # find the GMM component with the tallest peak
+    comp_index = np.argmax(peak_maxs)
+
+    # find index of GMM component with mean closest to the mean of the overall histogram 
+    # comp_index = np.argmin(np.abs(gmm.means_ - np.mean(data)))
+    
+    comp_mean = gmm.means_[comp_index, 0]
+    comp_std = np.sqrt(gmm.covariances_[comp_index, 0, 0])
+    comp_lower_percentile = norm.ppf(0.005, comp_mean, comp_std)
+    comp_upper_percentile = norm.ppf(0.995, comp_mean, comp_std)
+
+    return comp_lower_percentile, comp_upper_percentile
+
+
+def artifact_detector_v3(pyramid, downscale=2, erosion_kernel_size=5, lower_quantile_cutoff=0.2, max_contrast=20, h=None, debug=False):
+
     if debug:
         fig, axes = plt.subplots(1, 6, figsize=(24, 4))
+    
     kernel = disk(erosion_kernel_size)
-    kernel_large = disk(erosion_kernel_size*4)
+    kernel_large = disk(erosion_kernel_size * 4)
     im = rescale_intensity(pyramid[downscale].compute(), out_range=np.uint8)
     im_eroded = rank_min(im, kernel)
     lower_quantile = np.quantile(im_eroded.ravel(), lower_quantile_cutoff)
     im_eroded[im_eroded < lower_quantile] = lower_quantile
     im_transformed = rank_max(mean(im_eroded, kernel), kernel)
     local_contrast = gradient(im_transformed, kernel_large)
-    
+
     # if h is None:
     #     avg_ccmp_areas = []
     #     for i in range(max_contrast):
@@ -862,10 +1040,12 @@ def artifact_detector_v3(pyramid,
             local_contrast_ = local_contrast[(local_contrast > lower_quantile)]
             h = skimage.filters.threshold_minimum(local_contrast_)
         except RuntimeError:
-            h=255
-
-    local_maxima_ = h_maxima(im_transformed, h=h, footprint=kernel_large) if h > 0 else\
-                    local_maxima(im_transformed)
+            h = 255
+    
+    local_maxima_ = (
+        h_maxima(im_transformed, h=h, footprint=kernel_large) if h > 0 
+        else local_maxima(im_transformed)
+    )
     local_maxima_labeled = label(local_maxima_)
     artifact_mask = np.zeros_like(im, dtype=np.int16)
     max_contrast = np.max(im_transformed) - np.min(im_transformed)
@@ -874,22 +1054,22 @@ def artifact_detector_v3(pyramid,
     seeds = np.empty((num_local_maxima, 2), dtype=int)
     optimal_tols = np.empty((num_local_maxima,), dtype=int)
     
-    for seg_id in range(1, num_local_maxima+1):
-        seed = np.argwhere(local_maxima_labeled==seg_id)[0]
+    for seg_id in range(1, num_local_maxima + 1):
+        seed = np.argwhere(local_maxima_labeled == seg_id)[0]
         num_filled_pixels = [np.sum(flood(im_transformed, seed_point=tuple(seed), 
-                                                tolerance=tol)) for tol in range(max_contrast+5)]
+                                          tolerance=tol)) for tol in range(max_contrast + 5)]
         delta_num = np.diff(num_filled_pixels)
         try: 
             optimal_tol = argrelextrema(delta_num, np.greater)[0][-2] 
             if optimal_tol >= 20:
-                optimal_tol -= 2 #kind of a fudging factor here
+                optimal_tol -= 2  # heuristic factor
         except:
-            optimal_tol = max(0, np.argmax(delta_num > np.mean(delta_num))-1) #-1 is a conservative fudging factor here
+            optimal_tol = max(0, np.argmax(delta_num > np.mean(delta_num)) - 1) 
+            # -1 is a conservative heuristic factor here
         
-        seeds[seg_id-1, :] = seed
-        optimal_tols[seg_id-1] = optimal_tol
-        artifact_mask += flood(im_transformed, seed_point=tuple(seed), 
-                                                tolerance=optimal_tol)        
+        seeds[seg_id - 1, :] = seed
+        optimal_tols[seg_id - 1] = optimal_tol
+        artifact_mask += flood(im_transformed, seed_point=tuple(seed), tolerance=optimal_tol)        
 
     if debug:
         axes[0].imshow(im, cmap='gray')
@@ -898,13 +1078,16 @@ def artifact_detector_v3(pyramid,
         axes[3].imshow(local_contrast, cmap='gray')
         axes[4].imshow(local_maxima_labeled, cmap='gray')
         axes[5].imshow(artifact_mask, cmap='gray')
+    
     return artifact_mask, im_transformed, seeds, optimal_tols, h
 
 
 def upscale(raw_im, target_im):
-    return skimage.transform.resize(raw_im, target_im.shape,
-                                     order=0, preserve_range=True, 
-                                     anti_aliasing=False)
+    
+    return skimage.transform.resize(
+        raw_im, target_im.shape, order=0, preserve_range=True, anti_aliasing=False
+    )
+
 
 @dataclass
 class ArtifactInfo():
@@ -918,16 +1101,20 @@ class ArtifactInfo():
     seed_layer: napari.layers.Points = None
         
     def update_mask(self, new_mask):
+        
         self.mask = new_mask
         self.artifact_layer.data = upscale(self.mask, 
                                            self.artifact_layer.data)
         self.artifact_layer.refresh()
 
     def bind_listener_seeds(self, viewer, global_state, tolerance_spinbox):
+        
         seed_layer = self.seed_layer
         if seed_layer is None:
             return
+        
         def point_clicked_callback(event):
+            
             current_layer = viewer.layers.selection.active
             global_state.current_layer = current_layer
             features = seed_layer.current_properties
@@ -936,60 +1123,65 @@ class ArtifactInfo():
             tolerance_spinbox.value = features['tol'][0]
         
         def point_changed_callback(event):
+            
             current_layer = viewer.layers.selection.active
             abx_channel = current_layer.metadata['abx_channel']
             pt_id = current_layer.current_properties['id'][0]
             artifact_info = self
             im_transformed = artifact_info.transformed
             global_state.current_layer = current_layer
-            df = artifact_info.seed_layer.features.copy() # preemptive...but might be wasteful if df is large
+            df = artifact_info.seed_layer.features.copy() 
+            # preemptive...but might be wasteful if df is large
             
-            if event.action=='add':
+            if event.action == 'add':
                 df = seed_layer.features
                 pt_id = uuid4()
-                df.loc[df.index[-1], 'id']=pt_id
-                df.loc[df.index[-1], 'tol']=0
-                seed = (current_layer.data[-1] / (2**current_layer.metadata['downscale'])).astype(int)
+                df.loc[df.index[-1], 'id'] = pt_id
+                df.loc[df.index[-1], 'tol'] = 0
+                seed = (
+                    (current_layer.data[-1] / 
+                     (2**current_layer.metadata['downscale'])).astype(int)
+                )
                 artifact_info.seeds[pt_id] = seed
-                new_fill = flood(im_transformed, seed_point=tuple(seed), 
-                                                tolerance=0)
+                new_fill = flood(im_transformed, seed_point=tuple(seed), tolerance=0)
                 artifact_info.update_mask(artifact_info.mask + new_fill)
-            elif event.action=='remove':
+            elif event.action == 'remove':
                 optimal_tol = global_state.current_tol
-                old_fill = flood(im_transformed, seed_point=tuple(global_state.current_point), 
-                                tolerance=optimal_tol) 
+                old_fill = flood(
+                    im_transformed, seed_point=tuple(global_state.current_point),
+                    tolerance=optimal_tol
+                ) 
                 artifact_info.update_mask(artifact_info.mask - old_fill)
         
         seed_layer.events.current_properties.connect(point_clicked_callback)
         seed_layer.events.data.connect(point_changed_callback)
+    
     def render_seeds(self, viewer, loaded_ims, layer_name, abx_channel):
+
         if len(self.seeds) > 0:
             seeds = np.vstack(list(self.seeds.values()))
             ids = list(self.seeds.keys())
         else:
             seeds = ids = []
-        self.seed_layer = viewer.add_points(seeds*(2**self.params['downscale']), 
-                        name=layer_name[abx_channel+'_seeds'],
-                        face_color=[1,0,0,1],
-                        edge_color=[0,0,0,0],
-                        size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
-                        features={
-                            'id': ids,
-                            'tol': self.tols
-                        }, visible=False)
+        self.seed_layer = viewer.add_points(
+            seeds * (2**self.params['downscale']), name=layer_name[abx_channel + '_seeds'],
+            face_color=[1, 0, 0, 1], edge_color=[0, 0, 0, 0],
+            size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
+            features={'id': ids, 'tol': self.tols}, visible=False)
         self.features = self.seed_layer.features
         self.seed_layer.metadata['abx_channel'] = abx_channel
         self.seed_layer.metadata['downscale'] = self.params['downscale']
 
     def render_mask(self, viewer, loaded_ims, layer_name, abx_channel):
+        
         grayscale = upscale(self.mask > 0, loaded_ims[abx_channel][0])
-        self.artifact_layer = viewer.add_image(grayscale,
-                                        name=layer_name[abx_channel+'_mask'], 
-                                        opacity=0.5, visible=False,
-                                        blending='additive')
+        self.artifact_layer = viewer.add_image(
+            grayscale, name=layer_name[abx_channel + '_mask'],
+            opacity=0.5, visible=False, blending='additive'
+        )
         self.artifact_layer.metadata['abx_channel'] = abx_channel
 
     def render(self, viewer, loaded_ims, layer_name, abx_channel):
-        self.render_mask(viewer, loaded_ims, layer_name, abx_channel)
-        self.render_seeds(viewer, loaded_ims, layer_name, abx_channel)
         
+        self.render_seeds(viewer, loaded_ims, layer_name, abx_channel)
+        self.render_mask(viewer, loaded_ims, layer_name, abx_channel)
