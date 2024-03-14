@@ -2,8 +2,8 @@
 
 inDir: /Users/<username>/Desktop/cylinter_demo
 # Path to CyLinter input directory containing multi-channel
-# image files (TIFF or OME-TIFF), segmentation outlines (OME-TIFF),
-# segmentation masks (TIFF), and corresponding single-cell feature tables (CSV)
+# image files (TIF or OME-TIF), segmentation outlines (OME-TIF),
+# segmentation masks (TIF), and corresponding single-cell feature tables (CSV)
 
 outDir: /Users/<username>/Desktop/cylinter_demo/output
 # CyLinter output directory. Path is created if it does not exist.
@@ -104,9 +104,16 @@ channelExclusionsClusteringQC: []
 samplesToRemoveClusteringQC: []
 # (list of strs) Samples to exclude from clustering.
 
-percentDataPerChunk: 0.2
-# (float, range: 0.0-1.0) Fraction of data to undergo embedding and
-# clustering per reclassifaction cycle.
+fracForEmbeddingQC: 1.0
+# (float) Fraction of cells to be embedded (range: 0.0-1.0)
+# Limits the amount of data passed to downstream modules.
+
+dimensionEmbeddingQC: 2
+# (int) Dimension of the embedding (fixed to 2 in current version).
+
+topMarkersQC: "clusters"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
 
 colormapAnnotationQC: "Sample"
 # (str) Metadata annotation to colormap the embedding: Sample or Condition.
@@ -198,7 +205,7 @@ conditionsToSilhouette: []
 
 
 # gating (optional)-------------------------------------------------------------------
-gating: False
+gating: True
 # (bool) Whether to perform SYLARAS-style gating on single-cell data.
 # Cell Syst. 2020 Sep 23;11(3):272-285.e9 PMID: 32898474
 
@@ -212,11 +219,8 @@ vectorThreshold: 100
 # (int) vizualize Boolean vectors with cell counts >= vectorThreshold
 
 classes:
-  Immune: 
-    definition: [+CD45, -aSMA]
-    subsets: []
-  Stroma: 
-    definition: [-CD45, +aSMA]
+  Tumor: 
+    definition: [+pan-CK, +KI67]
     subsets: []
 # (dict) Boolean immunophenotype signatures.
 # +marker = immunopositive , -marker = immunonegative, marker = don't care
@@ -242,6 +246,10 @@ fracForEmbedding: 1.0
 
 dimensionEmbedding: 2
 # (int) Dimension of the embedding (options: 2 or 3).
+
+topMarkers: "clusters"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
 
 colormapAnnotationClustering: "Sample"
 # (str) Metadata annotation to colormap the embedding: Sample or Condition.
@@ -324,6 +332,10 @@ FDRCorrection: False
 # curateThumbnails-------------------------------------------------------------
 numThumbnails: 25
 # (int) Number of examples per cluster to be curated.
+
+topMarkersThumbnails: "clusters"
+# (str) Normalization axis ("channels" or "clusters") used to define
+# highest expressed markers per cluster.
 
 windowSize: 30
 # (int) Number of pixels in x and y dimensions per thumbnail.
