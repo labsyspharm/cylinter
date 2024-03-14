@@ -10,7 +10,10 @@ has_children: false
 CyLinter is written in Python 3 and is compatible with MacOS, Windows, and Linux operating systems. The program can be installed via the cross-platform package manager, Conda.
 
 ## 1. Install Miniconda
-The folllowing are examples of commands for quickly and quietly installing the latest version of the Miniconda installer for your operating system (MacOS, Windows, Linux). To install a different version or architecture of Miniconda for any platform, change the name of the .sh (or .exe) installer in the curl (or wget) command to the one appropriate for your machine. The latest Miniconda installers can be found [here](https://docs.conda.io/projects/miniconda/en/latest/index.html).
+
+**NOTE**: If you already have Miniconda or Anaconda installed, [skip this section and jump to section 1B](#section-1b).
+
+The folllowing are examples of commands for quickly and quietly installing the latest version of the Miniconda installer for your operating system (MacOS - ARM, Windows, Linux - Intel 64-bit). For other platforms, [consult the Miniconda download page](https://docs.conda.io/projects/miniconda/en/latest/index.html).
 
 ### MacOS
 Open Terminal and paste the following commands:
@@ -38,8 +41,11 @@ bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
 rm -f ~/miniconda3/miniconda.sh
 ```
 
-## 2. Set Libmamba as the default dependency solver
-[Libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) is a fast dependency solver that can greatly expidite the installation of Conda packages.
+You should now [skip section 1B and go straight to section 2](#section-2).
+
+## 1B. For existing conda installations, set libmamba as the default dependency solver
+{: #section-1b}
+CyLinter depends on a complex set of packages and older Conda installations will struggle with this. If you already have Miniconda or Anaconda installed, we suggest that you run the following commands to update Conda itself and enable the libmamba dependency solver. This will help ensure CyLinter can be installed efficiently.
 
 ``` bash
 conda update -n base conda
@@ -47,9 +53,10 @@ conda install -n base conda-libmamba-solver
 conda config --set solver libmamba
 ```
 
-## 3. Install CyLinter
-Install CyLinter into a dedicated virtual environment with the following command:  
+## 2. Install CyLinter
+{: #section-2}
+Install CyLinter into a dedicated conda environment with the following command:  
 
 ``` bash
-conda create -n cylinter -c conda-forge -c gjbaker -c labsyspharm python=3 cylinter=0.0.47
+conda create -n cylinter -c conda-forge -c labsyspharm python=3 cylinter
 ```
