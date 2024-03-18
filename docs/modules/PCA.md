@@ -5,7 +5,7 @@ nav_order: 9
 parent: Modules
 ---
 
-9\. `PCA`: this module performs principal component analysis (PCA) on per-cell immunomarker intensities across tissues and returns per-cell and per-sample PCA scores plots, ridge plots showing the distribution of marker signal intensities, and the results of [Horn's parallel analysis](https://en.wikipedia.org/wiki/Parallel_analysis) indicating the number of PCs capturing non-random variation in the dataset.
+9\. `PCA`: this is a fully automated module that performs [Horn’s parallel analysis](https://en.wikipedia.org/wiki/Parallel_analysis) indicating the number of PCs capturing non-random variation in the dataset to help the user determine whether 2 or 3 principal components should be used in the [clustering module]({{ site.baseurl }}/modules/clustering) implemented later in the pipeline. PCA scores plots for the first two PCs are computed on per-cell and per-sample bases to visualize how single-cells and tissue sample are distributed with respect to each other. Ridge plots are also computed to visualize histogram alignment across marker channels.
 
 ### YAML configurations
 

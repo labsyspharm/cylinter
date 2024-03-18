@@ -22,7 +22,7 @@ CyLinter can analyze any multiplex imaging data so long as they conform to the e
 
 ``` bash
 <INPUT DIR>
-├── config.yml
+├── cylinter_config.yml
 ├── csv/
 │   ├── <sample1>.csv
 │   └── <sample2>.csv
@@ -44,13 +44,13 @@ CyLinter can parse **whole slide image (WSI)** and **tissue microarray (TMA)** m
 
 # YAML configuration file
 
-`config.yml` is the YAML configuration file passed to the `cylinter` command on program execution. It specifies general program configurations and module-specific parameters for a given analysis and should be stored in the top level CyLinter [input directory](#input-directory-structure). The `config.yml` file downloaded with the program is pre-configured for use with [Example Data]({{ site.baseurl }}/exemplar) used to demonstrate CyLinter. On MacOS, this file is located here: `/Users/<user>/miniconda3/envs/cylinter/lib/python3.10/site-packages/cylinter/config.yml`.
+`cylinter_config.yml` is the YAML configuration file passed to the `cylinter` command on program execution. It specifies general program configurations and module-specific parameters for a given analysis and should be stored in the top level CyLinter [input directory](#input-directory-structure). The `cylinter_config.yml` file downloaded with the program is pre-configured for use with [Example Data]({{ site.baseurl }}/exemplar) used to demonstrate CyLinter. On MacOS, this file is located here: `/Users/<user>/miniconda3/envs/cylinter/lib/python3.10/site-packages/cylinter/cylinter_config.yml`.
 
 ## General configurations
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `inDir` | /Users/user/Desktop/cylinter_demo | CyLinter input directory; contains multi-channel image files (TIFF/OME-TIFF), segmentation outline files (TIFF/OME-TIFF), cell ID masks (TIFF/OME-TIFF), single-cell spatial feature tables (CSV), `config.yml`, and `markers.csv` organized according to the [input directory structure](#input-directory-structure) or as native [MCMICRO output structure](https://mcmicro.org/io.html#directory-structure). |
+| `inDir` | /Users/user/Desktop/cylinter_demo | CyLinter input directory; contains multi-channel image files (TIFF/OME-TIFF), segmentation outline files (TIFF/OME-TIFF), cell ID masks (TIFF/OME-TIFF), single-cell spatial feature tables (CSV), `cylinter_config.yml`, and `markers.csv` organized according to the [input directory structure](#input-directory-structure) or as native [MCMICRO output structure](https://mcmicro.org/io.html#directory-structure). |
 | `outDir` | /Users/user/Desktop/cylinter_demo/output | CyLinter output directory path; created on program execution. |
 | `sampleMetadata` | "Filename": <br />  ["15", "Glioblastoma", "GBM", "CANCER-TRUE", 1] | Sample metadata dictionary: keys = Filenames (str); values = list of strings. First elements: sample names (str, may differ from Filename). Second elements: descriptive text of experimental condition (str). Third elements: abbreviation of experimental condition (str). Fourth elements: comma-delimited string of arbitrary binary declarations for computing t-statistics between two groups of samples (str). Fifth elements: replicate number specifying biological or technical replicates (int). |
 | `samplesToExclude` | [ ] | (list of strs) Sample names (i.e., first elements in `sampleMetadata` values) to exclude from analysis. |
