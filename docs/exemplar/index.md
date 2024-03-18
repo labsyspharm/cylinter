@@ -42,8 +42,8 @@ To run Cylinter on the demo dataset, pass the [YAML configuration file]({{ site.
 
 ``` bash
 # for Mac:
-cylinter --module <module-name>(optional) ~/Desktop/cylinter_demo/config.yml  
+cylinter --module <module-name>(optional) ~/Desktop/cylinter_demo/cylinter_config.yml  
 
 # for PC:
-cylinter --module <module-name>(optional) C:\Users\<username>\Desktop\cylinter_demo\config.yml
+cylinter --module <module-name>(optional) C:\Users\<username>\Desktop\cylinter_demo\cylinter_config.yml
 ```
