@@ -5,7 +5,7 @@ nav_order: 14
 parent: Modules
 ---
 
-14\. `frequencyStats`: this module is fully automated and computes pairwise statistics for binary declarations specified in the [sampleMetadata]({{ site.baseurl }}/workflow/input#general-configurations) parameter of `config.yml`. Test results are saved in `<output_dir>/clustering/2d/frequency_stats` in the case of 2D clustering or `<output_dir>/clustering/3d/frequency_stats` in the case of 3D clustering.
+14\. `frequencyStats`: this module is fully automated. It computes pairwise statistics for binary declarations specified in the [sampleMetadata]({{ site.baseurl}}/structure/#general-configurations) parameter of `cylinter_config.yml`. Test results are saved to a directory called `frequency_stats` in the clustering subdirectory of the main CyLinter output directory. This path is `clustering/2d/frequency_stats` in the case of 2D clusterings and `clustering/3d/frequency_stats` in the case of 3D clusterings.
 
 ### YAML configurations
 
