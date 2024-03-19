@@ -105,7 +105,7 @@ samplesToRemoveClusteringQC: []
 # (list of strs) Samples to exclude from clustering.
 
 percentDataPerChunk: 0.2
-# (float, range: 0.0-1.0) Fraction of data to undergo embedding and
+# (float) Fraction of data to undergo embedding and
 # clustering per reclassifaction cycle.
 
 colormapAnnotationQC: "Sample"
@@ -209,15 +209,12 @@ samplesToRemoveGating: []
 # (list of strs) Samples to exclude from gating.
 
 vectorThreshold: 100
-# (int) vizualize Boolean vectors with cell counts >= vectorThreshold
+# (int) vizualize Boolean vectors (i.e., binary phenotype profiles) with cell counts >= vectorThreshold
 
 classes:
-  Immune: 
-    definition: [+CD45, -aSMA]
-    subsets: []
-  Stroma: 
-    definition: [-CD45, +aSMA]
-    subsets: []
+  Tumor: 
+    definition: [+pan-CK, +KI67, -aSMA, -CD45]
+    subsets: [CDKN1A]
 # (dict) Boolean immunophenotype signatures.
 # +marker = immunopositive , -marker = immunonegative, marker = don't care
 

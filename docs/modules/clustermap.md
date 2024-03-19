@@ -5,6 +5,6 @@ nav_order: 13
 parent: Modules
 ---
 
-13\. `clustermap`: this module computes hierarchically clustered heatmaps (i.e. clustermaps) of mean immunomarker signals of clusters identified in the [`clustering`]({{ site.baseurl }}/modules/clustering) module. One is normalized across clusters (row-wise), the other is normalized across channels (column-wise). Plots are saved in `<output_dir>/clustering/2d/` in the case of 2D clustering or `<output_dir>/clustering/3d/` in the case of 3D clustering.
+13\. `clustermap`: this is a fully automated module that computes clustered heatmaps of channel z-scores for clusters identified in the [clustering module]({{ site.baseurl }}/modules/clustering) which are saved into the `clustermap` subdirectory of the main CyLinter output directory.
 
 ### No YAML configurations
