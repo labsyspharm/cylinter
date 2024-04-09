@@ -83,7 +83,7 @@ def input_check(self):
             except FileNotFoundError:
                 logger.info(
                     'Aborting; markers.csv file not found. Include markers.csv '
-                    'or ensure input file path ("inDir") is correct in config.yml'
+                    'or ensure input file path ("inDir") is correct in cylinter_config.yml'
                 )
                 sys.exit()
             
@@ -98,7 +98,7 @@ def input_check(self):
                         os.path.join(self.inDir, 'quantification', f'{key}*.csv'))[0]
                 except IndexError:
                     logger.info(
-                        f'sampleMetadata key {sample_name} in config.yml does '
+                        f'sampleMetadata key {sample_name} in cylinter_config.yml does '
                         'not match a CSV filename.'
                     )
                     sys.exit()
@@ -144,10 +144,11 @@ def input_check(self):
             except FileNotFoundError:
                 logger.info(
                     'Aborting; markers.csv file not found. Include markers.csv '
-                    'or ensure input file path ("inDir") in correct in config.yml')
+                    'or ensure input file path ("inDir") is correct in cylinter_config.yml')
                 sys.exit()
             
-            # check that samples specified in config.yml each have a csv, tif, seg, and mask file
+            # check that samples specified in cylinter_config.yml each have
+            # a csv, tif, seg, and mask file
             markers_list = []
             for key in self.sampleNames.keys():
                 
@@ -167,7 +168,7 @@ def input_check(self):
                         os.path.join(self.inDir, sample_name, 'quantification', f'{key}*.csv'))[0]
                 except IndexError:
                     logger.info(
-                        f'sampleMetadata key {sample_name} in config.yml does '
+                        f'sampleMetadata key {sample_name} in cylinter_config.yml does '
                         'not match a CSV filename.'
                     )
                     sys.exit()
@@ -287,10 +288,11 @@ def input_check(self):
         )
         sys.exit()
     
-    # check that file names specified in config.yml are contained in input directory
+    # check that file names specified in cylinter_config.yml are contained in input directory
     if not set(self.sampleNames.keys()).issubset(csv_names):
         logger.info(
-            'Aborting; at least 1 sampleMetadata key in config.yml does not match a CSV filename.'
+            'Aborting; at least 1 sampleMetadata key in cylinter_config.yml '
+            'does not match a CSV filename.'
         )
         sys.exit()
 
@@ -403,7 +405,7 @@ def marker_channel_number(self, markers, marker_name):
         if marker_name == self.counterstainChannel:
             logger.info(
                 'Aborting; "counterstainChannel" parameter used in '
-                'config.yml not found in markers.csv'
+                'cylinter_config.yml not found in markers.csv'
             )
             sys.exit()
         else:
