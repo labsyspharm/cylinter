@@ -477,12 +477,16 @@ def selectROIs(data, self, args):
                     # if all ROIs were deleted
                     if not bool(qc_report['selectROIs']):
                         del qc_report['selectROIs']
+                        qc_report['selectROIs'] = {}
 
                     # store automated and manually-defined polygon vertices (added to
                     # qc_report dict by save_shapes function) to CyLinter QC report
                     qc_report_sorted = sort_qc_report(qc_report, module='selectROIs', order=None)
                     f = open(report_path, 'w')
                     yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                    
+                    logger.info(f'ROI(s) applied to sample {sample}.')
+                    print()
                     
                     # move to next sample and re-render the GUI
                     if last_sample is None:
@@ -495,9 +499,7 @@ def selectROIs(data, self, args):
                     clear_widgets(widgets)
                     add_layers(sample)
                     add_widgets(last_sample, sample)
-                    logger.info(f'ROI(s) applied to sample {sample}.')
-                    print()
-                
+
                 except StopIteration:
                     logger.info('ROI selection complete')
                     QTimer().singleShot(0, viewer.close)
