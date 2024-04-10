@@ -1,0 +1,61 @@
+{% set name = "cylinter" %}
+{% set version = "0.0.49" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  git_url: https://github.com/labsyspharm/cylinter.git
+  git_tag: v0.0.49
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
+  entry_points:
+    - cylinter=cylinter.cylinter:main
+  noarch: python
+
+requirements:
+  build:
+    - poetry
+  host:
+    - pip
+    - python
+    - poetry
+  run:
+    - python
+    - cellcutter
+    - hdbscan
+    - joblib
+    - magicgui
+    - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
+    - napari
+    - numpy
+    - natsort
+    - numba
+    - pandas
+    - pyarrow
+    - pyqt
+    - pyyaml
+    - qtpy
+    - scikit-image
+    - scikit-learn <=1.2.2  # avoids InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.2.2 when using version 1.3.1. because artifact detection model was built using v1.2.2
+    - seaborn
+    - tifffile
+    - umap-learn
+    - zarr
+    - svglib
+    - pypdf2
+    - imagecodecs  # MIBI data fails to be read without this
+    - opencv
+
+test:
+  imports:
+    - cylinter
+
+about:
+  home: https://labsyspharm.github.io/cylinter/
+  license: MIT
+  license_family: BSD
+  summary: Quality Control Software for Multiplex Microscopy
