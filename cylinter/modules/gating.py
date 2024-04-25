@@ -621,6 +621,7 @@ def gating(data, self, args):
 
         # read QC report
         report_path = os.path.join(self.outDir, 'cylinter_report.yml')
+
         try:
             qc_report = yaml.safe_load(open(report_path))
             reload_report = False
