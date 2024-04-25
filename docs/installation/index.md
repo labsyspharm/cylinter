@@ -13,13 +13,19 @@ CyLinter is written in Python 3 and is compatible with MacOS, Windows, and Linux
 
 **NOTE**: If you already have Miniconda or Anaconda installed, [skip this section and jump to section 1B](#section-1b).
 
-The folllowing are examples of commands for quickly and quietly installing the latest version of the Miniconda installer for your operating system (MacOS - ARM, Windows, Linux - Intel 64-bit). For other platforms, [consult the Miniconda download page](https://docs.conda.io/projects/miniconda/en/latest/index.html).
+The folllowing are examples of commands for quickly and quietly installing the latest version of the Miniconda installer for your operating system (MacOS - M1 / Intel 64-bit, Windows, Linux - Intel 64-bit). For other platforms, [consult the Miniconda download page](https://docs.conda.io/projects/miniconda/en/latest/index.html).
 
 ### MacOS
 Open Terminal and paste the following commands:
 ```bash
 mkdir -p ~/miniconda3
+
+# M1 chip
 curl https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh -o ~/miniconda3/miniconda.sh
+
+# Intel 64-bit chip
+curl https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -o ~/miniconda3/miniconda.sh
+
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
 rm -f ~/miniconda3/miniconda.sh
 ```

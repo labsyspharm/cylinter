@@ -923,12 +923,14 @@ def sort_qc_report(qc_report, module, order=None):
         'Manual ROI Selections (pos.)', 'Manual ROI Selections (neg.)',
         'Automated ROI Selections (neg.)'
     ]
-    sorted_subkeys = sorted(
-        [i for i in qc_report['selectROIs'].keys()], key=lambda x: roi_order.index(x)
-    )
-    qc_report['selectROIs'] = {
-        subkey: qc_report['selectROIs'][subkey] for subkey in sorted_subkeys
-    }
+
+    if 'selectROIs' in qc_report:
+        sorted_subkeys = sorted(
+            [i for i in qc_report['selectROIs'].keys()], key=lambda x: roi_order.index(x)
+        )
+        qc_report['selectROIs'] = {
+            subkey: qc_report['selectROIs'][subkey] for subkey in sorted_subkeys
+        }
 
     # preserve channel order defined in markers.csv
     if module in ['pruneOutliers', 'setContrast'] and order is not None:
