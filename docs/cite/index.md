@@ -4,9 +4,9 @@ title: Citing CyLinter
 nav_order: 12
 ---
 
-### If you use CyLinter in your work, please cite our preprint:
+### If you use CyLinter in your work, please cite our publication:
 
-*Baker et al. Quality Control for Single Cell Analysis of High-plex Tissue Profiles using CyLinter, bioRxiv 2023, DOI: [https://doi.org/10.1101/2023.11.01.565120](https://doi.org/10.1101/2023.11.01.565120)*
+*Baker et al. ["Quality control for single-cell analysis of high-plex tissue profiles using CyLinter", **Nature Methods** 2024](https://doi.org/10.1038/s41592-024-02328-0)*
 
 
 ### The CyLinter GitHub repository can be cited as follows:

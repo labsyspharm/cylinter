@@ -10,8 +10,8 @@ hero_ctas:
     link: "installation/"
   - label: "GitHub Repo"
     link: "https://github.com/labsyspharm/cylinter"
-  - label: "Preprint"
-    link: "https://doi.org/10.1101/2023.11.01.565120 "
+  - label: "Publication/Citation"
+    link: "https://doi.org/10.1038/s41592-024-02328-0"
 # last_modified_date: 2021-03-28
 ---
 
