@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import yaml
 import pickle
@@ -11,7 +12,7 @@ import numpy as np
 import cv2
 from PIL import Image, ImageDraw
 
-import matplotlib.pyplot as plt
+import matplotlib
 from qtpy.QtCore import QTimer
 from matplotlib.backends.qt_compat import QtWidgets
 
@@ -944,8 +945,10 @@ def selectROIs(data, self, args):
             channel_number = marker_channel_number(self, markers, self.counterstainChannel)
             dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
 
-            fig, ax = plt.subplots()
-            ax.imshow(dna[0], cmap='gray')
+            fig = matplotlib.figure.Figure()
+            ax = fig.subplots()
+            ih, iw = dna[0].shape
+            ax.imshow(dna[-2], cmap='gray', extent=(0, iw, ih, 0))
             ax.grid(False)
             ax.set_axis_off()
             coords = data[['X_centroid', 'Y_centroid', 'Area']][
@@ -953,11 +956,15 @@ def selectROIs(data, self, args):
             ax.scatter(
                 coords['X_centroid'], coords['Y_centroid'], s=0.35, lw=0.0, c='yellow'
             )
-            plt.title(f'Sample {sample}', size=10)
-            plt.tight_layout()
-            plt.savefig(os.path.join(plot_dir, f'{sample}.png'), dpi=800)
-            plt.close('all')
-
+            ax.set_title(f'Sample {sample}', size=10)
+            fig.tight_layout()
+            fig.savefig(os.path.join(plot_dir, f'{sample}.png'), dpi=400)
+            
+            # Avoiding pyplot and executing the following del and collect()
+            # statements appear to be required to avoid a memory leak somewhere
+            # in matplotlib internals.
+            del fig, ax
+            gc.collect()
     else:
         logger.info(
             'Skipping ROI selection, no samples for ROI selection specified in config.yml'
