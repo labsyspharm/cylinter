@@ -1088,7 +1088,7 @@ def gating(data, self, args):
 
         ##########################################################################################
         # plot heatmap of classified cell type signatures
-        
+
         classes = pd.DataFrame.from_dict(signatures)
         table = pd.DataFrame(columns=abx_channels)
 
