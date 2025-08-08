@@ -222,7 +222,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                     properties=point_properties,
                     face_color='cell_area',
                     face_colormap='viridis',
-                    edge_width=0.0, size=4.0)
+                    border_width=0.0, size=4.0)
 
         # add button functionality
         button.on_clicked(apply_cutoffs)

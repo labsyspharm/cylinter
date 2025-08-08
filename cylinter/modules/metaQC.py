@@ -1050,7 +1050,7 @@ def metaQC(data, self, args):
                                         viewer.add_points(
                                             centroids, name=module,
                                             visible=True, face_color=color,
-                                            edge_width=0.0, size=4.0)
+                                            border_width=0.0, size=4.0)
 
                                     # read segmentation outlines, add to Napari
                                     file_path = get_filepath(self, check, value, 'SEG')
