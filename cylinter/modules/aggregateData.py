@@ -168,6 +168,7 @@ def aggregateData(data, self, args):
             f'Columns {markers_to_drop} are not in all'
             ' samples and will be dropped from downstream analysis.'
         )
+
     data = data[channels_set].copy()
 
     # sort by Sample and CellID to be tidy

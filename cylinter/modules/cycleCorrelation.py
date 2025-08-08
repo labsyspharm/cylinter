@@ -236,8 +236,8 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
                     name='Selected Cells',
                     properties=None,
                     face_color='yellow',
-                    edge_color='k',
-                    edge_width=0.0, size=7.0)
+                    border_color='k',
+                    border_width=0.0, size=7.0)
 
         # add button functionality
         button.on_clicked(apply_cutoffs)

@@ -497,11 +497,11 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             viewer.add_points(
                 low_centroids, name='low centroids', properties=None,
-                face_color='magenta', edge_color='k', edge_width=0.0, size=8.0)
+                face_color='magenta', border_color='k', border_width=0.0, size=8.0)
 
             viewer.add_points(
                 high_centroids, name='high centroids', properties=None,
-                face_color='cyan', edge_color='k', edge_width=0.0, size=8.0)
+                face_color='cyan', border_color='k', border_width=0.0, size=8.0)
 
             napari.utils.notifications.show_info(f'Viewing outliers in sample {sample}')
         else:

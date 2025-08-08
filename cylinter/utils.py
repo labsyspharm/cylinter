@@ -454,7 +454,7 @@ def single_channel_pyramid(tiff_path, channel):
 
         if len(tiff.series[0].levels) > 1:
 
-            pyramid = [zarr.open(s[channel].aszarr()) for s in tiff.series[0].levels]
+            pyramid = [zarr.open(s[channel].aszarr(), mode='r') for s in tiff.series[0].levels]
 
             pyramid = [da.from_zarr(z) for z in pyramid]
 
@@ -994,7 +994,7 @@ def compute_gmm(data, x_min, x_max, ax):
     ax.set_ylim(0, None)  # ensuring GMM y-axis starts at 0
     
     leg = ax.legend(prop={'size': 7})
-    for legobj in leg.legendHandles:
+    for legobj in leg.legend_handles:
         legobj.set_linewidth(5.0)
 
     ax.grid(False)
@@ -1169,7 +1169,7 @@ class ArtifactInfo():
             seeds = ids = []
         self.seed_layer = viewer.add_points(
             seeds * (2**self.params['downscale']), name=layer_name[abx_channel + '_seeds'],
-            face_color=[1, 0, 0, 1], edge_color=[0, 0, 0, 0],
+            face_color=[1, 0, 0, 1], border_color=[0, 0, 0, 0],
             size=int(max(*self.mask.shape) * (2**self.params['downscale']) / 100),
             features={'id': ids, 'tol': self.tols}, visible=False)
         self.features = self.seed_layer.features

@@ -657,6 +657,7 @@ def clustering(data, self, args):
                         
                         if 'class' not in data.columns:
                             c = 'gainsboro'
+                            cmap = None
                             legend_elements = []
                         
                         else:
@@ -702,7 +703,6 @@ def clustering(data, self, args):
                                 )
                         
                         ax_gate.cla()
-
                         ax_gate.scatter(
                             data['emb1'], data['emb2'], c=c, cmap=cmap,
                             alpha=1.0, s=point_size, ec='k', linewidth=0.0)
@@ -1102,7 +1102,7 @@ def clustering(data, self, args):
 
                         viewer.add_points(
                             centroids, name='lassoed cells', visible=True,
-                            face_color='yellow', edge_width=0.0, size=4.0
+                            face_color='yellow', border_width=0.0, size=4.0
                         )
 
                         # read segmentation outlines, add to Napari
