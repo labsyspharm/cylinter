@@ -29,7 +29,8 @@ requirements:
     - hdbscan
     - joblib
     - magicgui
-    - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
+    - matplotlib
+    # - matplotlib <3.6  # avoids segmentation faults when closing silhouette plot in clustering module
     - napari
     - numpy
     - natsort
