@@ -16,10 +16,10 @@ Access to the demonstration dataset requires free registration at the Sage Synap
 conda activate cylinter
 
 # Install the Synapse client.
-conda install -c bioconda synapseclient
+pip install synapseclient
 
 # Mac/Linux users, run the following command to download the demo dataset:
-synapse get -r syn52859560 --downloadLocation ~/Desktop/cylinter_demo  # Enter Synapse ID and password when prompted.
+synapse get -r syn52859560 --downloadLocation ~/Desktop/cylinter_demo  # Enter Synapse ID and authentication token when prompted.
 
 # PC users, run the following command to download the demo dataset:  
 synapse get -r syn52859560 --downloadLocation C:\Users\<username>\Desktop\cylinter_demo --multiThreaded  # Enter Synapse ID and password when prompted.
