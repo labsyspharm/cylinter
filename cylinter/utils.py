@@ -994,7 +994,7 @@ def compute_gmm(data, x_min, x_max, ax):
     ax.set_ylim(0, None)  # ensuring GMM y-axis starts at 0
     
     leg = ax.legend(prop={'size': 7})
-    for legobj in leg.legendHandles:
+    for legobj in leg.legend_handles:
         legobj.set_linewidth(5.0)
 
     ax.grid(False)
