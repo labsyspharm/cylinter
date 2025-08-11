@@ -438,9 +438,11 @@ def clustering(data, self, args):
                 silhouette_spacer = 1000
 
                 if embedding.shape[1] == 2:
+                    sns.set_style('darkgrid')
                     fig_silho, (ax1_silho, ax2_silho) = plt.subplots(1, 2)
                     fig_silho.set_size_inches(18, 7)
                 elif embedding.shape[1] == 3:
+                    sns.set_style('darkgrid')
                     fig_silho = plt.figure(figsize=(18, 7))
                     gs = plt.GridSpec(1, 2, figure=fig_silho)
                     ax1_silho = fig_silho.add_subplot(gs[0, 0], projection=None)
@@ -564,25 +566,27 @@ def clustering(data, self, args):
                 # placeholder for lasso selection
                 selector = None
 
+                plt.close('all')
+                
                 sns.set_style('whitegrid')
 
-                fig = plt.figure(figsize=(3, 8))
+                fig = plt.figure()
                 matplotlib_warnings(fig)
 
-                gs = plt.GridSpec(2, 3, figure=fig)
+                # adjust position of 2D subplots on canvas
+                width = 0.28
+                height = 0.45
+                bottom = 0.5
 
-                # define axes
-                ax_cluster = fig.add_subplot(gs[0, 0])
-                ax_gate = fig.add_subplot(gs[0, 1])
-                ax_sample = fig.add_subplot(gs[0, 2])
+                x_positions = [0.03, 0.36, 0.69]
 
-                ax_cluster_lbs = fig.add_subplot(gs[1, 0])
-                ax_gate_lbs = fig.add_subplot(gs[1, 1])
-                ax_sample_lbs = fig.add_subplot(gs[1, 2])
+                ax_cluster = fig.add_axes([x_positions[0], bottom, width, height])
+                ax_gate = fig.add_axes([x_positions[1], bottom, width, height])
+                ax_sample = fig.add_axes([x_positions[2], bottom, width, height])
 
                 plt.subplots_adjust(
-                    left=0.01, right=0.99, bottom=0.0,
-                    top=0.95, wspace=0.0, hspace=0.0)
+                    left=0.0, right=1.0, bottom=0.0,
+                    top=1.0, wspace=0.0, hspace=0.0)
 
                 # PLOT embedding
                 for color_by in [f'cluster_{self.dimensionEmbedding}d', 'class', 'annotation']:
@@ -625,7 +629,7 @@ def clustering(data, self, args):
                             data['emb1'], data['emb2'], c=c, alpha=1.0,
                             s=point_size, cmap=cmap, ec='k', linewidth=0.0)
 
-                        ax_cluster.set_title('HDBSCAN (lasso)', fontsize=7)
+                        ax_cluster.set_title('HDBSCAN (lasso)', fontsize=9)
                         ax_cluster.set_aspect('equal')
                         ax_cluster.axes.xaxis.set_visible(False)
                         ax_cluster.axes.yaxis.set_visible(False)
@@ -643,14 +647,15 @@ def clustering(data, self, args):
                                 Line2D([0], [0], marker='o',
                                        color='none', label=f'Cluster {i}: {hi_markers}',
                                        markerfacecolor=cmap.colors[e], markeredgecolor='none',
-                                       lw=0.001, markersize=3)
+                                       lw=0.001, markersize=6)
                             )
 
-                        ax_cluster_lbs.legend(
-                            handles=legend_elements, prop={'size': 3},
-                            loc='upper left', frameon=False)
-
-                        ax_cluster_lbs.axis('off')
+                        ax_cluster.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_cluster.transAxes,
+                            frameon=False)
 
                     elif color_by == 'class':
                         title = 'Gating'
@@ -699,7 +704,7 @@ def clustering(data, self, args):
                                            color='none', label=vector_name,
                                            markerfacecolor=cmap.colors[color_idx],
                                            markeredgecolor='none',
-                                           lw=0.001, markersize=3)
+                                           lw=0.001, markersize=6)
                                 )
                         
                         ax_gate.cla()
@@ -707,18 +712,18 @@ def clustering(data, self, args):
                             data['emb1'], data['emb2'], c=c, cmap=cmap,
                             alpha=1.0, s=point_size, ec='k', linewidth=0.0)
 
-                        ax_gate.set_title(title, fontsize=7)
+                        ax_gate.set_title(title, fontsize=9)
                         ax_gate.set_aspect('equal')
                         ax_gate.axes.xaxis.set_visible(False)
                         ax_gate.axes.yaxis.set_visible(False)
                         ax_gate.grid(False)
 
-                        ax_gate_lbs.legend(
-                            handles=legend_elements, prop={'size': 3},
-                            loc='upper left', frameon=False
-                        )
-
-                        ax_gate_lbs.axis('off')
+                        ax_gate.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_gate.transAxes,
+                            frameon=False)
 
                     elif color_by == 'annotation':
 
@@ -745,7 +750,7 @@ def clustering(data, self, args):
                             alpha=1.0, s=point_size, ec='k', linewidth=0.0
                         )
 
-                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=7)
+                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=9)
                         ax_sample.set_aspect('equal')
                         ax_sample.axes.xaxis.set_visible(False)
                         ax_sample.axes.yaxis.set_visible(False)
@@ -765,21 +770,24 @@ def clustering(data, self, args):
                                 Line2D([0], [0], marker='o', color='none', label=i,
                                        markerfacecolor=cmap.colors[e],
                                        markeredgecolor=markeredgecolor,
-                                       lw=0.001, markersize=3)
+                                       lw=0.001, markersize=6)
                             )
 
-                        ax_sample_lbs.legend(
-                            handles=legend_elements, prop={'size': 3},
-                            loc='upper left', frameon=False)
-
-                        ax_sample_lbs.axis('off')
-
+                        ax_sample.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_sample.transAxes,
+                            frameon=False)
+            
             elif embedding.shape[1] == 3:
 
                 # initialize figure and add to FigureCanvas
                 # before rendering plot in 3D
+                plt.close('all')
+                
                 sns.set_style('whitegrid')
-                fig = plt.figure(figsize=(4, 8))
+                fig = plt.figure()
                 matplotlib_warnings(fig)
 
             count = cluster_layout.count()
@@ -799,20 +807,20 @@ def clustering(data, self, args):
 
             if embedding.shape[1] == 3:
 
-                gs = plt.GridSpec(2, 3, figure=fig)
+                # adjust position of 3D subplots on canvas
+                width = 0.33
+                height = 0.45
+                bottom = 0.5
 
-                # define axes
-                ax_cluster = fig.add_subplot(gs[0, 0], projection='3d')
-                ax_gate = fig.add_subplot(gs[0, 1], projection='3d')
-                ax_sample = fig.add_subplot(gs[0, 2], projection='3d')
+                x_positions = [0.0, 0.335, 0.67]
 
-                ax_cluster_lbs = fig.add_subplot(gs[1, 0])
-                ax_gate_lbs = fig.add_subplot(gs[1, 1])
-                ax_sample_lbs = fig.add_subplot(gs[1, 2])
+                ax_cluster = fig.add_axes([x_positions[0], bottom, width, height], projection='3d')
+                ax_gate = fig.add_axes([x_positions[1], bottom, width, height], projection='3d')
+                ax_sample = fig.add_axes([x_positions[2], bottom, width, height], projection='3d')
 
                 plt.subplots_adjust(
-                    left=0.0, right=0.99, bottom=0.0, top=0.9, wspace=0.0, hspace=0.0
-                )
+                    left=0.0, right=1.0, bottom=0.0,
+                    top=1.0, wspace=0.0, hspace=0.0)
 
                 for color_by in [
                     f'cluster_{self.dimensionEmbedding}d', 'class', 'annotation'
@@ -854,7 +862,7 @@ def clustering(data, self, args):
                             c=c, cmap=cmap, alpha=1.0, s=point_size,
                             ec='k', linewidth=0.0)
 
-                        ax_cluster.set_title('HDBSCAN', fontsize=7)
+                        ax_cluster.set_title('HDBSCAN', fontsize=9)
                         ax_cluster.set_xticklabels([])
                         ax_cluster.set_yticklabels([])
                         ax_cluster.set_zticklabels([])
@@ -874,15 +882,15 @@ def clustering(data, self, args):
                                 Line2D([0], [0], marker='o',
                                        color='none', label=f'Cluster {i}: {hi_markers}',
                                        markerfacecolor=cmap.colors[e], markeredgecolor='none',
-                                       lw=0.001, markersize=3)
+                                       lw=0.001, markersize=6)
                             )
 
-                        ax_cluster_lbs.legend(
-                            handles=legend_elements, prop={'size': 3}, 
-                            loc='upper left', frameon=False
-                        )
-                        
-                        ax_cluster_lbs.axis('off')
+                        ax_cluster.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_cluster.transAxes,
+                            frameon=False)
 
                     elif color_by == 'class':
 
@@ -929,7 +937,7 @@ def clustering(data, self, args):
                                     Line2D([0], [0], marker='o',
                                            color='none', label=vector_name,
                                            markerfacecolor=cmap.colors[color_idx],
-                                           markeredgecolor='none', lw=0.001, markersize=3)
+                                           markeredgecolor='none', lw=0.001, markersize=6)
                                 )
                         
                         ax_gate.cla()
@@ -939,7 +947,7 @@ def clustering(data, self, args):
                             c=c, cmap=cmap, alpha=1.0, s=point_size,
                             ec='k', linewidth=0.0)
 
-                        ax_gate.set_title(title, fontsize=7)
+                        ax_gate.set_title(title, fontsize=9)
                         ax_gate.set_xticklabels([])
                         ax_gate.set_yticklabels([])
                         ax_gate.set_zticklabels([])
@@ -951,12 +959,12 @@ def clustering(data, self, args):
                         ax_gate.zaxis._axinfo['grid'].update(
                             {'linewidth': 0.5})
 
-                        ax_gate_lbs.legend(
-                            handles=legend_elements, prop={'size': 3},
-                            loc='upper left', frameon=False
-                        )
-
-                        ax_gate_lbs.axis('off')
+                        ax_gate.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_gate.transAxes,
+                            frameon=False)
 
                     elif color_by == 'annotation':
 
@@ -982,7 +990,7 @@ def clustering(data, self, args):
                             alpha=1.0, s=point_size, ec='k', linewidth=0.0
                         )
 
-                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=7)
+                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=9)
                         ax_sample.set_xticklabels([])
                         ax_sample.set_yticklabels([])
                         ax_sample.set_zticklabels([])
@@ -1003,15 +1011,15 @@ def clustering(data, self, args):
                             legend_elements.append(
                                 Line2D([0], [0], marker='o', color='none', label=i,
                                        markerfacecolor=cmap.colors[e], 
-                                       markeredgecolor=markeredgecolor, lw=0.001, markersize=3)
+                                       markeredgecolor=markeredgecolor, lw=0.001, markersize=6)
                             )
-
-                        ax_sample_lbs.legend(
-                            handles=legend_elements, prop={'size': 3},
-                            loc='upper left', frameon=False
-                        )
-
-                        ax_sample_lbs.axis('off')
+                        
+                        ax_sample.legend(
+                            handles=legend_elements, prop={'size': 6},
+                            loc='upper left',
+                            bbox_to_anchor=(0, 0),
+                            bbox_transform=ax_sample.transAxes,
+                            frameon=False)
 
             cluster_layout.addWidget(NavigationToolbar(cluster_canvas, cluster_widget))
             cluster_layout.addWidget(cluster_canvas)
