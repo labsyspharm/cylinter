@@ -11,11 +11,13 @@ source:
 
 build:
   number: 0
-  script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
+  script: 
+    - "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
   entry_points:
     - cylinter=cylinter.cylinter:main
   noarch: python
-
+channels:
+  - conda-forge
 requirements:
   build:
     - poetry
@@ -36,7 +38,7 @@ requirements:
     - numba
     - pandas
     - pyarrow
-    - pyqt=5.*
+    - pyqt==5.15.11  # ensuring PyQT5
     - ffmpeg
     - pyyaml
     - qtpy
@@ -46,10 +48,11 @@ requirements:
     - tifffile
     - umap-learn
     - zarr <3
+    - numcodecs <0.12  # ensuring compatibility with Zarr2
     - svglib
     - pypdf2
     - imagecodecs  # MIBI data fails to be read without this
-    - opencv
+    - opencv==4.8.*  # ensuring PyQT5 build
 
 test:
   imports:

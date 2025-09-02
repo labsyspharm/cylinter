@@ -721,7 +721,7 @@ def metaQC(data, self, args):
                                 )
 
                                 ax_cluster.set_title(
-                                    'HDBSCAN (lasso)', fontsize=7)
+                                    'HDBSCAN (lasso)', fontsize=9)
                                 ax_cluster.axis('equal')
                                 ax_cluster.axes.xaxis.set_visible(False)
                                 ax_cluster.axes.yaxis.set_visible(False)
@@ -739,14 +739,14 @@ def metaQC(data, self, args):
                                     legend_elements.append(
                                         Line2D([0], [0], marker='o',
                                                color='none',
-                                               label=(f'Cluster {i}: {hi_markers}'),
+                                               label=(f'C{i}: {hi_markers}'),
                                                markerfacecolor=cmap.colors[e],
                                                markeredgecolor='none',
-                                               lw=0.001, markersize=2)
+                                               lw=0.001, markersize=6)
                                     )
 
                                 ax_cluster_lbs.legend(
-                                    handles=legend_elements, prop={'size': 3}, loc='upper left',
+                                    handles=legend_elements, prop={'size': 6}, loc='upper left',
                                     frameon=False
                                 )
 
@@ -774,7 +774,7 @@ def metaQC(data, self, args):
                                     s=point_size, ec='k', linewidth=0.0
                                 )
 
-                                ax_status.set_title('QC Status', fontsize=7)
+                                ax_status.set_title('QC Status', fontsize=9)
                                 ax_status.axis('equal')
                                 ax_status.axes.xaxis.set_visible(False)
                                 ax_status.axes.yaxis.set_visible(False)
@@ -800,11 +800,11 @@ def metaQC(data, self, args):
                                                markerfacecolor=cmap.colors[e],
                                                markeredgecolor=markeredgecolor,
                                                lw=0.001,
-                                               markersize=2)
+                                               markersize=6)
                                     )
 
                                 ax_status_lbs.legend(
-                                    handles=legend_elements, prop={'size': 5}, loc='upper left',
+                                    handles=legend_elements, prop={'size': 6}, loc='upper left',
                                     frameon=False
                                 )
 
@@ -830,7 +830,7 @@ def metaQC(data, self, args):
                                     s=point_size, ec='k', linewidth=0.0
                                 )
 
-                                ax_reclass.set_title('Reclassification', fontsize=7)
+                                ax_reclass.set_title('Reclassification', fontsize=9)
                                 ax_reclass.axis('equal')
                                 ax_reclass.axes.xaxis.set_visible(False)
                                 ax_reclass.axes.yaxis.set_visible(False)
@@ -856,11 +856,11 @@ def metaQC(data, self, args):
                                                markerfacecolor=cmap.colors[e],
                                                markeredgecolor=markeredgecolor,
                                                lw=0.001,
-                                               markersize=2)
+                                               markersize=6)
                                     )
 
                                 ax_reclass_lbs.legend(
-                                    handles=legend_elements, prop={'size': 5}, loc='upper left',
+                                    handles=legend_elements, prop={'size': 6}, loc='upper left',
                                     frameon=False
                                 )
 
@@ -889,7 +889,7 @@ def metaQC(data, self, args):
                                     s=point_size, ec='k', linewidth=0.0
                                 )
 
-                                ax_sample.set_title(self.colormapAnnotationQC, fontsize=7)
+                                ax_sample.set_title(self.colormapAnnotationQC, fontsize=9)
                                 ax_sample.axis('equal')
                                 ax_sample.axes.xaxis.set_visible(False)
                                 ax_sample.axes.yaxis.set_visible(False)
@@ -910,11 +910,11 @@ def metaQC(data, self, args):
                                                label=i,
                                                markerfacecolor=cmap.colors[e],
                                                markeredgecolor=markeredgecolor,
-                                               lw=0.001, markersize=2)
+                                               lw=0.001, markersize=6)
                                     )
 
                                 ax_sample_lbs.legend(
-                                    handles=legend_elements, prop={'size': 3}, loc='upper left',
+                                    handles=legend_elements, prop={'size': 6}, loc='upper left',
                                     frameon=False
                                 )
 

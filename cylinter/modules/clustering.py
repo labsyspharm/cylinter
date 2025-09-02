@@ -645,7 +645,7 @@ def clustering(data, self, args):
 
                             legend_elements.append(
                                 Line2D([0], [0], marker='o',
-                                       color='none', label=f'Cluster {i}: {hi_markers}',
+                                       color='none', label=f'C{i}: {hi_markers}',
                                        markerfacecolor=cmap.colors[e], markeredgecolor='none',
                                        lw=0.001, markersize=6)
                             )
