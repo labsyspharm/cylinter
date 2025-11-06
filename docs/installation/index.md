@@ -64,5 +64,5 @@ conda config --set solver libmamba
 Install CyLinter into a dedicated conda environment with the following command:  
 
 ``` bash
-conda create -n cylinter -c conda-forge -c labsyspharm cylinter=0.0.52
+conda create -n cylinter -c conda-forge -c labsyspharm cylinter=0.0.53
 ```

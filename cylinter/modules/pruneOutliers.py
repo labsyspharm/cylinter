@@ -3,9 +3,6 @@ import sys
 import yaml
 import logging
 
-import matplotlib
-matplotlib.use('qtagg')  # avoiding segfaults
-
 import numpy as np
 import pandas as pd
 import math
@@ -26,10 +23,15 @@ from matplotlib.backends.backend_qt5agg import (
 
 from qtpy.QtCore import QTimer
 
+
 from ..utils import (
     input_check, read_markers, marker_channel_number, sort_qc_report, 
     single_channel_pyramid, get_filepath, reorganize_dfcolumns
 )
+
+import matplotlib
+matplotlib.use('qtagg')  # avoiding segfaults
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,9 @@ def keys_before_key(dictionary, abx_channels, target_channel):
     
     keys = sorted(dictionary.keys(), key=lambda x: abx_channels.index(x))
     index = keys.index(target_channel)
-    subset_dict = {key: dictionary[key] for key in keys[:index] if key in dictionary}
+    subset_dict = {
+        key: dictionary[key] for key in keys[:index] if key in dictionary
+    }
     
     return subset_dict
 
@@ -66,7 +70,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     # clear existing channels from Napari window if they exist
     viewer.layers.clear()
 
-    ##########################################################################################
+    ###########################################################################
     # plot raw signal distributions
 
     hist_facet = (
@@ -84,7 +88,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     hist_facet['Sample'] = hist_facet['Sample'].astype('str')
 
     # create column for facet labels
-    hist_facet['for_plot'] = hist_facet['Sample'] + ', ' + hist_facet['Condition']
+    hist_facet['for_plot'] = (
+        hist_facet['Sample'] + ', ' + hist_facet['Condition']
+    )
 
     # plot raw facets
     col_wrap = 5
@@ -106,7 +112,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
     # use scatter points for plotting
     else:
-        g_raw.map(plt.scatter, 'signal', 'Area', s=0.05, linewidths=0.0, color='k')
+        g_raw.map(
+            plt.scatter, 'signal', 'Area', s=0.05, linewidths=0.0, color='k'
+        )
 
     g_raw.set_titles(
         col_template="{col_name}", fontweight='bold',
@@ -135,16 +143,21 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     # linear interpol. (between 1 and 30 rows at col_wrap = 5 plots/row)
     # for top/bottom subplot adjustment
     pad = (
-        1 + (math.ceil(len(g_raw.axes.flatten()) / col_wrap) - 1) * (10 - 1) / (30 - 1)
+        1 + (math.ceil(len(g_raw.axes.flatten()) / col_wrap) - 1) * 
+        (10 - 1) / (30 - 1)
     )
 
     plt.tight_layout(pad=pad)
     plt.subplots_adjust(left=0.04, right=0.98, hspace=0.8, wspace=0.3)
     
-    # save raw figure dimensions to apply to trimmed figure in "next_channel" function below
+    # save raw figure dimensions to apply to 
+    # trimmed figure in "next_channel" function below
     fig_size_inches = g_raw.fig.get_size_inches()  
     
-    plt.savefig(os.path.join(plot_dir, f'{channel}_raw.png'), dpi=600, bbox_inches='tight')
+    plt.savefig(
+        os.path.join(plot_dir, f'{channel}_raw.png'), 
+        dpi=600, bbox_inches='tight'
+    )
 
     # remove plot_widget and layout attributes from Napari viewer if they exist
     if not initial_callback:
@@ -164,10 +177,11 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     plot_layout.addWidget(NavigationToolbar(raw_canvas, plot_widget))
     plot_layout.addWidget(raw_canvas)
 
-    ##########################################################################################
+    ###########################################################################
     
     @magicgui(
-        layout='vertical', call_button='Apply Cutoffs and Move to Next Marker -->'
+        layout='vertical', 
+        call_button='Apply Cutoffs and Move to Next Marker -->'
     )
     def next_channel(channel, fig_size_inches):
 
@@ -180,7 +194,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
         global dfTest
 
         # store cutoffs in QC report
-        qc_report['pruneOutliers'][channel] = [float(lowerCutoff), float(upperCutoff)]
+        qc_report['pruneOutliers'][channel] = [
+            float(lowerCutoff), float(upperCutoff)
+        ]
         
         # sort and dump updated qc_report to YAML file
         qc_report_sorted = sort_qc_report(
@@ -198,15 +214,16 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
         lowerCutoff = 0.0  
         upperCutoff = 100.0
 
-        # raw plot has already been closed in percentile_selector, so the current figure 
-        # is the trimmed version.
+        # raw plot has already been closed in percentile_selector,
+        # so the current figure is the trimmed version.
 
         # ensure raw and trimmed figures have the same dimensions 
         fig_width, fig_height = fig_size_inches
         plt.gcf().set_size_inches(fig_width, fig_height)
         
         plt.savefig(
-            os.path.join(plot_dir, f'{channel}_trimmed.png'), dpi=600, bbox_inches='tight'
+            os.path.join(plot_dir, f'{channel}_trimmed.png'), 
+            dpi=600, bbox_inches='tight'
         )
         
         # go to next sample
@@ -221,16 +238,19 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 dfTest.to_parquet(os.path.join(pruning_dir, 'dfTrim.parquet'))
             
             # read trimmed dataframe
-            dfTrim = pd.read_parquet(os.path.join(pruning_dir, 'dfTrim.parquet'))
+            dfTrim = pd.read_parquet(
+                os.path.join(pruning_dir, 'dfTrim.parquet')
+            )
 
             # restore dfTest back to None before running next marker 
             dfTest = None
             
             initial_callback = False
             callback(
-                self, viewer, channel, dfTrim, data, initial_callback, percentiles_widget,
-                percentiles_layout, arbitrary_widget, arbitrary_layout, plot_widget,
-                plot_layout, pruning_dir, plot_dir, qc_report, report_path 
+                self, viewer, channel, dfTrim, data, initial_callback,
+                percentiles_widget, percentiles_layout, arbitrary_widget,
+                arbitrary_layout, plot_widget, plot_layout, pruning_dir, 
+                plot_dir, qc_report, report_path 
             )
 
             marker_index += 1
@@ -248,16 +268,18 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     next_channel.fig_size_inches.bind(fig_size_inches)
     
     next_channel.native.setSizePolicy(
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Fixed,
         QtWidgets.QSizePolicy.Fixed,
     )
 
     plot_layout.addWidget(next_channel.native)
 
-    ##########################################################################################
+    ###########################################################################
     
     @magicgui(
-        layout='horizontal', call_button='View Outliers', sample={'label': 'Sample Name'}
+        layout='horizontal', call_button='View Outliers',
+        sample={'choices': list(natsorted(data['Sample'].unique())), 
+                'label': 'Sample'}
     )
     def sample_selector(sample: str, channel):
 
@@ -267,11 +289,11 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
     sample_selector.channel.bind(channel)
 
     sample_selector.native.setSizePolicy(
-        QtWidgets.QSizePolicy.Maximum,
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Fixed,
+        QtWidgets.QSizePolicy.Fixed,
     )
 
-    ##########################################################################################
+    ###########################################################################
     @magicgui(
         layout='vertical',
         call_button=f'Check {channel} Cutoffs',
@@ -280,7 +302,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
         upper_cutoff={'widget_type': 'FloatSlider', 'max': 100.0,
                       'label': 'Upper Percentile'},
     )
-    def percentile_selector(lower_cutoff: float = 0.0, upper_cutoff: float = 100.0):
+    def percentile_selector(lower_cutoff: float = 0.0, 
+                            upper_cutoff: float = 100.0):
         
         global total_low_idxs
         global total_high_idxs
@@ -299,7 +322,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             # while keeping event loop running.
             plt.close()
             
-            ##################################################################################
+            ###################################################################
             # plot trimmed signal distributions
 
             # create a copy of dfTrim for testing cutoffs
@@ -316,7 +339,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 # drop cells < lower cutoff and > than upper cutoff
                 indices_to_drop = []
 
-                sample_channel_data = dfTest[dfTest['Sample'] == sample][channel]
+                sample_channel_data = dfTest[
+                    dfTest['Sample'] == sample][channel]
 
                 low_drop_idxs = sample_channel_data.index[
                     sample_channel_data < np.percentile(
@@ -328,7 +352,10 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                         sample_channel_data, upper_cutoff)]
                 indices_to_drop.extend(high_drop_idxs)
 
-                dfTest.drop(labels=set(indices_to_drop), axis=0, inplace=True, errors='raise')
+                dfTest.drop(
+                    labels=set(indices_to_drop), axis=0, 
+                    inplace=True, errors='raise'
+                )
 
                 # rescale residual signal intensities
                 trimmed_data = dfTest[dfTest['Sample'] == sample][channel]
@@ -336,7 +363,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 scaler = (
                     MinMaxScaler(feature_range=(0, 1), copy=True)
                     .fit(trimmed_data.values.reshape(-1, 1)))
-                rescaled_data = scaler.transform(trimmed_data.values.reshape(-1, 1))
+                rescaled_data = scaler.transform(
+                    trimmed_data.values.reshape(-1, 1)
+                )
                 rescaled_data = pd.DataFrame(
                     data=rescaled_data, index=trimmed_data.index
                 ).rename(columns={0: channel})
@@ -349,7 +378,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 total_high_idxs.extend(high_drop_idxs)
 
             # melt trimmed and rescaled dfTest
-            dfTest_channel = dfTest[['Sample', 'Condition', 'Area'] + [channel]].copy()
+            dfTest_channel = dfTest[
+                ['Sample', 'Condition', 'Area'] + [channel]].copy()
             hist_facet = (
                 dfTest_channel
                 .sample(frac=1.0)
@@ -365,7 +395,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             hist_facet['Sample'] = hist_facet['Sample'].astype('str')
 
             # create column for facet labels
-            hist_facet['for_plot'] = hist_facet['Sample'] + ', ' + hist_facet['Condition']
+            hist_facet['for_plot'] = (
+                hist_facet['Sample'] + ', ' + hist_facet['Condition']
+            )
             
             sns.set_style('white')
 
@@ -384,20 +416,29 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             # use scatter plots for plotting
             else:
-                g_trimmed.map(plt.scatter, 'signal', 'Area', s=0.05, linewidths=0.0, color='k')
+                g_trimmed.map(
+                    plt.scatter, 'signal', 'Area', s=0.05, 
+                    linewidths=0.0, color='k'
+                )
 
             g_trimmed.set_titles(
                 col_template="{col_name}", fontweight='bold',
                 size=np.log(650 / len(g_trimmed.axes.flatten())), pad=0.0)
 
             for ax in g_trimmed.axes.flatten():
-                ax.tick_params(axis='both', which='major', labelsize=5.0, pad=-2)
+                ax.tick_params(
+                    axis='both', which='major', labelsize=5.0, pad=-2
+                )
 
                 ax.set_xticks([])
                 ax.set_yticks([])
 
-                ax.xaxis.label.set_size(np.log(750 / len(g_trimmed.axes.flatten())))
-                ax.yaxis.label.set_size(np.log(750 / len(g_trimmed.axes.flatten())))
+                ax.xaxis.label.set_size(
+                    np.log(750 / len(g_trimmed.axes.flatten()))
+                )
+                ax.yaxis.label.set_size(
+                    np.log(750 / len(g_trimmed.axes.flatten()))
+                )
 
                 ax.xaxis.labelpad = 1.0
                 ax.yaxis.labelpad = 1.0
@@ -412,12 +453,15 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 # linear interpol. (between 1 and 30 rows at 5 plots/row)
                 # for top/bottom subplot adjustment
                 pad = (
-                    1 + (math.ceil(len(g_trimmed.axes.flatten()) / col_wrap) - 1) *
+                    1 + (math.ceil(len(g_trimmed.axes.flatten()) / col_wrap) 
+                         - 1) *
                     (10 - 1) / (30 - 1)
                 )
 
                 plt.tight_layout(pad=pad)
-                plt.subplots_adjust(left=0.04, right=0.98, hspace=0.8, wspace=0.3)
+                plt.subplots_adjust(
+                    left=0.04, right=0.98, hspace=0.8, wspace=0.3
+                )
             
             # remove old widgets from plot_layout
             count = plot_layout.count()
@@ -433,7 +477,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             trimmed_canvas = FigureCanvas(g_trimmed.fig)
 
             # add navigation tool bar and figure canvas to widget
-            plot_layout.addWidget(NavigationToolbar(trimmed_canvas, plot_widget))
+            plot_layout.addWidget(
+                NavigationToolbar(trimmed_canvas, plot_widget)
+            )
             plot_layout.addWidget(trimmed_canvas)
             
             # add sample_selector and next_channel button to plot_layout 
@@ -446,7 +492,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 'lowerCutoff must be less than upperCutoff (red).'
             )
             pass
-    ##########################################################################################
+    ###########################################################################
     
     @sample_selector.called.connect
     def view_points(value: str):
@@ -464,8 +510,12 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             # add DNA1 image to Napari viewer
             file_path = get_filepath(self, check, sample, 'TIF')
-            channel_number = marker_channel_number(self, markers, self.counterstainChannel)
-            dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
+            channel_number = marker_channel_number(
+                self, markers, self.counterstainChannel
+            )
+            dna, min, max = single_channel_pyramid(
+                file_path, channel=channel_number
+            )
             viewer.add_image(
                 dna, rgb=False, opacity=1.0, name=self.counterstainChannel,
                 contrast_limits=(min, max)
@@ -474,7 +524,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             # read antibody channel
             file_path = get_filepath(self, check, sample, 'TIF')
             channel_number = marker_channel_number(self, markers, ch)
-            channel, min, max = single_channel_pyramid(file_path, channel=channel_number)
+            channel, min, max = single_channel_pyramid(
+                file_path, channel=channel_number
+            )
             viewer.add_image(
                 channel, rgb=False, blending='additive', colormap='green',
                 visible=False, name=ch, contrast_limits=(min, max)
@@ -484,8 +536,9 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             file_path = get_filepath(self, check, sample, 'SEG')
             seg, min, max = single_channel_pyramid(file_path, channel=0)
             viewer.add_image(
-                seg, rgb=False, blending='additive', opacity=1.0, colormap='gray',
-                visible=False, name='segmentation', contrast_limits=(min, max)
+                seg, rgb=False, blending='additive', opacity=1.0,
+                colormap='gray', visible=False, name='segmentation',
+                contrast_limits=(min, max)
             )
 
             # grab centroids of low signal intensity outliers
@@ -502,31 +555,38 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             viewer.add_points(
                 low_centroids, name='low centroids', properties=None,
-                face_color='magenta', border_color='k', border_width=0.0, size=8.0)
+                face_color='magenta', border_color='k',
+                border_width=0.0, size=8.0)
 
             viewer.add_points(
                 high_centroids, name='high centroids', properties=None,
-                face_color='cyan', border_color='k', border_width=0.0, size=8.0)
+                face_color='cyan', border_color='k', 
+                border_width=0.0, size=8.0
+            )
 
-            napari.utils.notifications.show_info(f'Viewing outliers in sample {sample}')
+            napari.utils.notifications.show_info(
+                f'Viewing outliers in sample {sample}'
+            )
         else:
             print()
-            napari.utils.notifications.show_warning('Sample name not in filtered data.')
+            napari.utils.notifications.show_warning(
+                'Sample name not in filtered data.'
+            )
             pass
 
     percentile_selector.native.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
+        QtWidgets.QSizePolicy.Preferred,
         QtWidgets.QSizePolicy.Fixed,
     )
 
     if initial_callback:  
         percentiles_layout.addWidget(percentile_selector.native)
     
-    ##########################################################################################
-   
+    ###########################################################################
     @magicgui(
-        layout='vertical', call_button='Enter', channel={'label': 'Re-start from Marker'}
-    )
+            layout='vertical', call_button='Enter',
+            channel={'choices': abx_channels, 'label': 'Re-Start from Marker'}
+        )
     def channel_selector(channel: str):
 
         return channel
@@ -562,11 +622,13 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 )
                 
                 if subset_dict:
-                    for ch, (lower_cutoff, upper_cutoff) in subset_dict.items():
+                    for ch, (lower_cutoff, 
+                             upper_cutoff) in subset_dict.items():
                         
                         for sample in natsorted(dfTrim['Sample'].unique()):
 
-                            sample_channel_data = dfTrim[dfTrim['Sample'] == sample][ch]
+                            sample_channel_data = dfTrim[
+                                dfTrim['Sample'] == sample][ch]
 
                             # drop cells < lower cutoff and > than upper cutoff
                             indices_to_drop = []
@@ -584,12 +646,13 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                                         qc_report['pruneOutliers'][ch][1])])
 
                             dfTrim.drop(
-                                labels=set(indices_to_drop), axis=0, inplace=True,
-                                errors='raise'
+                                labels=set(indices_to_drop), axis=0,
+                                inplace=True, errors='raise'
                             )
 
                             # rescale pruned antibody signal intensities
-                            trimmed_data = dfTrim[dfTrim['Sample'] == sample][ch]
+                            trimmed_data = dfTrim[
+                                dfTrim['Sample'] == sample][ch]
 
                             scaler = (
                                 MinMaxScaler(feature_range=(0, 1), copy=True)
@@ -607,7 +670,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                     
                     # rescale first channel's signal intensities 0-1 per sample
                     for sample in natsorted(dfTrim['Sample'].unique()):
-                        raw_channel_data = dfTrim[dfTrim['Sample'] == sample][channel]
+                        raw_channel_data = dfTrim[
+                            dfTrim['Sample'] == sample][channel]
                         scaler = (
                             MinMaxScaler(feature_range=(0, 1), copy=True)
                             .fit(raw_channel_data.values.reshape(-1, 1)))
@@ -639,12 +703,15 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
                 )
 
         else:
-            napari.utils.notifications.show_warning('Marker name not in filtered data.')
+            napari.utils.notifications.show_warning(
+                'Marker name not in filtered data.'
+            )
 
-    ##########################################################################################
+    ###########################################################################
     
     # delete and re-add percentile_selector to percentiles_layout if it exists 
-    # so percentiles_widget appears above plot_widget in Napari and has (0, 100) defaults
+    # so percentiles_widget appears above plot_widget in Napari
+    # and has (0, 100) defaults
     if not initial_callback:
         
         count = percentiles_layout.count()
@@ -662,7 +729,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
     # dock (or re-dock) plot_widget to Napari window 
     viewer.window.add_dock_widget(
-        plot_widget, name=f'{channel} Intensity vs. Segmentation Area', area='right'
+        plot_widget, name=f'{channel} Intensity vs. Segmentation Area',
+        area='right'
     )
 
     # remove and re-dock arbitrary_widget if it exists 
@@ -694,7 +762,8 @@ def pruneOutliers(data, self, args):
     if not os.path.exists(pruning_dir):
         os.mkdir(pruning_dir)
 
-    # create directory to save raw and trimmed intensity distributions if it doesn't already exist
+    # create directory to save raw and trimmed intensity distributions
+    # if it doesn't already exist
     plot_dir = os.path.join(pruning_dir, 'plots')
     if not os.path.exists(plot_dir):
         os.mkdir(plot_dir)
@@ -707,18 +776,24 @@ def pruneOutliers(data, self, args):
         if qc_report is None:
             qc_report = {}
             reload_report = True
-        if 'pruneOutliers' not in qc_report or qc_report['pruneOutliers'] is None:
+        if ('pruneOutliers' not in qc_report or 
+                qc_report['pruneOutliers'] is None):
             qc_report['pruneOutliers'] = {}
             reload_report = True
         if reload_report:
-            qc_report_sorted = sort_qc_report(qc_report, module='pruneOutliers', order=None)
+            qc_report_sorted = sort_qc_report(
+                qc_report, module='pruneOutliers', order=None
+            )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
             qc_report = yaml.safe_load(open(report_path))
     except:
         logger.info(
-            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
-            'from aggregateData module to initialize QC report.'
+            'Aborting; QC report missing from CyLinter output directory. '
+            'Re-start pipeline from aggregateData module to '
+            'initialize QC report.'
         )
         sys.exit()
     
@@ -757,7 +832,8 @@ def pruneOutliers(data, self, args):
     for ch in abx_channels:
         try:  
             lowerCutoff, upperCutoff = qc_report['pruneOutliers'][ch]
-            if isinstance(lowerCutoff, float) and isinstance(upperCutoff, float):
+            if (isinstance(lowerCutoff, float) and 
+                    isinstance(upperCutoff, float)):
                 valid_keys.append(ch)
         except: 
             pass
@@ -767,14 +843,17 @@ def pruneOutliers(data, self, args):
             first_missing_key = ch
             marker_index = abx_channels.index(first_missing_key) + 1
             
-            # trim and rescale values of all pruneOutliers channels in QC report
-            # whose index is less than that of first missing channel
+            # trim and rescale values of all pruneOutliers channels
+            # in QC report whose index is less than that of 
+            # first missing channel
             for ch in abx_channels:
-                if abx_channels.index(ch) < abx_channels.index(first_missing_key):
+                if abx_channels.index(ch) < abx_channels.index(
+                     first_missing_key):
 
                     for sample in natsorted(dfTrim['Sample'].unique()):
 
-                        sample_channel_data = dfTrim[dfTrim['Sample'] == sample][ch]
+                        sample_channel_data = dfTrim[
+                            dfTrim['Sample'] == sample][ch]
 
                         # drop cells < lower cutoff and > than upper cutoff
                         indices_to_drop = []
@@ -814,15 +893,16 @@ def pruneOutliers(data, self, args):
             dfTrim.to_parquet(os.path.join(pruning_dir, 'dfTrim.parquet'))
 
             viewer.window.add_dock_widget(
-                percentiles_widget, name='Select Percentile Cutoffs', area='right'
+                percentiles_widget, name='Select Percentile Cutoffs',
+                area='right'
             )
             
             initial_callback = True
             callback(
-                self, viewer, first_missing_key, dfTrim, data, initial_callback,
-                percentiles_widget, percentiles_layout, arbitrary_widget,
-                arbitrary_layout, plot_widget, plot_layout, pruning_dir,
-                plot_dir, qc_report, report_path
+                self, viewer, first_missing_key, dfTrim, data, 
+                initial_callback, percentiles_widget, percentiles_layout,
+                arbitrary_widget, arbitrary_layout, plot_widget, plot_layout,
+                pruning_dir, plot_dir, qc_report, report_path
             )
 
             viewer.window.add_dock_widget(
@@ -835,14 +915,16 @@ def pruneOutliers(data, self, args):
             napari.run()
 
             break
-            # avoids, AttributeError: 'Window' object has no attribute '_qt_window'
+            # avoids, AttributeError: 'Window' object has 
+            # no attribute '_qt_window'
 
-    ##############################################################################################
+    ###########################################################################
     # prune outliers and rescale 0-1 per channel per sample
 
     for channel in abx_channels:
 
-        # check that QC report entires are valid (i.e. have not been edited, deleted, etc.)
+        # check that QC report entires are valid
+        # (i.e. have not been edited, deleted, etc.)
         try:
             # test for missing channel keys
             qc_report['pruneOutliers'][channel]
@@ -850,13 +932,15 @@ def pruneOutliers(data, self, args):
             # test for missing thresholds 
             lowerCutoff, upperCutoff = qc_report['pruneOutliers'][channel]
             
-            # test for None-type thresholds, occurs when value is deleted in QC report 
-            # but value placeholder remains (i.e. hyphans in cylinter_report.yml file)
+            # test for None-type thresholds, occurs when value is 
+            # deleted in QC report but value placeholder remains
+            # (i.e. hyphans in cylinter_report.yml file)
             if lowerCutoff is None or upperCutoff is None:
                 print()
                 logger.info(
-                    f'Aborting; QC report metadata for channel {channel} is invalid. '
-                    'Removing this key from QC report; please re-run pruneOutliers module '
+                    f'Aborting; QC report metadata for channel {channel} '
+                    'is invalid. Removing this key from QC report; '
+                    'please re-run pruneOutliers module '
                     'to re-curate thresholds for this channel.'
                 )
                 del qc_report['pruneOutliers'][channel]
@@ -867,8 +951,9 @@ def pruneOutliers(data, self, args):
         except (TypeError, KeyError, ValueError):
             print()
             logger.info(
-                f'Aborting; QC report metadata for channel {channel} is invalid. '
-                'Removing this key from QC report; please re-run pruneOutliers module '
+                f'Aborting; QC report metadata for channel {channel} '
+                'is invalid. Removing this key from QC report; '
+                'please re-run pruneOutliers module '
                 'to re-curate thresholds for this channel.'
             )
             del qc_report['pruneOutliers'][channel]
@@ -904,7 +989,8 @@ def pruneOutliers(data, self, args):
                         sample_channel_data, upperCutoff)])
 
             data.drop(
-                labels=set(indices_to_drop), axis=0, inplace=True, errors='raise'
+                labels=set(indices_to_drop), axis=0, 
+                inplace=True, errors='raise'
             )
 
             # rescale trimmed antibody signal intensities
@@ -921,8 +1007,9 @@ def pruneOutliers(data, self, args):
 
             data.update(rescaled_data)
 
-    ##############################################################################################
-    # prune outliers and rescale 0-1 per channel (scale is across samples in this case)
+    ###########################################################################
+    # prune outliers and rescale 0-1 per channel 
+    # (scale is across samples in this case)
     
     # for k, v in cutoffs_dict.items():
     #     print(f'Applying percentile cutoffs to the {k} channel.')

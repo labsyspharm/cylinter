@@ -48,8 +48,8 @@ def curateThumbnails(data, self, args):
     except FileNotFoundError:
         print()
         logger.info(
-            'Aborting; QC report not found. Ensure cylinter_report.yml is stored at '
-            'top-level of CyLinter output file or re-start pipeline '
+            'Aborting; QC report not found. Ensure cylinter_report.yml is '
+            'stored at top-level of CyLinter output file or re-start pipeline '
             'to start filtering data.'
         )
         sys.exit()
@@ -64,7 +64,8 @@ def curateThumbnails(data, self, args):
                 
                 # drop antibody channel exclusions for clustering
                 abx_channels = [
-                    i for i in abx_channels if i not in self.channelExclusionsClustering
+                    i for i in abx_channels if i 
+                    not in self.channelExclusionsClustering
                 ]
 
                 # drop unclustered cells from data
@@ -74,7 +75,8 @@ def curateThumbnails(data, self, args):
                 
                 # drop antibody channel exclusions for gating
                 abx_channels = [
-                    i for i in abx_channels if i not in self.channelExclusionsGating
+                    i for i in abx_channels if i 
+                    not in self.channelExclusionsGating
                 ]
 
                 # drop unclassified cells from data
@@ -82,7 +84,8 @@ def curateThumbnails(data, self, args):
 
             # create thumbnails directory
             thumbnails_dir = os.path.join(
-                self.outDir, 'clustering', f'{self.dimensionEmbedding}d', 'thumbnails', type
+                self.outDir, 'clustering', f'{self.dimensionEmbedding}d', 
+                'thumbnails', type
             )
             if not os.path.exists(thumbnails_dir):
                 os.makedirs(thumbnails_dir)
@@ -92,12 +95,13 @@ def curateThumbnails(data, self, args):
             if not os.path.exists(zarr_dir):
                 os.makedirs(zarr_dir)
 
-            ######################################################################################
+            ###################################################################
 
             # read the indices of clusters that have already been run
             if os.path.exists(os.path.join(thumbnails_dir, 'completed.txt')):
 
-                with open(os.path.join(thumbnails_dir, 'completed.txt'), 'r') as f:
+                with open(
+                  os.path.join(thumbnails_dir, 'completed.txt'), 'r') as f:
                     completed = f.readlines()
                     completed = ast.literal_eval(completed[0])
 
@@ -117,14 +121,18 @@ def curateThumbnails(data, self, args):
                 # to while looping over populations
                 completed = list(completed)
 
-                logger.info(f'{len(to_run)} {type} image gallery(s) to generate.')
+                logger.info(
+                    f'{len(to_run)} {type} image gallery(s) to generate.'
+                )
 
             else:
                 # create a list of populations to run
                 completed = []
                 to_run = natsorted(df[type].unique())
 
-                logger.info(f'{len(to_run)} {type} image gallery(s) to create.')
+                logger.info(
+                    f'{len(to_run)} {type} image gallery(s) to create.'
+                )
 
             ###################################################################
             for pop in to_run:
@@ -136,7 +144,8 @@ def curateThumbnails(data, self, args):
 
                     # identify top expressed markers
                     hi_markers = cluster_expression(
-                        df=df, markers=abx_channels, cluster=pop, num_proteins=3,
+                        df=df, markers=abx_channels, cluster=pop,
+                        num_proteins=3,
                         clus_dim=self.dimensionEmbedding
                     )
                 elif type == 'class':
@@ -151,24 +160,30 @@ def curateThumbnails(data, self, args):
                 # get marker channel numbers from markers.csv
                 channel_nums = []
                 for marker in markers_to_show:
-                    channel_number = marker_channel_number(self, markers, marker)
-                    channel_nums.append(str(channel_number + 1))  # cellcutter 1-based indexing 
+                    channel_number = marker_channel_number(
+                        self, markers, marker
+                    )
+                    # cellcutter 1-based indexing
+                    channel_nums.append(str(channel_number + 1))   
 
                 # create marker LUT
                 color_dict = {}
                 for i, j in zip(
                     markers_to_show,
-                    [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0),
-                     (1.0, 1.0, 0), (1.0, 0.0, 1.0), (0.0, 1.0, 1.0), (1.0, 0.5, 0.0),
-                     (0.5, 0.0, 1.0), (0.0, 0.5, 1.0), (0.5, 1.0, 0.0), (1.0, 0.0, 0.5),
-                     (0.0, 1.0, 0.5), (0.5, 0.5, 0.0), (0.0, 0.5, 0.5), (0.5, 0.0, 0.0)]):
+                    [(0.5, 0.5, 0.5), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0),
+                     (0.0, 0.0, 1.0), (1.0, 1.0, 0), (1.0, 0.0, 1.0),
+                     (0.0, 1.0, 1.0), (1.0, 0.5, 0.0), (0.5, 0.0, 1.0),
+                     (0.0, 0.5, 1.0), (0.5, 1.0, 0.0), (1.0, 0.0, 0.5),
+                     (0.0, 1.0, 0.5), (0.5, 0.5, 0.0), (0.0, 0.5, 0.5),
+                     (0.5, 0.0, 0.0)]):
 
                     color_dict[i] = j
 
                 for sample in [i for i in df['Sample'].unique()]:
 
                     # isolate data for current cluster and sample
-                    cellcutter_input = df[(df[type] == pop) & (df['Sample'] == sample)]
+                    cellcutter_input = df[
+                        (df[type] == pop) & (df['Sample'] == sample)]
 
                     if len(cellcutter_input) == 0:
                         continue
@@ -188,7 +203,8 @@ def curateThumbnails(data, self, args):
 
                     # write cellcutter_input to disk
                     cellcutter_input.to_csv(
-                        os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                        os.path.join(thumbnails_dir, 'csv_data.csv'),
+                        index=False
                     )
 
                     print()
@@ -220,7 +236,8 @@ def curateThumbnails(data, self, args):
                          f"{thumbnails_dir}/csv_data.csv",
                          f"{zarr_dir}/{type}_{pop}_sample_{sample}"
                          f"_win{self.windowSize}.zarr",
-                         "--channels"] + channel_nums
+                         "--channels"] + channel_nums,
+                        check=True
                     )
 
                     # read multi-channel zarr file created by cellcutter
@@ -240,7 +257,8 @@ def curateThumbnails(data, self, args):
 
                         # write cellcutter_input to disk
                         cellcutter_input.to_csv(
-                            os.path.join(thumbnails_dir, 'csv_data.csv'), index=False
+                            os.path.join(thumbnails_dir, 'csv_data.csv'), 
+                            index=False
                         )
 
                         print()
@@ -263,8 +281,12 @@ def curateThumbnails(data, self, args):
                             )
 
                         # run cellcutter on segmentation outlines image
-                        seg_file_path = get_filepath(self, check, sample, 'SEG')
-                        mask_file_path = get_filepath(self, check, sample, 'MASK')
+                        seg_file_path = get_filepath(
+                            self, check, sample, 'SEG'
+                        )
+                        mask_file_path = get_filepath(
+                            self, check, sample, 'MASK'
+                        )
                         run(
                             ["cut_cells", "--force", "--window-size",
                              f"{self.windowSize}",
@@ -275,7 +297,8 @@ def curateThumbnails(data, self, args):
                              f"{thumbnails_dir}/csv_data.csv",
                              f"{zarr_dir}/{type}_{pop}_sample_{sample}"
                              f"_win{self.windowSize}_seg.zarr",
-                             "--channels", "1"]
+                             "--channels", "1"],
+                            check=True
                         )
 
                         # read segmentation outlines zarr file
@@ -286,7 +309,8 @@ def curateThumbnails(data, self, args):
                         )
                         z_seg = zarr.open(z_path_seg, mode='r')
 
-                    if os.path.exists(os.path.join(thumbnails_dir, 'csv_data.csv')):
+                    if os.path.exists(
+                      os.path.join(thumbnails_dir, 'csv_data.csv')):
                         # remove cellcutter_input file after cells are cut
                         os.remove(os.path.join(thumbnails_dir, 'csv_data.csv'))
 
@@ -317,12 +341,15 @@ def curateThumbnails(data, self, args):
                             elif z_img.dtype == 'uint8':
                                 divisor = 255
                             
-                            # apply contrast settings if they exist in QC report
+                            # apply contrast settings if in QC report
                             try:  
-                                slice -= (qc_report['setContrast'][marker][0] / divisor)
+                                slice -= (qc_report['setContrast'][marker][0] /
+                                          divisor)
                                 slice /= (
-                                    (qc_report['setContrast'][marker][1] / divisor) -
-                                    (qc_report['setContrast'][marker][0] / divisor)
+                                    (qc_report[
+                                        'setContrast'][marker][1] / divisor) -
+                                    (qc_report[
+                                        'setContrast'][marker][0] / divisor)
                                 )
                             except:
                                 pass
@@ -355,7 +382,9 @@ def curateThumbnails(data, self, args):
                              'example': int(cell + 1),
                              'image': blank_img}, orient='index').T
                         
-                        long_table = pd.concat([long_table, append_df], axis=0, ignore_index=True)
+                        long_table = pd.concat(
+                            [long_table, append_df], axis=0, ignore_index=True
+                        )
 
                 # plot facet grid of thumbnails for current cluster
                 if not long_table.empty:
@@ -363,12 +392,14 @@ def curateThumbnails(data, self, args):
 
                     g = sns.FacetGrid(
                         long_table, row='sample', col='example',
-                        sharex=False, sharey=False, gridspec_kws={'hspace': 0.1, 'wspace': 0.1}
+                        sharex=False, sharey=False,
+                        gridspec_kws={'hspace': 0.1, 'wspace': 0.1}
                     )
 
                     g.map(
                         lambda image, **kwargs: (
-                            plt.imshow(np.clip(image.values[0], 0, 1)), plt.grid(False)), 'image'
+                            plt.imshow(np.clip(image.values[0], 0, 1)), 
+                            plt.grid(False)), 'image'
                     )  # image clipping prevents matplotlib warning
 
                     for ax in g.axes.flatten():
@@ -390,7 +421,8 @@ def curateThumbnails(data, self, args):
                     ax.legend(
                         custom_lines,
                         list(color_dict.keys()), prop={'size': 12},
-                        bbox_to_anchor=(1.05, len(long_table['sample'].unique()) + 0.3),
+                        bbox_to_anchor=(
+                            1.05, len(long_table['sample'].unique()) + 0.3),
                         loc='upper left'
                     )
 
@@ -405,7 +437,8 @@ def curateThumbnails(data, self, args):
                 completed.append(pop)
 
                 # overwrite completed_clusters.txt file
-                with open(os.path.join(thumbnails_dir, 'completed.txt'), 'w') as f:
+                with open(
+                  os.path.join(thumbnails_dir, 'completed.txt'), 'w') as f:
                     f.write(str(completed))
 
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)

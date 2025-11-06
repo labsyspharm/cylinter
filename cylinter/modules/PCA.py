@@ -1,5 +1,6 @@
 import os
 import logging
+import warnings
 
 import math
 import numpy as np
@@ -17,7 +18,10 @@ import matplotlib.patheffects as path_effects
 
 from sklearn.decomposition import PCA as PCA_MODULE
 
-from ..utils import input_check, read_markers, categorical_cmap, reorganize_dfcolumns
+from ..utils import (
+    input_check, read_markers, categorical_cmap, 
+    reorganize_dfcolumns
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +134,8 @@ def PCA(data, self, args):
 
     if n_components > 1:
         logging.info(
-            "Performing Horn's parallel analysis to determine number of non-random PCs..."
+            "Performing Horn's parallel analysis to determine number "
+            "of non-random PCs..."
         )
 
         for iteration in range(1, n_components + 1):
@@ -146,9 +151,16 @@ def PCA(data, self, args):
             # mean-center data (axis=0)
             for c in shuffled.columns:
                 shuffled[c] = shuffled[c] - shuffled[c].mean()
-
-            # fit PCA parameters to data
-            pca.fit_transform(shuffled)
+            
+            with warnings.catch_warnings():  # block decomposition warnings
+                warnings.filterwarnings(
+                    "ignore", 
+                    category=RuntimeWarning, 
+                    module="sklearn.decomposition"
+                )
+            
+                # fit PCA parameters to data
+                pca.fit_transform(shuffled)
 
             evr[iteration] = pca.explained_variance_ratio_
 
@@ -162,8 +174,15 @@ def PCA(data, self, args):
         for c in unshuffled.columns:
             unshuffled[c] = unshuffled[c] - unshuffled[c].mean()
 
-        # apply PCA parameters to unshuffled data
-        projected = pca.fit_transform(unshuffled)
+        with warnings.catch_warnings():  # block decomposition warnings
+            warnings.filterwarnings(
+                "ignore", 
+                category=RuntimeWarning, 
+                module="sklearn.decomposition"
+            )
+
+            # apply PCA parameters to unshuffled data
+            projected = pca.fit_transform(unshuffled)
 
         sns.set_style('whitegrid')
         fig1, ax1 = plt.subplots()
@@ -189,8 +208,13 @@ def PCA(data, self, args):
                    label='shuffled', markeredgewidth=0.7,
                    markersize=5.0, linewidth=5)
         )
-        ax1.legend(handles=legend_handles, prop={'size': 10.0}, bbox_to_anchor=[0.95, 1.0])
-        fig1.savefig(os.path.join(pca_dir, 'horns_analysis.pdf'), bbox_inches='tight')
+        ax1.legend(
+            handles=legend_handles, prop={'size': 10.0},
+            bbox_to_anchor=[0.95, 1.0]
+        )
+        fig1.savefig(
+            os.path.join(pca_dir, 'horns_analysis.pdf'), bbox_inches='tight'
+        )
         plt.close(fig1)
 
         ###################################################################
@@ -218,7 +242,8 @@ def PCA(data, self, args):
         ax2.tick_params(axis='both', which='major', labelsize=7.0)
 
         fig2.savefig(
-            os.path.join(pca_dir, 'pca_cells.png'), dpi=600, bbox_inches='tight'
+            os.path.join(pca_dir, 'pca_cells.png'),
+            dpi=600, bbox_inches='tight'
         )
         plt.close(fig2)
 
@@ -230,7 +255,8 @@ def PCA(data, self, args):
 
             # compute median antibody expression per sample
             # samples (rows) x features (columns)
-            medians = data.groupby(['Sample']).median(numeric_only=True)[abx_channels]
+            medians = data.groupby(
+                ['Sample']).median(numeric_only=True)[abx_channels]
 
             # drop sample exclusions for PCA
             medians = medians[~medians.index.isin(self.samplesToRemovePCA)]
@@ -297,7 +323,8 @@ def PCA(data, self, args):
 
             # plot sample PCA scores
             sns.set_style('white')
-            for e, (condition_name, sample_scores) in enumerate(scatter_input.iterrows()):
+            for e, (condition_name, sample_scores) in enumerate(
+              scatter_input.iterrows()):
 
                 point = pd.DataFrame(sample_scores).T
 
@@ -319,16 +346,22 @@ def PCA(data, self, args):
             plt.setp(g.spines.values(), color='k', lw=0.5)
 
             # assign row index (condition abbreviations) as column
-            scatter_input = scatter_input.reset_index().rename(columns={'index': 'abbreviation'})
+            scatter_input = scatter_input.reset_index().rename(
+                columns={'index': 'abbreviation'}
+            )
 
             # annotate data points
             if self.labelPoints is True:
 
                 # generate squareform distance matrix
-                sq = squareform(pdist(scatter_input[['PC1', 'PC2']], metric='euclidean'))
+                sq = squareform(
+                    pdist(scatter_input[['PC1', 'PC2']], metric='euclidean')
+                )
 
                 # add numerical row and column indices
-                df = pd.DataFrame(sq, index=scatter_input.index, columns=scatter_input.index)
+                df = pd.DataFrame(
+                    sq, index=scatter_input.index, columns=scatter_input.index
+                )
 
                 # isolate values from upper triangle
                 df1 = df.where(np.triu(np.ones(df.shape)).astype('bool'))
@@ -393,7 +426,8 @@ def PCA(data, self, args):
                                 # get set of all indices
                                 # neighboring data point e
                                 neighbors = set(
-                                    list(df6['sample_id1']) + list(df6['sample_id2'])
+                                    list(df6['sample_id1']) + 
+                                    list(df6['sample_id2'])
                                 )
 
                                 # add neighboring indices to overall
@@ -403,7 +437,9 @@ def PCA(data, self, args):
                                 # slice scatter_input to get samples
                                 # proximal to data point e
 
-                                neighbors_df = scatter_input.loc[list(neighbors)]
+                                neighbors_df = scatter_input.loc[
+                                    list(neighbors)
+                                ]
 
                                 # generate centroid between samples
                                 # neighboring data point e
@@ -439,7 +475,8 @@ def PCA(data, self, args):
                                           fc='yellow', alpha=0.0))
 
                             text.set_path_effects(
-                                [path_effects.Stroke(linewidth=0.75, foreground='k'),
+                                [path_effects.Stroke(linewidth=0.75,
+                                                     foreground='k'),
                                  path_effects.Normal()]
                             )
 

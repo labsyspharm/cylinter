@@ -62,14 +62,18 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
 
         # read DNA1 and add to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
-        channel_number = marker_channel_number(self, markers, self.counterstainChannel)
-        dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
+        channel_number = marker_channel_number(
+                self, markers, self.counterstainChannel
+        )
+        dna, min, max = single_channel_pyramid(
+            file_path, channel=channel_number
+        )
         viewer.add_image(
             dna, rgb=False, blending='additive',
             name=self.counterstainChannel, contrast_limits=(min, max)
         )
         
-        # remove hist_widget and layout attributes from Napari viewer if they exist
+        # remove hist_widget and layout attributes from Napari if they exist
         if not initial_callback:
             viewer.window.remove_dock_widget(hist_widget)
 
@@ -87,7 +91,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         hist_layout.addWidget(NavigationToolbar(canvas, hist_widget))
         hist_layout.addWidget(canvas)
 
-        ###########################################################################
+        #######################################################################
         # plot histogram
         
         sns.set_style('whitegrid')
@@ -107,10 +111,11 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         group = data[data['Sample'] == sample].copy()
 
         # avoiding log(0) errors
-        group[self.counterstainChannel] = group[self.counterstainChannel] + 0.001  
+        group[self.counterstainChannel] = group[self.counterstainChannel]+0.001  
 
         n, bins, patches = ax.hist(
-            np.log(group[self.counterstainChannel]), bins=self.numBinsIntensity,
+            np.log(group[self.counterstainChannel]),
+            bins=self.numBinsIntensity,
             density=False, color='grey', ec='none',
             alpha=0.75, histtype='stepfilled',
             range=None, label='before'
@@ -121,15 +126,20 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         
         # add sliders to plot
         axcolor = 'lightgoldenrodyellow'
-        axLowerCutoff = fig.add_axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
-        axUpperCutoff = fig.add_axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+        axLowerCutoff = fig.add_axes(
+            [0.25, 0.15, 0.65, 0.03], facecolor=axcolor
+        )
+        axUpperCutoff = fig.add_axes(
+            [0.25, 0.1, 0.65, 0.03], facecolor=axcolor
+        )
 
         # specify data range
         rnge = [bins.min(), bins.max()]
 
-        # convert histogram data into 2D numpy array with 1 column to pass to GMM
-        gmm_data = np.log(group[self.counterstainChannel]).values.reshape(-1, 1)
-        
+        # convert hist data into 2D numpy array with 1 column to pass to GMM
+        gmm_data = np.log(
+            group[self.counterstainChannel]).values.reshape(-1, 1)
+
         # compute GMM
         comp_lower_percentile, comp_upper_percentile = compute_gmm(
             data=gmm_data, x_min=rnge[0], x_max=rnge[1], ax=ax2
@@ -138,11 +148,13 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         try:
             lowerCutoff, upperCutoff = qc_report['intensityFilter'][sample]
             if lowerCutoff is None or upperCutoff is None:
-                lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
+                lowerCutoff, upperCutoff = (comp_lower_percentile, 
+                                            comp_upper_percentile)
 
         except (TypeError, KeyError, ValueError):
             # use GMM to assign default lower and upper thresholds
-            lowerCutoff, upperCutoff = (comp_lower_percentile, comp_upper_percentile)
+            lowerCutoff, upperCutoff = (comp_lower_percentile,
+                                        comp_upper_percentile)
 
         # add slider functionality
         sLower = Slider(
@@ -184,7 +196,9 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         
         # add button to show selected centroids in Napari viewer
         button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
-        button = Button(button_ax, 'Plot Points', color=axcolor, hovercolor='0.975')
+        button = Button(
+            button_ax, 'Plot Points', color=axcolor, hovercolor='0.975'
+        )
         button.label.set_fontsize(11)
 
         def apply_cutoffs(event):
@@ -203,7 +217,8 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
 
             # isolate cycle 1 DNA intensity values and assign
             # as quantitative point properties
-            dna_intensity = np.log(group_filtered[self.counterstainChannel]).values
+            dna_intensity = np.log(
+                group_filtered[self.counterstainChannel]).values
             point_properties = {'dna_intensity': dna_intensity}
 
             # remove existing centroids and
@@ -234,10 +249,11 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         if not initial_callback:
             viewer.window.remove_dock_widget(selection_widget)
             viewer.window.add_dock_widget(
-                selection_widget, name='Arbitrary Sample Selector', area='right'
+                selection_widget, name='Sample Selector',
+                area='right'
             )
         
-        ###########################################################################
+        #######################################################################
         
         @magicgui(
             layout='horizontal',
@@ -254,12 +270,18 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
             if lowerCutoff <= upperCutoff:
 
                 # store cutoffs in QC report
-                qc_report['intensityFilter'][sample] = [float(lowerCutoff), float(upperCutoff)]
+                qc_report['intensityFilter'][sample] = [
+                    float(lowerCutoff), float(upperCutoff)
+                ]
 
                 # sort and dump updated qc_report to YAML file
-                qc_report_sorted = sort_qc_report(qc_report, module='intensityFilter', order=None)
+                qc_report_sorted = sort_qc_report(
+                    qc_report, module='intensityFilter', order=None
+                )
                 f = open(report_path, 'w')
-                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                yaml.dump(
+                    qc_report_sorted, f, sort_keys=False, allow_unicode=False
+                )
                 
                 napari.utils.notifications.show_info(
                     f'Sliders updated to ({lowerCutoff:.3f}, {upperCutoff:.3f})'
@@ -270,13 +292,14 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                     if arbitrary_selection_toggle:
                         sample_index -= 1 
 
-                    sample = samples_to_run[sample_index]
-                    
+                    next_sample_name = samples_to_run[sample_index]
+
                     initial_callback = False
                     callback(
-                        self, viewer, sample, samples_to_run, data, initial_callback,
-                        selection_widget, selection_layout, hist_widget, hist_layout,
-                        intensity_dir, qc_report, report_path
+                        self, viewer, next_sample_name, samples_to_run, data,
+                        initial_callback, selection_widget, selection_layout,
+                        hist_widget, hist_layout, intensity_dir, qc_report,
+                        report_path
                     )
 
                     sample_index += 1
@@ -287,7 +310,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                     print()
                     logger.info('Thresholding complete!')
                     QTimer().singleShot(0, viewer.close)
-
+            
             else:
                 napari.utils.notifications.show_warning(
                     'LowerCutoff (blue) must be lower than upperCutoff (red).'
@@ -295,8 +318,8 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                 pass
 
         next_sample.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum,
-            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed,
         )
         
         # give next_sample access to sample variable passed to callback
@@ -304,11 +327,12 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
 
         hist_layout.addWidget(next_sample.native)
         
-        ###########################################################################
+        #######################################################################
 
         @magicgui(
             layout='vertical', call_button='Enter',
-            sample={'label': 'Sample Name'}
+            sample={'choices': list(natsorted(data['Sample'].unique())), 
+                    'label': 'Go to Sample'}
         )
         def sample_selector(sample: str):
 
@@ -319,15 +343,15 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
             QtWidgets.QSizePolicy.Fixed
         )
         
+        # Set the current sample value immediately after creating the widget
+        sample_selector.sample.value = sample
+        
         if initial_callback:  
             selection_layout.addWidget(sample_selector.native)
 
-        # call connect
         @sample_selector.called.connect
         def sample_callback(value: str):
-
             global arbitrary_selection_toggle
-
             sample = value
 
             initial_callback = False
@@ -338,8 +362,8 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
             )
 
             arbitrary_selection_toggle = True
-        
-        ###########################################################################
+
+        #######################################################################
         napari.utils.notifications.show_info(f'Viewing sample {sample}')
     
     else:
@@ -374,18 +398,24 @@ def intensityFilter(data, self, args):
         if qc_report is None:
             qc_report = {}
             reload_report = True
-        if 'intensityFilter' not in qc_report or qc_report['intensityFilter'] is None:
+        if ('intensityFilter' not in qc_report or 
+                qc_report['intensityFilter'] is None):
             qc_report['intensityFilter'] = {}
             reload_report = True
         if reload_report:
-            qc_report_sorted = sort_qc_report(qc_report, module='intensityFilter', order=None)
+            qc_report_sorted = sort_qc_report(
+                qc_report, module='intensityFilter', order=None
+            )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
             qc_report = yaml.safe_load(open(report_path))
     except:
         logger.info(
-            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
-            'from aggregateData module to initialize QC report.'
+            'Aborting; QC report missing from CyLinter output directory. '
+            'Re-start pipeline from aggregateData module to initialize '
+            'QC report.'
         )
         sys.exit()
 
@@ -396,7 +426,7 @@ def intensityFilter(data, self, args):
     selection_widget = QtWidgets.QWidget()
     selection_layout = QtWidgets.QVBoxLayout(selection_widget)
     selection_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
+        QtWidgets.QSizePolicy.Fixed,
         QtWidgets.QSizePolicy.Fixed,
     )
     
@@ -404,12 +434,12 @@ def intensityFilter(data, self, args):
     hist_widget = QtWidgets.QWidget()
     hist_layout = QtWidgets.QVBoxLayout(hist_widget)
     hist_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
-        QtWidgets.QSizePolicy.Maximum
+        QtWidgets.QSizePolicy.Fixed,
+        QtWidgets.QSizePolicy.Fixed
     )
     
-    # make a list of all samples in batch, select the first one
-    # for which cutoffs have not been previously assigned, and pass it to the callback
+    # make a list of all samples in batch, select the first one for which
+    # cutoffs have not been previously assigned, and pass it to the callback
     samples = natsorted(data['Sample'].unique())
     
     if len(samples) == 0:
@@ -426,7 +456,8 @@ def intensityFilter(data, self, args):
             
             try:  
                 lowerCutoff, upperCutoff = qc_report['intensityFilter'][sample]
-                if not isinstance(lowerCutoff, float) or not isinstance(upperCutoff, float):
+                if (not isinstance(lowerCutoff, float) or 
+                        not isinstance(upperCutoff, float)):
                     samples_to_run.append(sample)
                 
             except: 
@@ -443,7 +474,7 @@ def intensityFilter(data, self, args):
         )
         
         viewer.window.add_dock_widget(
-            selection_widget, name='Arbitrary Sample Selector', area='right'
+            selection_widget, name='Sample Selector', area='right'
         )
         
         viewer.scale_bar.visible = True
@@ -459,7 +490,7 @@ def intensityFilter(data, self, args):
     
     ###########################################################################
     # save histogram plots with selected data highlighted
-    
+
     plot_dir = os.path.join(intensity_dir, 'plots')
     if not os.path.exists(plot_dir):
         os.mkdir(plot_dir)
@@ -485,12 +516,13 @@ def intensityFilter(data, self, args):
         fig, ax = plt.subplots()
 
         n, bins, patches = plt.hist(
-            np.log(group[self.counterstainChannel]), bins=self.numBinsIntensity,
+            np.log(group[self.counterstainChannel]), 
+            bins=self.numBinsIntensity,
             density=False, color='b', ec='none',
             alpha=0.5, histtype='stepfilled',
             range=None, label='before'
         )
-        
+
         # apply lower and upper cutoffs
         group_filtered = group.copy()[
             (np.log(group[self.counterstainChannel]) > lowerCutoff) & 
@@ -534,7 +566,7 @@ def intensityFilter(data, self, args):
             (np.log(group[self.counterstainChannel]) > upperCutoff)]
 
         if not data_to_drop.empty:
-            # create a column of unique IDs for cells to drop from current sample
+            # create column of unique IDs for cells to drop from current sample
             data_to_drop['handle'] = (
                 data_to_drop['CellID'].map(str) + '_' + data_to_drop['Sample']
             )

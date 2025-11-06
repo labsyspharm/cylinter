@@ -35,9 +35,10 @@ from magicgui import magicgui
 import napari
 
 from ..utils import (
-    input_check, read_markers, matplotlib_warnings, categorical_cmap, SelectFromCollection, 
-    cluster_expression, marker_channel_number, single_channel_pyramid, log_banner,
-    log_multiline, get_filepath, reorganize_dfcolumns, sort_qc_report
+    input_check, read_markers, matplotlib_warnings, categorical_cmap,
+    SelectFromCollection, cluster_expression, marker_channel_number,
+    single_channel_pyramid, log_banner, log_multiline, get_filepath,
+    reorganize_dfcolumns, sort_qc_report
 )
 
 logger = logging.getLogger(__name__)
@@ -57,10 +58,14 @@ def clustering(data, self, args):
     )
 
     # drop antibody channel exclusions for clustering
-    abx_channels = [i for i in abx_channels if i not in self.channelExclusionsClustering]
+    abx_channels = [
+        i for i in abx_channels if i not in self.channelExclusionsClustering
+    ]
 
     # create N-dimensional clustering subdirectory if it hasn't already
-    dim_dir = os.path.join(self.outDir, 'clustering', f'{self.dimensionEmbedding}d')
+    dim_dir = os.path.join(
+            self.outDir, 'clustering', f'{self.dimensionEmbedding}d'
+        )
     if not os.path.exists(dim_dir):
         os.makedirs(dim_dir)
 
@@ -76,14 +81,19 @@ def clustering(data, self, args):
             qc_report['clustering'] = {}
             reload_report = True
         if reload_report:
-            qc_report_sorted = sort_qc_report(qc_report, module='clustering', order=None)
+            qc_report_sorted = sort_qc_report(
+                qc_report, module='clustering', order=None
+            )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
             qc_report = yaml.safe_load(open(report_path))
     except:
         logger.info(
-            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
-            'from aggregateData module to initialize QC report.'
+            'Aborting; QC report missing from CyLinter output directory. '
+            'Re-start pipeline from aggregateData module to '
+            'initialize QC report.'
         )
         sys.exit()
     
@@ -119,7 +129,7 @@ def clustering(data, self, args):
         except FileNotFoundError:
             return False
     
-    ##############################################################################################
+    ###########################################################################
     
     # recapitulate df index at the point of embedding
     data = data[~data['Sample'].isin(self.samplesToRemoveClustering)]
@@ -130,7 +140,10 @@ def clustering(data, self, args):
 
     if self.normalizeTissueCounts:
         logger.info('Performing weighted sampling of cells from tissues...')
-        logger.info('Check that resulting cell counts below are similar across samples.')
+        logger.info(
+            'Check that resulting cell counts below '
+            'are similar across samples.'
+        )
         logger.info(
             'If not, try embedding a smaller fraction of data '
             'with the fracForEmbedding configuration setting.')
@@ -149,12 +162,16 @@ def clustering(data, self, args):
             axis=0)
 
         log_banner(logger.info, 'Cell counts:')
-        log_multiline(logger.info, data.groupby(['Sample']).size().to_string(index=True))
+        log_multiline(
+            logger.info, data.groupby(['Sample']).size().to_string(index=True)
+        )
         print()
 
     else:
 
-        data = data.sample(frac=self.fracForEmbedding, random_state=random_state)
+        data = data.sample(
+            frac=self.fracForEmbedding, random_state=random_state
+        )
 
     data.reset_index(drop=True, inplace=True)
     print(data[abx_channels])
@@ -172,9 +189,10 @@ def clustering(data, self, args):
                 clustering_input = data[['emb1', 'emb2']]
             except ValueError:
                 logger.info(
-                    'Aborting; the number of rows in the dataframe differs from embedding.npy. '
-                    'Ensure that the dataframe contains the same cells referred to in the ' 
-                    'embedding or re-embed the current dataframe after removing the existing '
+                    'Aborting; the number of rows in the dataframe differs '
+                    'from embedding.npy. Ensure that the dataframe contains '
+                    'the same cells referred to in the embedding or re-embed '
+                    'the current dataframe after removing the existing '
                     'embedding.'
                 )
                 sys.exit()
@@ -187,9 +205,10 @@ def clustering(data, self, args):
                 clustering_input = data[['emb1', 'emb2', 'emb3']]
             except ValueError:
                 logger.info(
-                    'Aborting; the number of rows in the dataframe differs from the embedding. '
-                    'Ensure that the dataframe contains the same cells referred to in the ' 
-                    'embedding or re-embed the current dataframe after removing the existing '
+                    'Aborting; the number of rows in the dataframe differs '
+                    'from the embedding. Ensure that the dataframe contains '
+                    'the same cells referred to in the embedding or re-embed '
+                    'the current dataframe after removing the existing '
                     'embedding.'
                 )
                 sys.exit()
@@ -255,7 +274,9 @@ def clustering(data, self, args):
                 disconnection_distance=None,
                 output_dens=False).fit_transform(data[abx_channels])
 
-        logger.info('Embedding completed in ' + str(datetime.now() - startTime))
+        logger.info(
+            'Embedding completed in ' + str(datetime.now() - startTime)
+        )
 
         np.save(os.path.join(dim_dir, 'embedding.npy'), embedding)
 
@@ -277,7 +298,7 @@ def clustering(data, self, args):
     else:
         point_size = 4
     
-    ##############################################################################################
+    ###########################################################################
     # show abx intensity for each marker on UMAP embedding
     
     if not os.path.exists(os.path.join(dim_dir, 'emb_channels.png')):
@@ -309,7 +330,8 @@ def clustering(data, self, args):
                     ax.view_init(azim=-130, elev=10)  # all clusters view
 
                     plot = ax.scatter(
-                        plot_sample['emb1'], plot_sample['emb2'], plot_sample['emb3'],
+                        plot_sample['emb1'], plot_sample['emb2'],
+                        plot_sample['emb3'],
                         c=plot_sample[ch], s=point_size, lw=0.0, alpha=1.0,
                         cmap='magma'
                     )
@@ -321,7 +343,8 @@ def clustering(data, self, args):
                 else:
                     ax = fig.add_subplot(gs[ax[0], ax[1]])
                     plot = ax.scatter(
-                        plot_sample['emb1'], plot_sample['emb2'], c=plot_sample[ch],
+                        plot_sample['emb1'], plot_sample['emb2'],
+                        c=plot_sample[ch],
                         s=point_size, lw=0.0, alpha=1.0, cmap='magma'
                     )
                     ax.set_aspect('equal')
@@ -338,14 +361,17 @@ def clustering(data, self, args):
                     cax.tick_params(labelsize=4)
                     cbar.outline.set_edgecolor('k')
                     cbar.outline.set_linewidth(0.2)
-                    cbar.ax.tick_params(which='both', labelsize=3, width=0.2, length=2, pad=0)
+                    cbar.ax.tick_params(
+                        which='both', labelsize=3, width=0.2, length=2, pad=0
+                    )
 
                 # TO IMPLEMENT CBAR FOR 3D PLOTS
                 # cax = divider.append_axes('bottom', size='5%', pad=0.0)
                 # cbar = fig.colorbar(plot, orientation='horizontal', cax=cax)
         
         # plt.subplots_adjust(
-        #     left=0.01, right=0.99, bottom=0.01, top=0.99, hspace=-0.55, wspace=0.1
+        #     left=0.01, right=0.99, bottom=0.01, top=0.99,
+        #     hspace=-0.55, wspace=0.1
         # )
         plt.tight_layout()
         
@@ -354,7 +380,7 @@ def clustering(data, self, args):
 
         print()
     
-    ##############################################################################################
+    ###########################################################################
     # interact with plots to identify optimal minimum cluster size
     
     while not check_report_structure(report_path):
@@ -397,18 +423,22 @@ def clustering(data, self, args):
 
             data[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
 
-            logger.info(f'min_cluster_size = {MCS} {np.unique(clustering.labels_)}')
+            logger.info(
+                f'min_cluster_size = {MCS} {np.unique(clustering.labels_)}'
+            )
 
             ###################################################
             # plot silhouette scores
 
             silho_input = clustering_input.copy()
-            silho_input[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
+            silho_input[
+                f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
             silho_input = silho_input[
                 silho_input[f'cluster_{self.dimensionEmbedding}d'] != -1
             ]
 
-            all_minus_one = (silho_input[f'cluster_{self.dimensionEmbedding}d'] == -1).all()
+            all_minus_one = (
+                silho_input[f'cluster_{self.dimensionEmbedding}d'] == -1).all()
             
             if not all_minus_one:
                 
@@ -417,18 +447,22 @@ def clustering(data, self, args):
 
                 cmap = categorical_cmap(
                     numUniqueSamples=len(
-                        silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()),
+                        silho_input[
+                            f'cluster_{self.dimensionEmbedding}d'].unique()),
                     numCatagories=10, cmap='tab10', continuous=False
                 )
 
                 cluster_centers = pd.DataFrame(
-                    index=sorted(silho_subset[f'cluster_{self.dimensionEmbedding}d'].unique())
+                    index=sorted(silho_subset[
+                        f'cluster_{self.dimensionEmbedding}d'].unique())
                 )
                 
                 embed_cols = [i for i in silho_subset.columns if 'emb' in i]
-                for clus in sorted(silho_subset[f'cluster_{self.dimensionEmbedding}d'].unique()):
+                for clus in sorted(silho_subset[
+                        f'cluster_{self.dimensionEmbedding}d'].unique()):
                     group = silho_subset[
-                        silho_subset[f'cluster_{self.dimensionEmbedding}d'] == clus]
+                        silho_subset[
+                            f'cluster_{self.dimensionEmbedding}d'] == clus]
                     for emb_dim in embed_cols:
                         emb_mean = group[emb_dim].mean()
                         cluster_centers.loc[clus, emb_dim] = emb_mean
@@ -445,15 +479,23 @@ def clustering(data, self, args):
                     sns.set_style('darkgrid')
                     fig_silho = plt.figure(figsize=(18, 7))
                     gs = plt.GridSpec(1, 2, figure=fig_silho)
-                    ax1_silho = fig_silho.add_subplot(gs[0, 0], projection=None)
-                    ax2_silho = fig_silho.add_subplot(gs[0, 1], projection='3d')
+                    ax1_silho = fig_silho.add_subplot(
+                        gs[0, 0], projection=None
+                    )
+                    ax2_silho = fig_silho.add_subplot(
+                        gs[0, 1], projection='3d'
+                    )
 
                 ax1_silho.set_xlim([-1, 1])
 
-                ax1_silho.set_ylim([0, len(silho_subset) + (n_clusters + 1) * silhouette_spacer])
+                ax1_silho.set_ylim(
+                    [0, 
+                     len(silho_subset) + (n_clusters + 1) * silhouette_spacer]
+                )
 
                 sample_silhouette_values = silhouette_samples(
-                    silho_subset[embed_cols], silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                    silho_subset[embed_cols], 
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
                 )
 
                 y_lower = silhouette_spacer
@@ -472,7 +514,8 @@ def clustering(data, self, args):
                     color = cmap.colors[i]
 
                     ax1_silho.fill_betweenx(
-                        np.arange(y_lower, y_upper), 0, ith_cluster_silhouette_values,
+                        np.arange(y_lower, y_upper), 0, 
+                        ith_cluster_silhouette_values,
                         facecolor=color, edgecolor=color, alpha=0.7
                     )
 
@@ -485,14 +528,17 @@ def clustering(data, self, args):
                     y_lower = y_upper + silhouette_spacer
 
                 silhouette_avg = silhouette_score(
-                    silho_subset[embed_cols], silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                    silho_subset[embed_cols], 
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
                 )
 
                 ax1_silho.set_title('Silhouette Plot')
                 ax1_silho.set_xlabel('Silhouette Coefficients')
                 ax1_silho.set_ylabel('Cluster label')
 
-                ax1_silho.axvline(x=silhouette_avg, color='r', lw=0.75, linestyle='--')
+                ax1_silho.axvline(
+                    x=silhouette_avg, color='r', lw=0.75, linestyle='--'
+                )
 
                 ax1_silho.set_yticks([])
 
@@ -541,7 +587,9 @@ def clustering(data, self, args):
                 ax2_silho.set_xlabel('Feature Space 1')
                 ax2_silho.set_ylabel('Feature Space 2')
 
-                total_clusters = len(silho_input[f'cluster_{self.dimensionEmbedding}d'].unique())
+                total_clusters = len(
+                    silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
+                )
 
                 fig_silho.suptitle(
                     ('MCS=%d, average silhouette score for %d/%d clusters '
@@ -555,8 +603,8 @@ def clustering(data, self, args):
             
             else:
                 logger.info(
-                    'All data points were determined by HDBSCAN to be ambiguous '
-                    ', skipping silhouette plot.'
+                    'All data points were determined by HDBSCAN '
+                    'to be ambiguous , skipping silhouette plot.'
                 )
             
             ###################################################
@@ -580,16 +628,21 @@ def clustering(data, self, args):
 
                 x_positions = [0.03, 0.36, 0.69]
 
-                ax_cluster = fig.add_axes([x_positions[0], bottom, width, height])
+                ax_cluster = fig.add_axes(
+                    [x_positions[0], bottom, width, height]
+                )
                 ax_gate = fig.add_axes([x_positions[1], bottom, width, height])
-                ax_sample = fig.add_axes([x_positions[2], bottom, width, height])
+                ax_sample = fig.add_axes(
+                    [x_positions[2], bottom, width, height]
+                )
 
                 plt.subplots_adjust(
                     left=0.0, right=1.0, bottom=0.0,
                     top=1.0, wspace=0.0, hspace=0.0)
 
                 # PLOT embedding
-                for color_by in [f'cluster_{self.dimensionEmbedding}d', 'class', 'annotation']:
+                for color_by in [f'cluster_{self.dimensionEmbedding}d',
+                                 'class', 'annotation']:
 
                     highlight = 'none'
 
@@ -636,22 +689,26 @@ def clustering(data, self, args):
                         ax_cluster.grid(False)
 
                         legend_elements = []
-                        for e, i in enumerate(natsorted(data[color_by].unique())):
+                        for e, i in enumerate(
+                          natsorted(data[color_by].unique())):
 
                             hi_markers = cluster_expression(
-                                df=data, markers=abx_channels, cluster=i, num_proteins=3,
+                                df=data, markers=abx_channels, cluster=i,
+                                num_proteins=3,
                                 clus_dim=self.dimensionEmbedding
                             )
 
                             legend_elements.append(
                                 Line2D([0], [0], marker='o',
-                                       color='none', label=f'C{i}: {hi_markers}',
-                                       markerfacecolor=cmap.colors[e], markeredgecolor='none',
-                                       lw=0.001, markersize=6)
+                                       color='none',
+                                       label=f'C{i}: {hi_markers}',
+                                       markerfacecolor=cmap.colors[e],
+                                       markeredgecolor='none',
+                                       lw=0.001, markersize=8)
                             )
 
                         ax_cluster.legend(
-                            handles=legend_elements, prop={'size': 6},
+                            handles=legend_elements, prop={'size': 8},
                             loc='upper left',
                             bbox_to_anchor=(0, 0),
                             bbox_transform=ax_cluster.transAxes,
@@ -670,7 +727,8 @@ def clustering(data, self, args):
                             # build cmap
                             cmap = categorical_cmap(
                                 numUniqueSamples=data['class'].nunique(),
-                                numCatagories=10, cmap='tab10', continuous=False
+                                numCatagories=10, cmap='tab10', 
+                                continuous=False
                             )
 
                             if 'unclassified' in data['class'].unique():
@@ -688,7 +746,9 @@ def clustering(data, self, args):
                                         .drop('unclassified')
                                         .index)
                                 )
-                                class_dict = dict(zip(order, list(range(len(order)))))
+                                class_dict = dict(
+                                    zip(order, list(range(len(order))))
+                                )
                             else:
                                 class_dict = dict(
                                     zip(data['class'].value_counts().index,
@@ -702,9 +762,10 @@ def clustering(data, self, args):
                                 legend_elements.append(
                                     Line2D([0], [0], marker='o',
                                            color='none', label=vector_name,
-                                           markerfacecolor=cmap.colors[color_idx],
+                                           markerfacecolor=cmap.colors[
+                                            color_idx],
                                            markeredgecolor='none',
-                                           lw=0.001, markersize=6)
+                                           lw=0.001, markersize=8)
                                 )
                         
                         ax_gate.cla()
@@ -719,7 +780,7 @@ def clustering(data, self, args):
                         ax_gate.grid(False)
 
                         ax_gate.legend(
-                            handles=legend_elements, prop={'size': 6},
+                            handles=legend_elements, prop={'size': 8},
                             loc='upper left',
                             bbox_to_anchor=(0, 0),
                             bbox_transform=ax_gate.transAxes,
@@ -741,7 +802,10 @@ def clustering(data, self, args):
                                     data[self.colormapAnnotationClustering]
                                      .unique())))))
 
-                        c = [sample_dict[i] for i in data[self.colormapAnnotationClustering]]
+                        c = [
+                            sample_dict[i] for i in
+                            data[self.colormapAnnotationClustering]
+                        ]
 
                         ax_sample.cla()
 
@@ -750,7 +814,9 @@ def clustering(data, self, args):
                             alpha=1.0, s=point_size, ec='k', linewidth=0.0
                         )
 
-                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=9)
+                        ax_sample.set_title(
+                            self.colormapAnnotationClustering, fontsize=9
+                        )
                         ax_sample.set_aspect('equal')
                         ax_sample.axes.xaxis.set_visible(False)
                         ax_sample.axes.yaxis.set_visible(False)
@@ -767,14 +833,15 @@ def clustering(data, self, args):
                                 markeredgecolor = 'none'
 
                             legend_elements.append(
-                                Line2D([0], [0], marker='o', color='none', label=i,
+                                Line2D([0], [0], marker='o', color='none',
+                                       label=i,
                                        markerfacecolor=cmap.colors[e],
                                        markeredgecolor=markeredgecolor,
-                                       lw=0.001, markersize=6)
+                                       lw=0.001, markersize=8)
                             )
 
                         ax_sample.legend(
-                            handles=legend_elements, prop={'size': 6},
+                            handles=legend_elements, prop={'size': 8},
                             loc='upper left',
                             bbox_to_anchor=(0, 0),
                             bbox_transform=ax_sample.transAxes,
@@ -814,16 +881,23 @@ def clustering(data, self, args):
 
                 x_positions = [0.0, 0.335, 0.67]
 
-                ax_cluster = fig.add_axes([x_positions[0], bottom, width, height], projection='3d')
-                ax_gate = fig.add_axes([x_positions[1], bottom, width, height], projection='3d')
-                ax_sample = fig.add_axes([x_positions[2], bottom, width, height], projection='3d')
+                ax_cluster = fig.add_axes(
+                    [x_positions[0], bottom, width, height], projection='3d'
+                )
+                ax_gate = fig.add_axes(
+                    [x_positions[1], bottom, width, height], projection='3d'
+                )
+                ax_sample = fig.add_axes(
+                    [x_positions[2], bottom, width, height], projection='3d'
+                )
 
                 plt.subplots_adjust(
                     left=0.0, right=1.0, bottom=0.0,
                     top=1.0, wspace=0.0, hspace=0.0)
 
                 for color_by in [
-                    f'cluster_{self.dimensionEmbedding}d', 'class', 'annotation'
+                    f'cluster_{self.dimensionEmbedding}d',
+                    'class', 'annotation'
                 ]:
 
                     highlight = 'none'
@@ -866,22 +940,31 @@ def clustering(data, self, args):
                         ax_cluster.set_xticklabels([])
                         ax_cluster.set_yticklabels([])
                         ax_cluster.set_zticklabels([])
-                        ax_cluster.xaxis._axinfo['grid'].update({'linewidth': 0.5})
-                        ax_cluster.yaxis._axinfo['grid'].update({'linewidth': 0.5})
-                        ax_cluster.zaxis._axinfo['grid'].update({'linewidth': 0.5})
+                        ax_cluster.xaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
+                        ax_cluster.yaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
+                        ax_cluster.zaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
 
                         legend_elements = []
                         for e, i in enumerate(natsorted(data[color_by].unique())):
 
                             hi_markers = cluster_expression(
-                                df=data, markers=abx_channels, cluster=i, num_proteins=3,
+                                df=data, markers=abx_channels, cluster=i,
+                                num_proteins=3,
                                 clus_dim=self.dimensionEmbedding
                             )
 
                             legend_elements.append(
                                 Line2D([0], [0], marker='o',
-                                       color='none', label=f'Cluster {i}: {hi_markers}',
-                                       markerfacecolor=cmap.colors[e], markeredgecolor='none',
+                                       color='none',
+                                       label=f'Cluster {i}: {hi_markers}',
+                                       markerfacecolor=cmap.colors[e],
+                                       markeredgecolor='none',
                                        lw=0.001, markersize=6)
                             )
 
@@ -904,7 +987,8 @@ def clustering(data, self, args):
                             # build cmap
                             cmap = categorical_cmap(
                                 numUniqueSamples=data['class'].nunique(),
-                                numCatagories=10, cmap='tab10', continuous=False
+                                numCatagories=10, cmap='tab10',
+                                continuous=False
                             )
 
                             if 'unclassified' in data['class'].unique():
@@ -922,7 +1006,9 @@ def clustering(data, self, args):
                                         .drop('unclassified')
                                         .index)
                                 )
-                                class_dict = dict(zip(order, list(range(len(order)))))
+                                class_dict = dict(
+                                    zip(order, list(range(len(order))))
+                                )
                             else:
                                 class_dict = dict(
                                     zip(data['class'].value_counts().index,
@@ -936,8 +1022,10 @@ def clustering(data, self, args):
                                 legend_elements.append(
                                     Line2D([0], [0], marker='o',
                                            color='none', label=vector_name,
-                                           markerfacecolor=cmap.colors[color_idx],
-                                           markeredgecolor='none', lw=0.001, markersize=6)
+                                           markerfacecolor=cmap.colors[
+                                            color_idx],
+                                           markeredgecolor='none', lw=0.001,
+                                           markersize=10)
                                 )
                         
                         ax_gate.cla()
@@ -960,7 +1048,7 @@ def clustering(data, self, args):
                             {'linewidth': 0.5})
 
                         ax_gate.legend(
-                            handles=legend_elements, prop={'size': 6},
+                            handles=legend_elements, prop={'size': 20},
                             loc='upper left',
                             bbox_to_anchor=(0, 0),
                             bbox_transform=ax_gate.transAxes,
@@ -983,20 +1071,32 @@ def clustering(data, self, args):
                                     len(data[self.colormapAnnotationClustering]
                                      .unique())))))
 
-                        c = [sample_dict[i] for i in data[self.colormapAnnotationClustering]]
+                        c = [
+                            sample_dict[i] for i in
+                            data[self.colormapAnnotationClustering]
+                        ]
 
                         ax_sample.scatter(
-                            data['emb1'], data['emb2'], data['emb3'], c=c, cmap=cmap,
-                            alpha=1.0, s=point_size, ec='k', linewidth=0.0
+                            data['emb1'], data['emb2'], data['emb3'],
+                            c=c, cmap=cmap, alpha=1.0, s=point_size, ec='k',
+                            linewidth=0.0
                         )
 
-                        ax_sample.set_title(self.colormapAnnotationClustering, fontsize=9)
+                        ax_sample.set_title(
+                            self.colormapAnnotationClustering, fontsize=9
+                        )
                         ax_sample.set_xticklabels([])
                         ax_sample.set_yticklabels([])
                         ax_sample.set_zticklabels([])
-                        ax_sample.xaxis._axinfo['grid'].update({'linewidth': 0.5})
-                        ax_sample.yaxis._axinfo['grid'].update({'linewidth': 0.5})
-                        ax_sample.zaxis._axinfo['grid'].update({'linewidth': 0.5})
+                        ax_sample.xaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
+                        ax_sample.yaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
+                        ax_sample.zaxis._axinfo['grid'].update(
+                            {'linewidth': 0.5}
+                        )
 
                         legend_elements = []
                         for e, i in enumerate(natsorted(
@@ -1009,9 +1109,11 @@ def clustering(data, self, args):
                                 markeredgecolor = 'none'
 
                             legend_elements.append(
-                                Line2D([0], [0], marker='o', color='none', label=i,
+                                Line2D([0], [0], marker='o', color='none',
+                                       label=i,
                                        markerfacecolor=cmap.colors[e], 
-                                       markeredgecolor=markeredgecolor, lw=0.001, markersize=6)
+                                       markeredgecolor=markeredgecolor,
+                                       lw=0.001, markersize=6)
                             )
                         
                         ax_sample.legend(
@@ -1021,7 +1123,9 @@ def clustering(data, self, args):
                             bbox_transform=ax_sample.transAxes,
                             frameon=False)
 
-            cluster_layout.addWidget(NavigationToolbar(cluster_canvas, cluster_widget))
+            cluster_layout.addWidget(
+                NavigationToolbar(cluster_canvas, cluster_widget)
+            )
             cluster_layout.addWidget(cluster_canvas)
 
             if not all_minus_one:
@@ -1042,7 +1146,9 @@ def clustering(data, self, args):
             @magicgui(
                 layout='horizontal',
                 call_button='View Lassoed Points',
-                sample_name={'label': 'Sample Name'},
+                sample_name={
+                 'choices': list(natsorted(data['Sample'].unique())), 
+                 'label': 'Sample'},
             )
             def sample_selector(sample_name: str):
 
@@ -1053,14 +1159,17 @@ def clustering(data, self, args):
             def sample_selector_callback(value: str):
 
                 print()
-                napari.utils.notifications.show_info(f'Sample selection: {value}')
+                napari.utils.notifications.show_info(
+                    f'Sample selection: {value}'
+                )
 
                 # if cells lassoed
                 if selector.ind is None or len(selector.ind) == 0:
 
                     print()
                     napari.utils.notifications.show_warning(
-                        'Cells must be lassoed in HDBSCAN plot before sample inspection.'
+                        'Cells must be lassoed in HDBSCAN plot '
+                        'before sample inspection.'
                     )
                     pass
 
@@ -1081,7 +1190,8 @@ def clustering(data, self, args):
                         lasso[f'cluster_{self.dimensionEmbedding}d'] = 1000
 
                         hi_markers = cluster_expression(
-                            df=lasso, markers=abx_channels, cluster=1000, num_proteins=3,
+                            df=lasso, markers=abx_channels, cluster=1000,
+                            num_proteins=3,
                             clus_dim=self.dimensionEmbedding
                         )
 
@@ -1092,20 +1202,26 @@ def clustering(data, self, args):
                         if self.showAbChannels:
 
                             for ch in reversed(abx_channels):
-                                channel_number = marker_channel_number(self, markers, ch)
+                                channel_number = marker_channel_number(
+                                    self, markers, ch
+                                )
 
                                 # read antibody image
-                                file_path = get_filepath(self, check, value, 'TIF')
+                                file_path = get_filepath(
+                                    self, check, value, 'TIF'
+                                )
                                 img, min, max = single_channel_pyramid(
                                     file_path, channel=channel_number
                                 )
                                 viewer.add_image(
-                                    img, rgb=False, blending='additive', colormap='green',
-                                    visible=False, name=ch, contrast_limits=(min, max)
+                                    img, rgb=False, blending='additive',
+                                    colormap='green', visible=False, name=ch,
+                                    contrast_limits=(min, max)
                                 )
 
                         centroids = data[['Y_centroid', 'X_centroid']][
-                            (data.index.isin(selector.ind)) & (data['Sample'] == value)
+                            (data.index.isin(selector.ind)) & 
+                            (data['Sample'] == value)
                         ]
 
                         viewer.add_points(
@@ -1115,9 +1231,12 @@ def clustering(data, self, args):
 
                         # read segmentation outlines, add to Napari
                         file_path = get_filepath(self, check, value, 'SEG')
-                        seg, min, max = single_channel_pyramid(file_path, channel=0)
+                        seg, min, max = single_channel_pyramid(
+                            file_path, channel=0
+                        )
                         viewer.add_image(
-                            seg, rgb=False, blending='additive', colormap='gray', visible=False,
+                            seg, rgb=False, blending='additive',
+                            colormap='gray', visible=False,
                             name='segmentation', contrast_limits=(min, max)
                         )
 
@@ -1132,16 +1251,19 @@ def clustering(data, self, args):
                         viewer.add_image(
                             dna_first, rgb=False, blending='additive',
                             opacity=0.5, colormap='gray', visible=True,
-                            name=self.counterstainChannel, contrast_limits=(min, max)
+                            name=self.counterstainChannel,
+                            contrast_limits=(min, max)
                         )
 
-                        # apply previously defined contrast limits if they exist
+                        # apply contrast limits if they exist
                         try:
                             viewer.layers[
                                 f'{self.counterstainChannel}'].contrast_limits = (
-                                qc_report['setContrast'][self.counterstainChannel]
+                                qc_report['setContrast'][
+                                    self.counterstainChannel]
                                 [0],
-                                qc_report['setContrast'][self.counterstainChannel]
+                                qc_report['setContrast'][
+                                    self.counterstainChannel]
                                 [1]
                             )
 
@@ -1188,14 +1310,17 @@ def clustering(data, self, args):
 
                 print()
                 logger.info(f'Saving current min cluster size: {current_MCS}')
-                qc_report['clustering'][f'MCS_{self.dimensionEmbedding}d'] = current_MCS
+                qc_report['clustering'][
+                    f'MCS_{self.dimensionEmbedding}d'] = current_MCS
 
                 # sort and dump updated qc_report to YAML file
                 qc_report_sorted = sort_qc_report(
                     qc_report, module='clustering', order=None
                 )
                 f = open(report_path, 'w')
-                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                yaml.dump(
+                    qc_report_sorted, f, sort_keys=False, allow_unicode=False
+                )
                 
                 # ensure silhouette plot is closed 
                 plt.close('all')  
@@ -1208,18 +1333,22 @@ def clustering(data, self, args):
                         selector.disconnect()
 
                     fig.savefig(
-                        os.path.join(dim_dir, f'{self.embeddingAlgorithm}_{current_MCS}.png'),
+                        os.path.join(
+                            dim_dir,
+                            f'{self.embeddingAlgorithm}_{current_MCS}.png'),
                         bbox_inches='tight', dpi=1000
                     )
 
                     fig_silho.savefig(
-                        os.path.join(dim_dir, 
-                                     f'{self.embeddingAlgorithm}_{current_MCS}_silho.png'),
+                        os.path.join(
+                            dim_dir, 
+                            f'{self.embeddingAlgorithm}_{current_MCS}_silho.png'),
                         bbox_inches='tight', dpi=1000
                     )
                     fig_silho.savefig(
-                        os.path.join(dim_dir, 
-                                     f'{self.embeddingAlgorithm}_{current_MCS}_silho.pdf'),
+                        os.path.join(
+                            dim_dir, 
+                            f'{self.embeddingAlgorithm}_{current_MCS}_silho.pdf'),
                         bbox_inches='tight'
                     )
 
@@ -1299,12 +1428,17 @@ def clustering(data, self, args):
                     match_reference_implementation=False).fit(
                         clustering_input)
 
-                data[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
+                data[f'cluster_{self.dimensionEmbedding}d'] = (
+                    clustering.labels_
+                )
 
-                logger.info(f'min_cluster_size = {i} {np.unique(clustering.labels_)}')
+                logger.info(
+                    f'min_cluster_size = {i} {np.unique(clustering.labels_)}'
+                )
 
                 silho_input = clustering_input.copy()
-                silho_input[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
+                silho_input[
+                    f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
                 silho_input = silho_input[
                     silho_input[f'cluster_{self.dimensionEmbedding}d'] != -1
                 ]
@@ -1316,7 +1450,9 @@ def clustering(data, self, args):
                     # subsample clustered data for silhouette analysis
                     silho_subset = silho_input.head(50000)
 
-                    embed_cols = [i for i in silho_subset.columns if 'emb' in i]
+                    embed_cols = [
+                        i for i in silho_subset.columns if 'emb' in i
+                    ]
 
                     silhouette_avg = silhouette_score(
                         silho_subset[embed_cols],
@@ -1324,10 +1460,14 @@ def clustering(data, self, args):
                     )
 
                     total_clusters = len(
-                        silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
+                        silho_input[
+                            f'cluster_{self.dimensionEmbedding}d'].unique()
                     )
 
-                    n_clusters = len(silho_subset[f'cluster_{self.dimensionEmbedding}d'].unique())
+                    n_clusters = len(
+                        silho_subset[
+                            f'cluster_{self.dimensionEmbedding}d'].unique()
+                    )
 
                     logger.info(
                         ('Average silhouette score for %d/%d clusters in '
@@ -1338,22 +1478,28 @@ def clustering(data, self, args):
 
                 else:
                     logger.info(
-                        'HDBSCAN determined that all data points are ambiguous (-1), '
-                        'skipping silhouette scoring.'
+                        'HDBSCAN determined that all data points are '
+                        'ambiguous (-1), skipping silhouette scoring.'
                     )
 
-        ##########################################################################################
+        #######################################################################
 
         sweep_MCS.native.setSizePolicy(
             QtWidgets.QSizePolicy.Maximum,
             QtWidgets.QSizePolicy.Maximum,
         )
 
-        viewer.window.add_dock_widget(cluster_and_plot, name='Plot Single MCS', area='right')
+        viewer.window.add_dock_widget(
+            cluster_and_plot, name='Plot Single MCS', area='right'
+        )
 
-        viewer.window.add_dock_widget(sweep_MCS, name='Sweep MCS Range', area='right')
+        viewer.window.add_dock_widget(
+            sweep_MCS, name='Sweep MCS Range', area='right'
+        )
 
-        viewer.window.add_dock_widget(cluster_widget, name='Clustering Result', area='right')
+        viewer.window.add_dock_widget(
+            cluster_widget, name='Clustering Result', area='right'
+        )
 
         viewer.scale_bar.visible = True
         viewer.scale_bar.unit = 'um'
@@ -1362,24 +1508,26 @@ def clustering(data, self, args):
 
         print()
 
-    ##########################################################################################
+    ###########################################################################
     # apply final MCS and return data from clustering module
     try:
         if check_report_structure(report_path):
             qc_report = yaml.safe_load(open(report_path))
-            final_mcs_entry = qc_report['clustering'][f'MCS_{self.dimensionEmbedding}d']
+            final_mcs_entry = qc_report[
+                'clustering'][f'MCS_{self.dimensionEmbedding}d']
         else:
             print()
             logger.info(
-                'Aborting; clustering keys in QC report not formatted correctly.'
-                'Reinitializing reclass.parquet, setting chunk index to 0. Please '
-                're-run clustering module to make MCS and reclass threshold selections.'
+                'Aborting; clustering keys in QC report not formatted '
+                'correctly.Reinitializing reclass.parquet, setting chunk '
+                'index to 0. Please re-run clustering module to make MCS '
+                'and reclass threshold selections.'
             )
     except FileNotFoundError:
         print()
         logger.info(
-            'Aborting; QC report not found. Ensure cylinter_report.yml is stored at '
-            'top-level of CyLinter output file or re-start pipeline '
+            'Aborting; QC report not found. Ensure cylinter_report.yml is '
+            'stored at top-level of CyLinter output file or re-start pipeline '
             'to start filtering data.'
         )
         sys.exit()
@@ -1404,7 +1552,9 @@ def clustering(data, self, args):
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)
 
     # save dataframe in standard CSV format for analysis outside CyLinter
-    data.to_csv(os.path.join(self.outDir, 'checkpoints', 'clustering.csv'), index=False)
+    data.to_csv(
+        os.path.join(self.outDir, 'checkpoints', 'clustering.csv'), index=False
+    )
     
     print()
     print()

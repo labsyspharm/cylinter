@@ -3,6 +3,8 @@ import sys
 import yaml
 import logging
 
+from natsort import natsorted
+
 from matplotlib.backends.qt_compat import QtWidgets
 from qtpy.QtCore import QTimer
 
@@ -35,7 +37,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     # clear existing channels from Napari window if they exist
     viewer.layers.clear()
     
-    # remove next_widget and arbitrary_widget docks and layout attributes from Napari viewer
+    # remove next_widget and arbitrary_widget docks and layout
+    # attributes from Napari viewer
     if not initial_callback:
         viewer.window.remove_dock_widget(next_widget)
         count = next_layout.count()
@@ -63,7 +66,9 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     
     # read DNA1 channel
     file_path = get_filepath(self, check, sample, 'TIF')
-    channel_number = marker_channel_number(self, markers, self.counterstainChannel)
+    channel_number = marker_channel_number(
+        self, markers, self.counterstainChannel
+    )
     dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
     viewer.add_image(
         dna, rgb=False, blending='additive', colormap='gray',
@@ -74,7 +79,9 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     if channel != self.counterstainChannel:
         channel_number = marker_channel_number(self, markers, channel)
         file_path = get_filepath(self, check, sample, 'TIF')
-        img, min, max = single_channel_pyramid(file_path, channel=channel_number)
+        img, min, max = single_channel_pyramid(
+            file_path, channel=channel_number
+        )
         viewer.add_image(
             img, rgb=False, blending='additive', colormap='green',
             visible=True, name=channel, contrast_limits=(min, max)
@@ -84,20 +91,23 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     try:
         viewer.layers[self.counterstainChannel].contrast_limits = (
             qc_report['setContrast'][
-                self.counterstainChannel][0], qc_report['setContrast'][self.counterstainChannel][1]
+                self.counterstainChannel][0], qc_report['setContrast'][
+                self.counterstainChannel][1]
         )
     except KeyError:
         pass
 
     try:
         viewer.layers[channel].contrast_limits = (
-            qc_report['setContrast'][channel][0], qc_report['setContrast'][channel][1])
+            qc_report['setContrast'][channel][0], qc_report['setContrast'][
+                channel][1])
     except KeyError:
         pass
 
     # dock (or re-dock) next_widget and arbitrary_widget to Napari window
     viewer.window.add_dock_widget(
-        next_widget, name=f'Channel: {channel},  Sample: {sample}', area='right'
+        next_widget, name=f'Channel: {channel},  Sample: {sample}',
+        area='right'
     )
     viewer.window.add_dock_widget(
         arbitrary_widget, name='Sample Selector', area='right'
@@ -117,7 +127,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
 
         # update channel contrast yaml with selected constrast limits            
         qc_report['setContrast'][self.counterstainChannel] = (
-            [int(i) for i in viewer.layers[self.counterstainChannel].contrast_limits]
+            [int(i) for i in 
+             viewer.layers[self.counterstainChannel].contrast_limits]
         )
         qc_report['setContrast'][channel] = [
             int(i) for i in viewer.layers[channel].contrast_limits
@@ -125,7 +136,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
 
         # sort and dump updated qc_report to YAML file
         qc_report_sorted = sort_qc_report(
-            qc_report, module='setContrast', order=[self.counterstainChannel] + abx_channels
+            qc_report, module='setContrast', 
+            order=[self.counterstainChannel] + abx_channels
         )
         f = open(report_path, 'w')
         yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
@@ -136,7 +148,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
                 sample_index -= 1 
 
             channel = list(channels_to_samples.keys())[sample_index]
-            sample = channels_to_samples[list(channels_to_samples.keys())[sample_index]] 
+            sample = channels_to_samples[
+                list(channels_to_samples.keys())[sample_index]] 
             
             initial_callback = False
             callback(
@@ -155,8 +168,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
             QTimer().singleShot(0, viewer.close)
     
     next_sample.native.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
-        QtWidgets.QSizePolicy.Maximum,
+        QtWidgets.QSizePolicy.Fixed,
+        QtWidgets.QSizePolicy.Fixed,
     )
 
     # give next_sample access to channel passed to callback
@@ -166,7 +179,9 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     
     #######################################################################
 
-    @magicgui(layout='vertical', call_button='Enter', sample={'label': 'Sample Name'})
+    @magicgui(layout='vertical', call_button='Enter', 
+              sample={'choices': list(natsorted(data['Sample'].unique())),
+                      'label': 'Go to Sample'})
     def sample_selector(sample: str):
 
         return sample
@@ -175,6 +190,9 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
         QtWidgets.QSizePolicy.Fixed,
         QtWidgets.QSizePolicy.Fixed
     )
+    
+    # Set the current sample value immediately after creating the widget
+    sample_selector.sample.value = sample
 
     arbitrary_layout.addWidget(sample_selector.native)
 
@@ -188,22 +206,30 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
 
         print()
         if sample not in data['Sample'].unique():
-            napari.utils.notifications.show_warning('Sample name not in filtered data.')
+            napari.utils.notifications.show_warning(
+                'Sample name not in filtered data.'
+            )
             pass
         else:
             # update channel contrast yaml with selected constrast limits
                 
             qc_report['setContrast'][self.counterstainChannel] = (
-                [int(i) for i in viewer.layers[self.counterstainChannel].contrast_limits]
+                [int(i) for i in 
+                 viewer.layers[self.counterstainChannel].contrast_limits]
             )
-            qc_report['setContrast'][channel] = [int(i) for i in viewer.layers[channel].contrast_limits]
+            qc_report['setContrast'][channel] = [
+                int(i) for i in viewer.layers[channel].contrast_limits
+            ]
 
             # dump updated qc_report to YAML file
             qc_report_sorted = sort_qc_report(
-                qc_report, module='setContrast', order=[self.counterstainChannel] + abx_channels
+                qc_report, module='setContrast', 
+                order=[self.counterstainChannel] + abx_channels
             )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
 
             initial_callback = False
             callback(
@@ -215,7 +241,9 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
             arbitrary_selection_toggle = True
     
     #######################################################################
-    napari.utils.notifications.show_info(f'Viewing marker {channel} in sample {sample}')
+    # napari.utils.notifications.show_info(
+    #     f'Viewing marker {channel} in sample {sample}'
+    # )
 
 
 # main
@@ -246,14 +274,19 @@ def setContrast(data, self, args):
             qc_report['setContrast'] = {}
             reload_report = True
         if reload_report:
-            qc_report_sorted = sort_qc_report(qc_report, module='setContrast', order=None)
+            qc_report_sorted = sort_qc_report(
+                qc_report, module='setContrast', order=None
+            )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
             qc_report = yaml.safe_load(open(report_path))
     except:
         logger.info(
-            'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
-            'from aggregateData module to initialize QC report.'
+            'Aborting; QC report missing from CyLinter output directory. '
+            'Re-start pipeline from aggregateData module to initialize '
+            'QC report.'
         )
         sys.exit()
 
@@ -263,7 +296,7 @@ def setContrast(data, self, args):
     next_widget = QtWidgets.QWidget()
     next_layout = QtWidgets.QVBoxLayout(next_widget)
     next_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
+        QtWidgets.QSizePolicy.Fixed,
         QtWidgets.QSizePolicy.Fixed,
     )
 
@@ -271,7 +304,7 @@ def setContrast(data, self, args):
     arbitrary_widget = QtWidgets.QWidget()
     arbitrary_layout = QtWidgets.QVBoxLayout(arbitrary_widget)
     arbitrary_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Minimum,
+        QtWidgets.QSizePolicy.Fixed,
         QtWidgets.QSizePolicy.Fixed,
     )
 
@@ -303,18 +336,21 @@ def setContrast(data, self, args):
 
     print()
 
-    ##############################################################################################
+    ###########################################################################
     # print current channel contrast limits and exit
      
-    if set(
-       list(qc_report['setContrast'].keys())) == set(abx_channels + [self.counterstainChannel]):
+    if (
+        set(list(qc_report['setContrast'].keys())) == 
+        set(abx_channels + [self.counterstainChannel])
+         ):
         logger.info('Current channel contrast settings are as follows:')
         for k, v in qc_report['setContrast'].items():
             logger.info(f'{k}: {v}')
     else:
         logger.info(
-            'Aborting; QC report does not contain contrast settings for all channels. '
-            'Please ensure limits are selected for all channels.'
+            'Aborting; QC report does not contain contrast settings '
+            'for all channels. Please ensure limits are selected for '
+            'all channels.'
         )
         sys.exit()
     
