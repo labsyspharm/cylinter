@@ -31,8 +31,9 @@ import napari
 from magicgui import magicgui
 
 from ..utils import (
-    input_check, read_markers, single_channel_pyramid, marker_channel_number,
-    log_banner, log_multiline, get_filepath, reorganize_dfcolumns, sort_qc_report
+    input_check, read_markers, single_channel_pyramid,
+    marker_channel_number, log_banner, log_multiline, get_filepath,
+    reorganize_dfcolumns, sort_qc_report
 )
 
 from ..config import BooleanTerm
@@ -89,7 +90,10 @@ def generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir):
 
         sns.set_style('whitegrid')
         fig, ax = plt.subplots(figsize=(4, 4))
-        ax.scatter(x=hist_input, y=area_input, s=2000 / len(hist_input), label='marker dist.')
+        ax.scatter(
+            x=hist_input, y=area_input, s=2000 / len(hist_input),
+            label='marker dist.'
+        )
         plt.xlim([0, 1])
         plt.ylim([area_input.min(), area_input.max()])
 
@@ -97,7 +101,9 @@ def generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir):
         gate_val = qc_report['gating'][f'{marker}, {sample}, {cond}, {rep}']
         
         if gate_val is not None:
-            ax.axvline(x=gate_val, color='orange', linewidth=4.0, linestyle='-')
+            ax.axvline(
+                x=gate_val, color='orange', linewidth=4.0, linestyle='-'
+            )
 
         plt.title(title, weight='bold')
         plt.ylabel('Segmentation Area')
@@ -177,7 +183,7 @@ def multipage_pdf(abx_channels, dist_dir):
         output_pdf.write(file)
 
 
-def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, selection_layout, gate_dir, sample, marker, initial_callback, dist_dir, abx_channels, markers, qc_report, report_path):
+def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, selection_layout, pdf_widget, pdf_layout, gate_dir, sample, marker, initial_callback, dist_dir, abx_channels, markers, qc_report, report_path):
 
     # if valid sample and marker entered
     if (sample in data['Sample'].unique()) and (marker in abx_channels):
@@ -190,7 +196,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         cond = data['Condition'][data['Sample'] == sample].unique().item()
         rep = data['Replicate'][data['Sample'] == sample].unique().item()
 
-        sample_data = data[['X_centroid', 'Y_centroid', marker, 'Area']][data['Sample'] == sample]
+        sample_data = data[['X_centroid', 'Y_centroid', marker, 'Area']][
+            data['Sample'] == sample]
 
         ###################################################################
         # percentile filter for viz (no data filtration by default)
@@ -200,10 +207,15 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
         # read DNA1 channel
         file_path = get_filepath(self, check, sample, 'TIF')
-        channel_number = marker_channel_number(self, markers, self.counterstainChannel)
-        dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
+        channel_number = marker_channel_number(
+                self, markers, self.counterstainChannel
+        )
+        dna, min, max = single_channel_pyramid(
+                file_path, channel=channel_number
+        )
         viewer.add_image(
-            dna, rgb=False, blending='additive', colormap='gray', visible=False,
+            dna, rgb=False, blending='additive',
+            colormap='gray', visible=False,
             name='DNA', contrast_limits=(min, max)
         )
             
@@ -224,7 +236,9 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             channel_number = marker_channel_number(self, markers, ch)
             file_path = get_filepath(self, check, sample, 'TIF')
-            img, min, max = single_channel_pyramid(file_path, channel=channel_number)
+            img, min, max = single_channel_pyramid(
+                    file_path, channel=channel_number
+            )
 
             if ch == marker:
                 visible = True
@@ -241,7 +255,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             try:
                 viewer.layers[ch].contrast_limits = (
-                    qc_report['setContrast'][ch][0], qc_report['setContrast'][ch][1]
+                    qc_report['setContrast'][
+                        ch][0], qc_report['setContrast'][ch][1]
                 ) 
             except KeyError:
                 pass
@@ -249,7 +264,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
             ###################################################################
 
         # add centroids of currently gated cells
-        current_gate = qc_report['gating'][f'{marker}, {sample}, {cond}, {rep}']
+        current_gate = qc_report['gating'][
+            f'{marker}, {sample}, {cond}, {rep}']
         
         current_gateOG = current_gate  # recording None status
 
@@ -261,17 +277,16 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             viewer.add_points(
                 centroids, name='Reference gate', face_color='#00aaff', 
-                edge_color='#00aaff', edge_width=0.0, size=7.0, opacity=1.0,
-                blending='opaque', visible=True
-            )
+                size=7.0, opacity=1.0, blending='opaque', visible=True
+            ).edge_width = 0
 
         try:
-            # remove hist_widget and layout elements from Napari viewer if it exists
+            # remove hist_widget, layout elements from Napari viewer if exist
             viewer.window.remove_dock_widget(hist_widget)
         except LookupError:
             pass
 
-        # remove hist_widget and layout attributes from Napari viewer if they exist
+        # remove hist_widget, layout attributes from Napari viewer if exist
         count = hist_layout.count()
         for i in range(count - 1, -1, -1):
             item = hist_layout.itemAt(i)
@@ -297,7 +312,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
         # set plot title
         fig.suptitle(
-            f'Marker={marker}, Sample={sample}, Condition={cond}, Replicate={rep}', size=10
+            f'Marker={marker}, Sample={sample}, '
+            f'Condition={cond}, Replicate={rep}', size=10
         )
 
         # get axis object from canvas
@@ -313,15 +329,20 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         # set y-axis label
         ax.set_ylabel('Segmentation Area')
 
-        xlims = plt.xlim([sample_data[marker].min(), sample_data[marker].max()])
+        xlims = plt.xlim(
+            [sample_data[marker].min(), sample_data[marker].max()]
+        )
         plt.ylim([sample_data['Area'].min(), sample_data['Area'].max()])
 
         # add vertical line at current gate
         if current_gate is not None:
-            ax.axvline(x=current_gate, color='k', linewidth=1.0, linestyle='--')
+            ax.axvline(
+                x=current_gate, color='k', linewidth=1.0, linestyle='--'
+            )
 
             ax.text(
-                0.87, 1.04, '--- reference gate', fontsize=9, horizontalalignment='center',
+                0.87, 1.04, '--- reference gate', fontsize=9,
+                horizontalalignment='center',
                 verticalalignment='center', transform=ax.transAxes
             )
 
@@ -330,7 +351,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         axGate = fig.add_axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
 
         rnge = [xlims[0], xlims[1]]  
-        # small value added to avoid slider bar errors (line 350) if image has no signal
+        # small value added to avoid slider bar errors 
+        # (line 350) if image has no signal
 
         # add slider functionality
         if current_gate is None:
@@ -340,7 +362,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
             valinit = current_gate
 
         sGate = Slider(
-            axGate, 'Gate', rnge[0], rnge[1], valinit=valinit, valstep=(rnge[1] / 100000)
+            axGate, 'Gate', rnge[0], rnge[1], valinit=valinit, 
+            valstep=(rnge[1] / 100000)
         )
         sGate.label.set_fontsize(11)
         sGate.label.set_color('k')
@@ -361,7 +384,9 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
             if current_gateOG is not None:
 
                 # maintain current gate
-                ax.axvline(x=current_gate, color='k', linewidth=1.0, linestyle='--')
+                ax.axvline(
+                    x=current_gate, color='k', linewidth=1.0, linestyle='--'
+                )
             
             return adjusted_gate
 
@@ -370,7 +395,9 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
         # add button to show selected centroids in Napari viewer
         button_ax = fig.add_axes([0.65, 0.025, 0.25, 0.06])
-        button = Button(button_ax, 'Plot Points', color=axcolor, hovercolor='0.975')
+        button = Button(
+            button_ax, 'Plot Points', color=axcolor, hovercolor='0.975'
+        )
         button.label.set_fontsize(11)
 
         def apply_cutoff(event):
@@ -397,8 +424,9 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
                 viewer.layers.pop(layers - 1)
 
             viewer.add_points(
-                centroids, name='adjusted gate', face_color='orange', edge_color='orange',
-                edge_width=0.0, size=7.0, opacity=1.0, blending='opaque'
+                centroids, name='adjusted gate', face_color='yellow',
+                border_color='k', border_width=0.0, size=7.0,
+                opacity=1.0, blending='opaque'
             )
 
         button.on_clicked(apply_cutoff)
@@ -408,42 +436,54 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
        
         #######################################################################
         viewer.window.add_dock_widget(
-            hist_widget, name=f'{marker} intensity distribution for sample {sample}', area='right'
+            hist_widget,
+            name=f'{marker} intensity distribution for sample {sample}',
+            area='right'
         )
         #######################################################################
         
         if not initial_callback:
             try:
-                # remove selection_widget dock from layout if it exists
+                # remove pdf and selection widget docks from layout if exist
+                viewer.window.remove_dock_widget(pdf_widget)
                 viewer.window.remove_dock_widget(selection_widget)
             except LookupError:
                 pass
 
-            # re-dock selection_widget so hist_widget appears first in Napari
+            # re-dock pdf, selection widgets so hist_widget seen first in gui
             viewer.window.add_dock_widget(
-                selection_widget, name='Arbitrary Sample/Marker Selection', area='right'
+                selection_widget, name='Marker and Sample Selector',
+                area='right'
+            )
+            viewer.window.add_dock_widget(
+                pdf_widget, name='Refresh PDFs', area='right'
             )
 
         #######################################################################
 
-        @magicgui(layout='horizontal', call_button='Apply Gate and Move to Next Sample -->')
+        @magicgui(layout='horizontal',
+                  call_button='Apply Gate and Move to Next Sample -->')
         def next_sample():
-                
-            print()
             
             adjusted_gate = update(val=None)
 
             # save gate value
-            qc_report['gating'][f'{marker}, {sample}, {cond}, {rep}'] = float(adjusted_gate)
+            qc_report['gating'][
+                f'{marker}, {sample}, {cond}, {rep}'] = float(adjusted_gate)
 
             # dump updated qc_report to YAML file
             qc_report_sorted = sort_qc_report(
-                qc_report, module='gating', order=list(qc_report['gating'].keys())
+                qc_report, module='gating', 
+                order=list(qc_report['gating'].keys())
             )
             f = open(report_path, 'w')
-            yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+            yaml.dump(
+                    qc_report_sorted, f, sort_keys=False, allow_unicode=False
+            )
             
-            napari.utils.notifications.show_info(f'Gate updated to {adjusted_gate:.4f}.')
+            napari.utils.notifications.show_info(
+                f'Gate updated to {adjusted_gate:.4f}'
+            )
             
             if any(value is None for value in qc_report['gating'].values()):
                 for key, value in qc_report['gating'].items():
@@ -457,6 +497,7 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
                 callback(
                     self, viewer, data, hist_widget,
                     hist_layout, selection_widget, selection_layout,
+                    pdf_widget, pdf_layout,
                     gate_dir, sample_name, marker_name, initial_callback,
                     dist_dir, abx_channels, markers, qc_report, report_path
                 )
@@ -465,25 +506,27 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
                 
                 logger.info('Gating complete!')
 
-                ##################################################################################
+                ###############################################################
                 # ensure all PDFs are updated with current gates
                 
                 print()
                 logger.info('Updating gates in PDF pages.')
                 
                 for ch in abx_channels:
-                    generate_pdf(data, ch, abx_channels, qc_report, gate_dir, dist_dir)
+                    generate_pdf(
+                        data, ch, abx_channels, qc_report, gate_dir, dist_dir
+                    )
                 multipage_pdf(abx_channels, dist_dir)
 
-                ##################################################################################
+                ###############################################################
                 
                 print()
                 
                 QTimer().singleShot(0, viewer.close)
 
         next_sample.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum,
-            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed,
         )
  
         hist_layout.addWidget(next_sample.native)
@@ -494,8 +537,10 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         @magicgui(
             layout='vertical',
             call_button='Enter',
-            marker_name={'label': 'Marker Name'},
-            sample_name={'label': 'Sample Name'}
+            marker_name={'choices': abx_channels, 'label': 'Marker'},
+            sample_name={
+                 'choices': list(natsorted(data['Sample'].unique())), 
+                 'label': 'Sample'}
         )
         def sample_selector(marker_name: str, sample_name: str):
 
@@ -521,6 +566,7 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
             callback(
                 self, viewer, data, hist_widget,
                 hist_layout, selection_widget, selection_layout,
+                pdf_widget, pdf_layout,
                 gate_dir, sample_name, marker_name, initial_callback,
                 dist_dir, abx_channels, markers, qc_report, report_path
             )
@@ -530,7 +576,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         @magicgui(
             layout='vertical',
             call_button='Refresh PDF(s)',
-            marker_name={'label': 'Marker Name (or "ALL")'},
+            marker_name={'choices': abx_channels + ['ALL MARKERS'],
+                         'label': 'Marker'},
         )
         def update_pdf(marker_name: str, gate_dir, dist_dir):
 
@@ -542,49 +589,64 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         update_pdf.dist_dir.bind(dist_dir)
 
         update_pdf.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum,
-            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed,
         )
         
         if initial_callback:
-            selection_layout.addWidget(update_pdf.native)
+            pdf_layout.addWidget(update_pdf.native)
 
         #######################################################################
 
         @update_pdf.called.connect
         def update_pdf_callback(marker: str):
 
-            if marker not in abx_channels + ['ALL']:
-                napari.utils.notifications.show_warning('Marker name not in filtered data.')
+            if marker not in abx_channels + ['ALL MARKERS']:
+                napari.utils.notifications.show_warning(
+                    'Marker name not in filtered data.'
+                )
                 pass
             else:
                 print()
-                if marker == 'ALL':
+                if marker == 'ALL MARKERS':
                     for marker in abx_channels:
-                        generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
+                        generate_pdf(
+                            data, marker, abx_channels, qc_report, 
+                            gate_dir, dist_dir
+                        )
                     multipage_pdf(abx_channels, dist_dir)
                 else:
-                    generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
+                    generate_pdf(
+                        data, marker, abx_channels, qc_report, 
+                        gate_dir, dist_dir
+                    )
                     multipage_pdf(abx_channels, dist_dir)
 
                 napari.utils.notifications.show_info('PDF(s) updated!')
         
         #######################################################################
 
-        napari.utils.notifications.show_info(f'Gating {marker} in sample {sample}')
+        napari.utils.notifications.show_info(
+            f'Gating {marker} in sample {sample}'
+        )
     
     else:
         print()
-        if marker not in abx_channels and sample not in data['Sample'].unique():
+        if (marker not in abx_channels and 
+                sample not in data['Sample'].unique()):
             napari.utils.notifications.show_warning(
                 'Marker and sample names not in filtered data.'
             )
             pass
         elif marker not in abx_channels and sample in data['Sample'].unique():
-            napari.utils.notifications.show_warning('Marker name not in filtered data.')
+            napari.utils.notifications.show_warning(
+                    'Marker name not in filtered data.'
+                )
             pass
         elif sample not in data['Sample'].unique() and marker in abx_channels:
-            napari.utils.notifications.show_warning('Sample name not in filtered data.')
+            napari.utils.notifications.show_warning(
+                'Sample name not in filtered data.'
+            )
             pass
 
 
@@ -610,7 +672,7 @@ def gating(data, self, args):
         # sox2['Sample'] = sox2['Sample'].astype('str')
         # data = data.merge(sox2, how='inner', on=['CellID', 'Sample'])
 
-        # create gating and distributions subdirectories if they haven't already
+        # create gating and distributions subdirectories if they don't exist
         gate_dir = os.path.join(self.outDir, 'gating')
         if not os.path.exists(gate_dir):
             os.makedirs(gate_dir)
@@ -632,24 +694,31 @@ def gating(data, self, args):
                 qc_report['gating'] = {}
                 reload_report = True
             if reload_report:
-                qc_report_sorted = sort_qc_report(qc_report, module='gating', order=None)
+                qc_report_sorted = sort_qc_report(
+                    qc_report, module='gating', order=None
+                )
                 f = open(report_path, 'w')
-                yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
+                yaml.dump(
+                        qc_report_sorted, f, sort_keys=False,
+                        allow_unicode=False
+                )
                 qc_report = yaml.safe_load(open(report_path))
         except:
             logger.info(
-                'Aborting; QC report missing from CyLinter output directory. Re-start pipeline '
-                'from aggregateData module to initialize QC report.'
+                'Aborting; QC report missing from CyLinter output directory. '
+                'Re-start pipeline from aggregateData module to '
+                'initialize QC report.'
             )
             sys.exit()
     
         data = data[~data['Sample'].isin(self.samplesToRemoveGating)]
 
-        ##########################################################################################
+        #######################################################################
         # initialize gating dictionary
 
         gating_keys = [
-            f"{j}, {i}, {data['Condition'][data['Sample'] == i].unique().item()}, "
+            f"{j}, {i}, {data['Condition'][
+                data['Sample'] == i].unique().item()}, "
             f"{data['Replicate'][data['Sample'] == i].unique().item()}" 
             for j in abx_channels for i in natsorted(data['Sample'].unique())
         ]
@@ -661,34 +730,47 @@ def gating(data, self, args):
                 qc_report['gating'][key] = None
 
         # sort and dump updated qc_report to YAML file
-        qc_report_sorted = sort_qc_report(qc_report, module='gating', order=gating_keys)
+        qc_report_sorted = sort_qc_report(
+                qc_report, module='gating', order=gating_keys
+            )
         f = open(report_path, 'w')
         yaml.dump(qc_report_sorted, f, sort_keys=False, allow_unicode=False)
         qc_report = yaml.safe_load(open(report_path))  # reload qc_report
 
-        ##########################################################################################
+        #######################################################################
         # generate initial PDFs of marker distributions
         
         for marker in abx_channels:
             if not os.path.exists(os.path.join(dist_dir, f'{marker}.pdf')):
-                generate_pdf(data, marker, abx_channels, qc_report, gate_dir, dist_dir)
+                generate_pdf(
+                    data, marker, abx_channels, qc_report, gate_dir, dist_dir
+                )
             
         if not os.path.exists(os.path.join(dist_dir, 'multipage.pdf')):
             logger.info('Generated multi-channel PDF.')
             multipage_pdf(abx_channels, dist_dir)
             print()
         
-        ##########################################################################################
+        #######################################################################
         # gate data
 
         viewer = napari.Viewer(title='CyLinter')
+
+        # generate PDF refresh Qt widget
+        pdf_widget = QtWidgets.QWidget()
+        pdf_layout = QtWidgets.QVBoxLayout(pdf_widget)
+
+        pdf_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed,
+        )
         
         # generate sample selection Qt widget
         selection_widget = QtWidgets.QWidget()
         selection_layout = QtWidgets.QVBoxLayout(selection_widget)
         
         selection_widget.setSizePolicy(
-            QtWidgets.QSizePolicy.Minimum,
+            QtWidgets.QSizePolicy.Fixed,
             QtWidgets.QSizePolicy.Fixed,
         )
 
@@ -697,8 +779,8 @@ def gating(data, self, args):
         hist_layout = QtWidgets.QVBoxLayout(hist_widget)
         
         hist_widget.setSizePolicy(
-            QtWidgets.QSizePolicy.Minimum,
-            QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Fixed,
+            QtWidgets.QSizePolicy.Fixed
         )
 
         if any(value is None for value in qc_report['gating'].values()):
@@ -712,12 +794,17 @@ def gating(data, self, args):
             callback(
                 self, viewer, data, hist_widget,
                 hist_layout, selection_widget, selection_layout,
+                pdf_widget, pdf_layout,
                 gate_dir, sample_name, marker_name, initial_callback,
                 dist_dir, abx_channels, markers, qc_report, report_path
             )
-            
+
             viewer.window.add_dock_widget(
-                selection_widget, name='Arbitrary Sample/Marker Selection', area='right'
+                selection_widget, name='Marker and Sample Selector', 
+                area='right'
+            )
+            viewer.window.add_dock_widget(
+                pdf_widget, name='Refresh PDFs', area='right'
             )
 
             viewer.scale_bar.visible = True
@@ -728,7 +815,7 @@ def gating(data, self, args):
         else:
             pass
 
-        ##########################################################################################
+        #######################################################################
         # subtract gates and binarize data
         
         gated = pd.DataFrame()
@@ -751,14 +838,15 @@ def gating(data, self, args):
 
                 sample_data = data[marker][data['Sample'] == sample]
 
-                gate = qc_report['gating'][f'{marker}, {sample}, {cond}, {rep}']
+                gate = qc_report['gating'][
+                    f'{marker}, {sample}, {cond}, {rep}']
 
                 if gate is None:
                     print()
                     logger.info(
-                        'Aborting; some gates in QC report are missing (i.e. Null). '
-                        'Re-run the gating module to ensure all sample/marker '
-                        'combinations have a gate.'
+                        'Aborting; some gates in QC report are '
+                        'missing (i.e. Null). Re-run the gating module '
+                        'to ensure all sample/marker combinations have a gate.'
                     )
                     sys.exit()
 
@@ -772,7 +860,8 @@ def gating(data, self, args):
         gated[abx_channels] = gated[abx_channels] > 0.0
 
         data = data.merge(
-            gated, how='inner', on=['Sample', 'CellID'], suffixes=(None, '_bool')
+            gated, how='inner', on=['Sample', 'CellID'],
+            suffixes=(None, '_bool')
         )
 
         bool_cols = [f'{i}_bool' for i in abx_channels]
@@ -788,7 +877,8 @@ def gating(data, self, args):
             .sort_values(ascending=False)
         )
 
-        selected_vector_counts = total_vector_counts[total_vector_counts >= self.vectorThreshold]
+        selected_vector_counts = total_vector_counts[
+            total_vector_counts >= self.vectorThreshold]
 
         print()
         logger.info(
@@ -796,7 +886,7 @@ def gating(data, self, args):
             len(selected_vector_counts), self.vectorThreshold
         )
 
-        ##########################################################################################
+        #######################################################################
         # plot Boolean vector counts
 
         sns.set_style('white')
@@ -815,7 +905,7 @@ def gating(data, self, args):
         plt.savefig(os.path.join(gate_dir, 'total_vector_counts.pdf'))
         plt.close('all')
 
-        ##########################################################################################
+        #######################################################################
         # plot heatmap of Boolean vectors >= vectorThreshold
         font_scaler = 1.0
         
@@ -840,8 +930,9 @@ def gating(data, self, args):
             )
             
             heatmap = sns.heatmap(
-                unique_vectors, annot=False, lw=0.1, linecolor='k', xticklabels=True,
-                cmap='Greys', vmax=1.75, cbar=False, square=False, ax=axs[0]
+                unique_vectors, annot=False, lw=0.1, linecolor='k',
+                xticklabels=True, cmap='Greys', vmax=1.75, cbar=False,
+                square=False, ax=axs[0]
             )
 
             heatmap.set_xticklabels(
@@ -853,15 +944,17 @@ def gating(data, self, args):
                 spine.set_linewidth(2)
             axs[0].set_ylabel('')
             axs[0].set_yticks([])
-            axs[0].set_xlabel('Marker', fontsize=18, labelpad=20, fontweight='bold')
+            axs[0].set_xlabel(
+                'Marker', fontsize=18, labelpad=20, fontweight='bold'
+            )
 
             selected_vector_counts = pd.DataFrame(selected_vector_counts)
             selected_vector_counts.reset_index(inplace=True)
             selected_vector_counts.rename(columns={0: 'counts'}, inplace=True)
             
-            # avoiding matplotlib info statement: "Using categorical units to plot a list
-            # of strings that are all parsable as floats or dates." caused by the
-            # below plotting function
+            # avoiding matplotlib info statement: "Using categorical units 
+            # to plot a list of strings that are all parsable as floats or 
+            # dates." caused by the below plotting function
             mlogger = logging.getLogger('matplotlib')
             mlogger.setLevel(logging.WARNING)
 
@@ -875,7 +968,9 @@ def gating(data, self, args):
             axs[1].spines['left'].set_visible(False)
             axs[1].spines['right'].set_visible(False)
             axs[1].spines['top'].set_visible(False)
-            axs[1].set_xlabel('Cell Count', fontsize=18, labelpad=10, fontweight='bold')
+            axs[1].set_xlabel(
+                    'Cell Count', fontsize=18, labelpad=10, fontweight='bold'
+                )
             axs[1].set_ylabel('')
             axs[1].set_yticks([])
 
@@ -885,9 +980,12 @@ def gating(data, self, args):
             plt.close('all')
 
         else:
-            logger.info('No vector signatures to plot for threshold_vectors.pdf, skipping.')
+            logger.info(
+                'No vector signatures to plot for '
+                'threshold_vectors.pdf, skipping.'
+            )
 
-        ##########################################################################################
+        #######################################################################
         # classify cells in dataframe
         
         # add ignored markers to inner dictionary of self.classes
@@ -896,7 +994,8 @@ def gating(data, self, args):
             for name, channels in inner_dict.items():
                 terms.extend(channels) 
             channel_list = [
-                str(i).split('~')[1] if '~' in str(i) else str(i) for i in terms
+                str(i).split('~')[1] if '~' in str(i) else 
+                str(i) for i in terms
             ]
             ignore = sorted(set(abx_channels).difference(set(channel_list)))
             boo = [BooleanTerm.parse_str(t) for t in ignore]
@@ -919,19 +1018,23 @@ def gating(data, self, args):
             
             # generate complementary lists of negated subset markers
             negated = [
-                list(set(inner_dict['subsets']).difference(set(i))) for i in combos
+                list(set(inner_dict['subsets']).difference(set(i))) for 
+                i in combos
             ]
             negated = [sorted(i) for i in negated]
             
             # prepend minus signs to negated subset markers 
-            negated = [[f'-{element}' for element in inner_list] for inner_list in negated]
+            negated = [[f'-{element}' for element in inner_list] for 
+                       inner_list in negated]
 
             # prepend plus signs to expressed subset markers 
-            combos = [[f'+{element}' for element in inner_list] for inner_list in combos]
+            combos = [[f'+{element}' for element in inner_list] for 
+                      inner_list in combos]
             
             # combine expressed and negated subset markers
             subsets = [
-                expressed + not_expressed for expressed, not_expressed in zip(combos, negated)
+                expressed + not_expressed for expressed, not_expressed in zip(
+                    combos, negated)
             ]
             
             # write cell type subsets to signatures dictionary
@@ -945,7 +1048,8 @@ def gating(data, self, args):
         f = open(os.path.join(gate_dir, 'signatures.yml'), 'w')
         sigs = {
             key: [f'{value}/~{value}' if value.negated is None else
-                  str(value) for value in values] for key, values in signatures.items()
+                  str(value) for value in values] for 
+            key, values in signatures.items()
         }
         yaml.dump(sigs, f)
 
@@ -964,7 +1068,8 @@ def gating(data, self, args):
                             col = data[f'{term.name}_bool']
                         except KeyError:
                             logger.warning(
-                                f'Aborting; classes dictionary term {term.name} '
+                                'Aborting; classes dictionary '
+                                f'term {term.name} '
                                 'not a marker in dataframe.'
                             )
                             sys.exit()
@@ -977,7 +1082,8 @@ def gating(data, self, args):
                 conflicts = set(data.loc[indexer][data.loc[indexer].notna()])
                 if conflicts:
                     raise ValueError(
-                        f"Boolean class '{class_name}' overlaps with {conflicts}"
+                        f"Boolean class '{class_name}' "
+                        f"overlaps with {conflicts}"
                     )
                 data.loc[indexer] = class_name
 
@@ -1002,7 +1108,8 @@ def gating(data, self, args):
         log_multiline(logger.info, classified_counts.to_string(index=False))
 
         pct_classified = classified_counts['cell_count'][
-            classified_counts['class'] != 'unclassified'].sum() / len(data) * 100
+            classified_counts[
+                'class'] != 'unclassified'].sum() / len(data) * 100
 
         unclassified = data[data['class'] == 'unclassified']
 
@@ -1028,10 +1135,11 @@ def gating(data, self, args):
         logger.info(
             'Current classification accounts for %.2f%% of data; '
             '%d Boolean vectors with >= %d events remain unclassified.',
-            pct_classified, len(unique_unclassified_vectors), self.vectorThreshold
+            pct_classified, len(unique_unclassified_vectors), 
+            self.vectorThreshold
         )
 
-        ##########################################################################################
+        #######################################################################
         # plot heatmap of Boolean vectors >= vectorThreshold left unclassified
 
         if not unique_unclassified_vectors.empty:
@@ -1054,7 +1162,8 @@ def gating(data, self, args):
             )
 
             heatmap.set_xticklabels(
-                [i.get_text().split('_bool')[0] for i in heatmap.get_xticklabels()], rotation=90
+                [i.get_text().split('_bool')[0] for i in 
+                 heatmap.get_xticklabels()], rotation=90
             )
 
             for _, spine in heatmap.spines.items():
@@ -1062,10 +1171,16 @@ def gating(data, self, args):
 
             axs[0].set_ylabel('')
             axs[0].set_yticks([])
-            axs[0].set_xlabel('Marker', fontsize=18, labelpad=20, fontweight='bold')
+            axs[0].set_xlabel(
+                'Marker', fontsize=18, labelpad=20, fontweight='bold'
+            )
 
-            unclassified_vector_counts = pd.DataFrame(unclassified_vector_counts)
-            unclassified_vector_counts.rename(columns={0: 'counts'}, inplace=True)
+            unclassified_vector_counts = pd.DataFrame(
+                unclassified_vector_counts
+            )
+            unclassified_vector_counts.rename(
+                    columns={0: 'counts'}, inplace=True
+            )
             
             sns.barplot(
                 data=unclassified_vector_counts, x='counts',
@@ -1078,7 +1193,9 @@ def gating(data, self, args):
             axs[1].spines['left'].set_visible(False)
             axs[1].spines['right'].set_visible(False)
             axs[1].spines['top'].set_visible(False)
-            axs[1].set_xlabel('Cell Count', fontsize=18, labelpad=10, fontweight='bold')
+            axs[1].set_xlabel(
+                'Cell Count', fontsize=18, labelpad=10, fontweight='bold'
+            )
             axs[1].set_ylabel('')
             axs[1].set_yticks([])
             plt.subplots_adjust(wspace=-0.1)
@@ -1086,7 +1203,7 @@ def gating(data, self, args):
             plt.savefig(os.path.join(gate_dir, 'unclassified_vectors.pdf'))
             plt.close('all')
 
-        ##########################################################################################
+        #######################################################################
         # plot heatmap of classified cell type signatures
 
         classes = pd.DataFrame.from_dict(signatures)
@@ -1095,10 +1212,13 @@ def gating(data, self, args):
         for cls in classes.columns:
             class_declarations = classes[cls].copy()
             class_declarations.index = [i.name for i in class_declarations]
-            channel_negations = [class_declarations[i].negated for i in abx_channels]
+            channel_negations = [
+                class_declarations[i].negated for i in abx_channels
+            ]
             row = dict(zip(abx_channels, channel_negations))
             table = pd.concat(
-                [table, pd.DataFrame(index=[cls], data=[row])], ignore_index=False
+                [table, pd.DataFrame(index=[cls], data=[row])], 
+                ignore_index=False
             )
 
         # apply the custom function to invert Boolean calls in the dataFrame
@@ -1133,14 +1253,21 @@ def gating(data, self, args):
         triang1 = Triangulation(xs.ravel(), ys.ravel(), triangles1)
 
         triangles2 = [
-            (i + 1 + j * (num_markers + 1), i + 1 + (j + 1) * (num_markers + 1),
+            (i + 1 + j * (num_markers + 1), 
+             i + 1 + (j + 1) * (num_markers + 1),
              i + (j + 1) * (num_markers + 1)) for j in range(num_classes) for
             i in range(num_markers)
         ]
         triang2 = Triangulation(xs.ravel(), ys.ravel(), triangles2)
         
-        ax.tripcolor(triang1, white.values.ravel(), lw=0.0, cmap='Greys_r', vmin=0, vmax=2) 
-        ax.tripcolor(triang2, 1 - black.values.ravel(), lw=0.0, cmap='Greys_r', vmin=-1, vmax=1)
+        ax.tripcolor(
+            triang1, white.values.ravel(), lw=0.0, cmap='Greys_r', 
+            vmin=0, vmax=2
+        ) 
+        ax.tripcolor(
+            triang2, 1 - black.values.ravel(), lw=0.0, cmap='Greys_r',
+            vmin=-1, vmax=1
+        )
         # vmin and vmax values set to create grey color
 
         for i in range(num_markers + 1):
@@ -1161,20 +1288,22 @@ def gating(data, self, args):
         custom_ytick_locations = list(range(num_classes))
         custom_ytick_labels = table.index
         plt.yticks(
-            [i + 0.5 for i in custom_ytick_locations[::-1]], custom_ytick_labels,
-            fontsize=10, rotation=0
+            [i + 0.5 for i in custom_ytick_locations[::-1]], 
+            custom_ytick_labels, fontsize=10, rotation=0
         )
 
         legend_elements = []
 
         legend_elements.append(
             Line2D([0], [0], marker='s', color='none', label='True',
-                   markerfacecolor='gray', markeredgecolor='k', lw=0.01, markersize=12)
+                   markerfacecolor='gray', markeredgecolor='k',
+                   lw=0.01, markersize=12)
         )
 
         legend_elements.append(
             Line2D([0], [0], marker='s', color='none', label='False',
-                   markerfacecolor='white', markeredgecolor='k', lw=0.01, markersize=12)
+                   markerfacecolor='white', markeredgecolor='k',
+                   lw=0.01, markersize=12)
         )
 
         ax.legend(
@@ -1183,9 +1312,13 @@ def gating(data, self, args):
         )
 
         plt.title(
-            'Classification accounts for {:.2f}% of data'.format(pct_classified), size=8
+            'Classification accounts '
+            'for {:.2f}% of data'.format(pct_classified),
+            size=8
         )
-        plt.savefig(os.path.join(gate_dir, 'class_signatures.pdf'), bbox_inches='tight')
+        plt.savefig(
+            os.path.join(gate_dir, 'class_signatures.pdf'), bbox_inches='tight'
+        )
         plt.close('all')
 
     data = reorganize_dfcolumns(data, markers, self.dimensionEmbedding)

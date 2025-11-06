@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict
 from uuid import uuid4
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -961,17 +962,37 @@ def compute_gmm(data, x_min, x_max, ax):
     best_n_components = -1
 
     for n_components in range(1, 3 + 1):
-        gmm = GaussianMixture(n_components=n_components, random_state=0)
-        gmm.fit(data)
+
+        gmm = GaussianMixture(
+            n_components=n_components, init_params='kmeans', random_state=0
+        )
+        
+        with warnings.catch_warnings():  # block kmeans warnings during GMM fit
+            warnings.filterwarnings(
+                "ignore",
+                category=RuntimeWarning,
+                module="sklearn.cluster._kmeans"
+            )
+            gmm.fit(data)
+        
         bic = gmm.bic(data)  # calculate BIC
 
         if bic < best_bic:
             best_bic = bic
             best_n_components = n_components
-    
+
     # fit a Gaussian mixture model to histogram data using best_n_components
-    gmm = GaussianMixture(n_components=best_n_components, random_state=0)
-    gmm.fit(data)
+    gmm = GaussianMixture(
+        n_components=best_n_components, init_params='kmeans', random_state=0
+    )
+
+    with warnings.catch_warnings():  # block kmeans warnings during GMM fit
+        warnings.filterwarnings(
+            "ignore",
+            category=RuntimeWarning,
+            module="sklearn.cluster._kmeans"
+        )
+        gmm.fit(data)
 
     # generate points (along the DNA intensity histogram X range) for plotting the GMM 
     x = np.linspace(x_min, x_max, 100)

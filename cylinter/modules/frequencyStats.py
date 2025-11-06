@@ -16,7 +16,8 @@ from matplotlib.lines import Line2D
 from scipy.stats import ttest_ind
 
 from ..utils import (
-    input_check, read_markers, categorical_cmap, fdrcorrection, reorganize_dfcolumns
+    input_check, read_markers, categorical_cmap,
+    fdrcorrection, reorganize_dfcolumns
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ def frequencyStats(data, self, args):
             stats_input = data[['Sample', 'Replicate', type]]
 
             # loop over comma-delimited binary declarations
-            for i in range(len(list(self.sampleStatuses.values())[0].split(', '))):
+            for i in range(
+              len(list(self.sampleStatuses.values())[0].split(', '))):
 
                 # get unique declaration categories (should be 2 per test)
                 comparison = set(
@@ -87,8 +89,9 @@ def frequencyStats(data, self, args):
                         if cluster not in [-1, 'unclassified']:
                             
                             logger.info(
-                                f'Calculating log2({test}/{control}) of mean cell '
-                                f'density for {type} {str(cluster)}.')
+                                f'Calculating log2({test}/{control}) of '
+                                f'mean cell density for {type} {str(cluster)}.'
+                            )
 
                             group = (
                                 group.groupby(['Sample', 'Replicate', type])
@@ -128,39 +131,52 @@ def frequencyStats(data, self, args):
                                 for j in file_names]
 
                             # add replicates column to group data
-                            group['Replicate'] = [self.sampleReplicates[i] for i in file_names]
+                            group['Replicate'] = [
+                                self.sampleReplicates[i] for i in file_names
+                            ]
 
                             group[type] = cluster
 
-                            # drop samples for which a declaration cannot be made
-                            group = group[~group['status'].str.contains('-UNK')]
+                            # drop samples with no declaration
+                            group = group[
+                                ~group['status'].str.contains('-UNK')]
 
                             group.reset_index(drop=True, inplace=True)
 
                             # get denominator cell count for each sample
                             if self.denominatorCluster is None:
                                 group['tissue_count'] = [
-                                    len(stats_input[stats_input['Sample'] == i])
+                                    len(stats_input[
+                                        stats_input['Sample'] == i])
                                     for i in group['Sample']]
                             else:
                                 group['tissue_count'] = [
-                                    len(stats_input[(stats_input['Sample'] == i) &
-                                        (stats_input[type] == self.denominatorCluster)])
+                                    len(stats_input[
+                                        (stats_input['Sample'] == i) &
+                                        (stats_input[
+                                            type] == self.denominatorCluster)])
                                     for i in group['Sample']]
 
                             # compute density of cells per sample
-                            group['density'] = group['count'] / group['tissue_count']
+                            group['density'] = (
+                                group['count'] / group['tissue_count']
+                            )
 
                             # append group data to catplot_input
-                            catplot_input = pd.concat([catplot_input, group], axis=0)
+                            catplot_input = pd.concat(
+                                [catplot_input, group], axis=0
+                            )
 
                             # isolate test and control group values
-                            cnd1_values = group['density'][group['status'] == test]
-                            cnd2_values = group['density'][group['status'] == control]
+                            cnd1_values = group['density'][
+                                group['status'] == test]
+                            cnd2_values = group['density'][
+                                group['status'] == control]
 
                             # perform Welch's t-test (equal_var=False)
                             stat, pval = ttest_ind(
-                                cnd1_values, cnd2_values, axis=0, equal_var=False,
+                                cnd1_values, cnd2_values, axis=0,
+                                equal_var=False,
                                 nan_policy='propagate'
                             )
 
@@ -174,7 +190,8 @@ def frequencyStats(data, self, args):
 
                             # compute mean ratio
                             ratio = np.log2(
-                                (cnd1_mean + 0.00000000001) / (cnd2_mean + 0.00000000001)
+                                (cnd1_mean + 0.00000000001) / 
+                                (cnd2_mean + 0.00000000001)
                             )
 
                             # compute mean difference
@@ -187,21 +204,24 @@ def frequencyStats(data, self, args):
 
                     # create stats dataframe
                     statistics = pd.DataFrame(
-                        list(zip(cluster_list, ratio_list, dif_list, pval_list)),
+                        list(zip(cluster_list, ratio_list, 
+                                 dif_list, pval_list)),
                         columns=[type, 'ratio', 'dif', 'pval']
                     ).sort_values(by=type)
 
                     # compute FDR p-val corrections
                     # (uses statsmodels.stats.multitest implementation)
                     rejected, p_adjust = fdrcorrection(
-                        statistics['pval'].tolist(), alpha=0.05, method='indep', is_sorted=False
+                        statistics['pval'].tolist(), alpha=0.05,
+                        method='indep', is_sorted=False
                     )
 
                     statistics['qval'] = p_adjust
 
                     # save total stats table
                     statistics.to_csv(
-                        os.path.join(frequency_dir, 'stats_total.csv'), index=False
+                        os.path.join(frequency_dir, 'stats_total.csv'),
+                        index=False
                     )
 
                     if self.FDRCorrection:
@@ -210,17 +230,22 @@ def frequencyStats(data, self, args):
                         stat = 'pval'
 
                     # isolate statistically significant stat values
-                    significant = statistics[statistics[stat] <= 0.05].sort_values(by=stat)
+                    significant = statistics[
+                        statistics[stat] <= 0.05].sort_values(by=stat)
 
                     # save significant stats table
                     significant.to_csv(
-                        os.path.join(frequency_dir, 'stats_sig.csv'), index=False
+                        os.path.join(frequency_dir, 'stats_sig.csv'),
+                        index=False
                     )
 
                     # plot
                     sns.set_style('whitegrid')
                     fig, ax = plt.subplots()
-                    plt.scatter(abs(significant['dif']), significant['ratio'], s=9.0, c='tab:red')
+                    plt.scatter(
+                        abs(significant['dif']), significant['ratio'],
+                        s=9.0, c='tab:red'
+                    )
 
                     for label, qval, x, y in zip(
                         significant[type], significant[stat],
@@ -236,10 +261,16 @@ def frequencyStats(data, self, args):
                         )
 
                     fontsize = {'size': 8}
-                    ax.xaxis.set_tick_params(which='major', reset=False, **fontsize)
-                    ax.yaxis.set_tick_params(which='major', reset=False, **fontsize)
+                    ax.xaxis.set_tick_params(
+                        which='major', reset=False, **fontsize
+                    )
+                    ax.yaxis.set_tick_params(
+                        which='major', reset=False, **fontsize
+                    )
 
-                    plt.title(f'{test} vs. {control} ({stat[0]}<0.05)', fontsize=9)
+                    plt.title(
+                        f'{test} vs. {control} ({stat[0]}<0.05)', fontsize=9
+                    )
                     plt.xlabel(f'abs({test} - {control})', fontsize=8)
                     plt.ylabel(f'log2({test} / {control})', fontsize=8)
                     plt.savefig(os.path.join(frequency_dir, 'plot.pdf'))
@@ -260,7 +291,8 @@ def frequencyStats(data, self, args):
                     if not catplot_input.empty:
                         # build cmap
                         cmap = categorical_cmap(
-                            numUniqueSamples=len(catplot_input['Sample'].unique()),
+                            numUniqueSamples=len(
+                                    catplot_input['Sample'].unique()),
                             numCatagories=10, cmap='tab10', continuous=False
                         )
 
@@ -283,7 +315,9 @@ def frequencyStats(data, self, args):
                         sns.set(font_scale=0.3)
                         sns.set_style('whitegrid')
                         ncols = 5
-                        nrows = math.ceil(len(catplot_input[type].unique()) / ncols)
+                        nrows = math.ceil(
+                            len(catplot_input[type].unique()) / ncols
+                        )
 
                         fig = plt.figure(figsize=(ncols + 2, nrows))
 
@@ -296,11 +330,14 @@ def frequencyStats(data, self, args):
 
                             ax = fig.add_subplot(gs[ax[0], ax[1]])
                             
-                            group['status'] = [i.split('-')[1] for i in group['status']]
+                            group['status'] = [
+                                i.split('-')[1] for i in group['status']
+                            ]
                             
                             sns.barplot(
-                                data=group, x='status', y='density', hue='Sample', 
-                                palette=sample_color_dict, width=0.8, lw=0.0, ax=ax 
+                                data=group, x='status', y='density',
+                                hue='Sample', palette=sample_color_dict,
+                                width=0.8, lw=0.0, ax=ax 
                             )
                             
                             ax.grid(lw=0.5)
@@ -315,35 +352,48 @@ def frequencyStats(data, self, args):
                             plt.tight_layout()
                          
                         file_names = [
-                            get_key(i) for i in natsorted(catplot_input['Sample'].unique())
+                            get_key(i) for i in 
+                            natsorted(catplot_input['Sample'].unique())
                         ]
 
-                        sample_conds = [self.sampleConditions[i] for i in file_names]
+                        sample_conds = [
+                            self.sampleConditions[i] for i in file_names
+                        ]
 
-                        sample_abbrs = [self.sampleConditionAbbrs[i] for i in file_names]
+                        sample_abbrs = [
+                            self.sampleConditionAbbrs[i] for i in file_names
+                        ]
 
-                        cond_abbr = [f'{i}-{j}' for i, j in zip(sample_conds, sample_abbrs)]
+                        cond_abbr = [
+                            f'{i}-{j}' for i, j in 
+                            zip(sample_conds, sample_abbrs)
+                        ]
 
                         handles_dict = dict(zip(
-                            natsorted(catplot_input['Sample'].unique()), cond_abbr)
+                            natsorted(
+                                catplot_input['Sample'].unique()), cond_abbr)
                         )
 
                         legend_handles = []
                         for k, v in handles_dict.items():
                             legend_handles.append(
                                 Line2D([0], [0], marker='o', color='none',
-                                       label=v, markerfacecolor=sample_color_dict[k],
-                                       markeredgecolor='k', markeredgewidth=0.2,
+                                       label=v,
+                                       markerfacecolor=sample_color_dict[k],
+                                       markeredgecolor='k',
+                                       markeredgewidth=0.2,
                                        markersize=5.0)
                             )
 
                         fig.legend(
-                            handles=legend_handles, prop={'size': 5.0}, loc='upper left',
-                            bbox_to_anchor=[1.0, 1.0]
+                            handles=legend_handles, prop={'size': 5.0},
+                            loc='upper left', bbox_to_anchor=[1.0, 1.0]
                         )
 
                         plt.savefig(
-                            os.path.join(frequency_dir, 'catplot.pdf'), bbox_inches='tight'
+                            os.path.join(
+                                frequency_dir, 'catplot.pdf'),
+                            bbox_inches='tight'
                         )
                         plt.close('all')
 
