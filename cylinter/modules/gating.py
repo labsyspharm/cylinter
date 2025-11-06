@@ -717,8 +717,8 @@ def gating(data, self, args):
         # initialize gating dictionary
 
         gating_keys = [
-            f"{j}, {i}, {data['Condition'][
-                data['Sample'] == i].unique().item()}, "
+            f"{j}, {i}, "
+            f"{data['Condition'][data['Sample'] == i].unique().item()}, "
             f"{data['Replicate'][data['Sample'] == i].unique().item()}" 
             for j in abx_channels for i in natsorted(data['Sample'].unique())
         ]
