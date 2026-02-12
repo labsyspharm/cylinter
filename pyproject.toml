@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "CyLinter"
-version = "0.0.53"
+version = "0.0.54"
 description = "CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy"
 readme = "README.md"
 license = "MIT"
