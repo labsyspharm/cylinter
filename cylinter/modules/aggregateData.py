@@ -48,7 +48,7 @@ def aggregateData(data, self, args):
             # drop markers in markersToExclude config parameter
             csv.drop(
                 columns=[i for i in self.markersToExclude
-                         if i in csv.columns], axis=1, inplace=True)
+                         if i in csv.columns], inplace=True)
 
             # select boilerplate columns
             cols = (
