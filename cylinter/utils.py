@@ -37,6 +37,7 @@ from skimage.morphology import disk, h_maxima, flood, local_maxima
 from skimage.exposure import rescale_intensity
 
 from scipy.stats import norm
+from scipy.signal import argrelextrema
 from sklearn.mixture import GaussianMixture
 
 from napari.utils.notifications import notification_manager, Notification, NotificationSeverity
