@@ -138,39 +138,82 @@ def clustering(data, self, args):
     # data sampling via self.fracForEmbedding
     random_state = 5
 
-    if self.normalizeTissueCounts:
-        logger.info('Performing weighted sampling of cells from tissues...')
-        logger.info(
-            'Check that resulting cell counts below '
-            'are similar across samples.'
-        )
-        logger.info(
-            'If not, try embedding a smaller fraction of data '
-            'with the fracForEmbedding configuration setting.')
-        print()
+    frac = self.fracForEmbedding
 
-        # calculate per tissue random samples weighted by cell count
-        groups = data.groupby('Sample')
-        sample_weights = pd.DataFrame({
-            'weights': 1 / (groups.size() * len(groups))})
-        weights = pd.merge(
-            data[['Sample']], sample_weights,
-            left_on='Sample', right_index=True)
-        data = data.sample(
-            frac=self.fracForEmbedding, replace=False,
-            weights=weights['weights'], random_state=random_state,
-            axis=0)
+    if self.normalizeTissueCounts:
+
+        if frac <= 0:
+            raise ValueError(
+                '`fracForEmbedding` must be > 0. '
+                'Zero or negative values are not allowed because '
+                'they produce an empty dataset.'
+            )
+
+        elif frac >= 1.0:
+            data = data.copy()
+
+        else:
+            logger.info(
+                'Performing weighted sampling of '
+                'cells from tissues...'
+            )
+            logger.info(
+                'Check that resulting cell counts below '
+                'are similar across samples.'
+            )
+            logger.info(
+                'If not, try embedding a smaller fraction of data '
+                'with the fracForEmbedding configuration setting.'
+            )
+            print()
+
+            groups = data.groupby('Sample')
+            sample_sizes = groups.size()
+
+            sample_weights = pd.DataFrame({
+                'weights': 1 / (sample_sizes * len(sample_sizes))
+            })
+
+            weights = data[['Sample']].merge(
+                sample_weights,
+                left_on='Sample',
+                right_index=True
+            )['weights']
+
+            try:
+                data = data.sample(
+                    frac=frac,
+                    replace=False,
+                    weights=weights,
+                    random_state=random_state,
+                    axis=0
+                )
+
+            except ValueError as e:
+                if 'Weighted sampling cannot be achieved' in str(e):
+                    raise ValueError(
+                        'Weighted sampling without replacement failed due '
+                        'to an incompatible weight distribution. Sampling '
+                        'with replacement is not allowed because duplicate '
+                        'rows (cells) are not permitted. Reduce '
+                        '`fracForEmbedding` or set it to 1.0 '
+                        'to select all cells.'
+                    ) from None
+                raise
 
         log_banner(logger.info, 'Cell counts:')
         log_multiline(
-            logger.info, data.groupby(['Sample']).size().to_string(index=True)
+            logger.info,
+            data.groupby(['Sample']).size().to_string(index=True)
         )
         print()
 
     else:
 
         data = data.sample(
-            frac=self.fracForEmbedding, random_state=random_state
+            frac=frac,
+            replace=False,
+            random_state=random_state
         )
 
     data.reset_index(drop=True, inplace=True)
