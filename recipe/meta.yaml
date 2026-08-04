@@ -1,5 +1,5 @@
 {% set name = "cylinter" %}
-{% set version = "0.0.55" %}
+{% set version = "0.0.56" %}
 
 package:
   name: "{{ name|lower }}"

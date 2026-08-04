@@ -474,181 +474,184 @@ def clustering(data, self, args):
             # plot silhouette scores
 
             silho_input = clustering_input.copy()
-            silho_input[
-                f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
+            silho_input[f'cluster_{self.dimensionEmbedding}d'] = clustering.labels_
+
+            # Remove noise points
             silho_input = silho_input[
                 silho_input[f'cluster_{self.dimensionEmbedding}d'] != -1
             ]
 
-            all_minus_one = (
-                silho_input[f'cluster_{self.dimensionEmbedding}d'] == -1).all()
-            
-            if not all_minus_one:
-                
-                # subsample clustered data for silhouette analysis
-                silho_subset = silho_input.head(50000)
+            # Require at least two non-noise clusters for silhouette analysis
+            labels = silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
 
-                cmap = categorical_cmap(
-                    numUniqueSamples=len(
-                        silho_input[
-                            f'cluster_{self.dimensionEmbedding}d'].unique()),
-                    numCatagories=10, cmap='tab10', continuous=False
-                )
-
-                cluster_centers = pd.DataFrame(
-                    index=sorted(silho_subset[
-                        f'cluster_{self.dimensionEmbedding}d'].unique())
-                )
-                
-                embed_cols = [i for i in silho_subset.columns if 'emb' in i]
-                for clus in sorted(silho_subset[
-                        f'cluster_{self.dimensionEmbedding}d'].unique()):
-                    group = silho_subset[
-                        silho_subset[
-                            f'cluster_{self.dimensionEmbedding}d'] == clus]
-                    for emb_dim in embed_cols:
-                        emb_mean = group[emb_dim].mean()
-                        cluster_centers.loc[clus, emb_dim] = emb_mean
-
-                n_clusters = len(cluster_centers.index.unique())
-
-                silhouette_spacer = 1000
-
-                if embedding.shape[1] == 2:
-                    sns.set_style('darkgrid')
-                    fig_silho, (ax1_silho, ax2_silho) = plt.subplots(1, 2)
-                    fig_silho.set_size_inches(18, 7)
-                elif embedding.shape[1] == 3:
-                    sns.set_style('darkgrid')
-                    fig_silho = plt.figure(figsize=(18, 7))
-                    gs = plt.GridSpec(1, 2, figure=fig_silho)
-                    ax1_silho = fig_silho.add_subplot(
-                        gs[0, 0], projection=None
-                    )
-                    ax2_silho = fig_silho.add_subplot(
-                        gs[0, 1], projection='3d'
-                    )
-
-                ax1_silho.set_xlim([-1, 1])
-
-                ax1_silho.set_ylim(
-                    [0, 
-                     len(silho_subset) + (n_clusters + 1) * silhouette_spacer]
-                )
-
-                sample_silhouette_values = silhouette_samples(
-                    silho_subset[embed_cols], 
-                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
-                )
-
-                y_lower = silhouette_spacer
-                for i in cluster_centers.index.unique():
-
-                    ith_cluster_silhouette_values = (
-                        sample_silhouette_values[silho_subset[
-                            f'cluster_{self.dimensionEmbedding}d'] == i]
-                    )
-                    ith_cluster_silhouette_values.sort()
-
-                    size_cluster_i = ith_cluster_silhouette_values.shape[0]
-
-                    y_upper = y_lower + size_cluster_i
-
-                    color = cmap.colors[i]
-
-                    ax1_silho.fill_betweenx(
-                        np.arange(y_lower, y_upper), 0, 
-                        ith_cluster_silhouette_values,
-                        facecolor=color, edgecolor=color, alpha=0.7
-                    )
-
-                    ax1_silho.text(
-                        0.0, y_lower + 0.5 * size_cluster_i, str(i),
-                        fontdict={'size': 20 / np.log(n_clusters)}
-                    )
-
-                    # compute the new y_lower for next plot
-                    y_lower = y_upper + silhouette_spacer
-
-                silhouette_avg = silhouette_score(
-                    silho_subset[embed_cols], 
-                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
-                )
-
-                ax1_silho.set_title('Silhouette Plot')
-                ax1_silho.set_xlabel('Silhouette Coefficients')
-                ax1_silho.set_ylabel('Cluster label')
-
-                ax1_silho.axvline(
-                    x=silhouette_avg, color='r', lw=0.75, linestyle='--'
-                )
-
-                ax1_silho.set_yticks([])
-
-                if embedding.shape[1] == 2:
-                    ax2_silho.scatter(
-                        silho_subset['emb1'], silho_subset['emb2'], marker='.',
-                        s=30, edgecolor='k', lw=0, alpha=1.0,
-                        c=[cmap.colors[i] for i in
-                           silho_subset[f'cluster_{self.dimensionEmbedding}d']]
-                    )
-
-                    ax2_silho.scatter(
-                        cluster_centers['emb1'], cluster_centers['emb2'],
-                        marker='o', c='white', alpha=1, s=125, edgecolor='k'
-                    )
-
-                    for i in cluster_centers.iterrows():
-                        ax2_silho.scatter(
-                            i[1]['emb1'], i[1]['emb2'], marker='$%d$' % i[0],
-                            alpha=1, s=40, edgecolor='k'
-                        )
-
-                elif embedding.shape[1] == 3:
-                    ax2_silho.scatter(
-                        silho_subset['emb1'], silho_subset['emb2'],
-                        silho_subset['emb3'], marker='.', s=30, edgecolor='k',
-                        lw=0, alpha=1.0,
-                        c=[cmap.colors[i] for i in
-                           silho_subset[f'cluster_{self.dimensionEmbedding}d']]
-                    )
-
-                    ax2_silho.scatter(
-                        cluster_centers['emb1'], cluster_centers['emb2'],
-                        cluster_centers['emb3'], marker='o', c='white',
-                        alpha=1, s=125, edgecolor='k'
-                    )
-
-                    for i in cluster_centers.iterrows():
-                        ax2_silho.scatter(
-                            i[1]['emb1'], i[1]['emb2'], i[1]['emb3'],
-                            marker='$%d$' % i[0], zorder=100, alpha=1, s=40,
-                            edgecolor='k'
-                        )
-
-                ax2_silho.set_title('Clustering')
-                ax2_silho.set_xlabel('Feature Space 1')
-                ax2_silho.set_ylabel('Feature Space 2')
-
-                total_clusters = len(
-                    silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
-                )
-
-                fig_silho.suptitle(
-                    ('MCS=%d, average silhouette score for %d/%d clusters '
-                     'in silhouette data subset is %f'
-                     % (MCS, n_clusters, total_clusters, silhouette_avg)),
-                    fontsize=14, fontweight='bold'
-                )
-
-                # show silhouette plot after cluster widget
-                # is added to Napari window (below)
-            
-            else:
+            if len(labels) < 2:
                 logger.info(
-                    'All data points were determined by HDBSCAN '
-                    'to be ambiguous , skipping silhouette plot.'
+                    f"Skipping silhouette plot: only {len(labels)} non-noise cluster(s)."
                 )
+                return
+
+            # subsample clustered data for silhouette analysis
+            n = min(50000, len(silho_input))
+            silho_subset = silho_input.sample(
+                n=n,
+                random_state=0
+            )
+
+            cmap = categorical_cmap(
+                numUniqueSamples=len(
+                    silho_input[
+                        f'cluster_{self.dimensionEmbedding}d'].unique()),
+                numCatagories=10, cmap='tab10', continuous=False
+            )
+
+            cluster_centers = pd.DataFrame(
+                index=sorted(silho_subset[
+                    f'cluster_{self.dimensionEmbedding}d'].unique())
+            )
+            
+            embed_cols = [i for i in silho_subset.columns if 'emb' in i]
+            for clus in sorted(silho_subset[
+                    f'cluster_{self.dimensionEmbedding}d'].unique()):
+                group = silho_subset[
+                    silho_subset[
+                        f'cluster_{self.dimensionEmbedding}d'] == clus]
+                for emb_dim in embed_cols:
+                    emb_mean = group[emb_dim].mean()
+                    cluster_centers.loc[clus, emb_dim] = emb_mean
+
+            n_clusters = len(cluster_centers.index.unique())
+
+            silhouette_spacer = 1000
+
+            if embedding.shape[1] == 2:
+                sns.set_style('darkgrid')
+                fig_silho, (ax1_silho, ax2_silho) = plt.subplots(1, 2)
+                fig_silho.set_size_inches(18, 7)
+            elif embedding.shape[1] == 3:
+                sns.set_style('darkgrid')
+                fig_silho = plt.figure(figsize=(18, 7))
+                gs = plt.GridSpec(1, 2, figure=fig_silho)
+                ax1_silho = fig_silho.add_subplot(
+                    gs[0, 0], projection=None
+                )
+                ax2_silho = fig_silho.add_subplot(
+                    gs[0, 1], projection='3d'
+                )
+
+            ax1_silho.set_xlim([-1, 1])
+
+            ax1_silho.set_ylim(
+                [0, 
+                 len(silho_subset) + (n_clusters + 1) * silhouette_spacer]
+            )
+
+            sample_silhouette_values = silhouette_samples(
+                silho_subset[embed_cols], 
+                silho_subset[f'cluster_{self.dimensionEmbedding}d']
+            )
+
+            y_lower = silhouette_spacer
+            for i in cluster_centers.index.unique():
+
+                ith_cluster_silhouette_values = (
+                    sample_silhouette_values[silho_subset[
+                        f'cluster_{self.dimensionEmbedding}d'] == i]
+                )
+                ith_cluster_silhouette_values.sort()
+
+                size_cluster_i = ith_cluster_silhouette_values.shape[0]
+
+                y_upper = y_lower + size_cluster_i
+
+                color = cmap.colors[i]
+
+                ax1_silho.fill_betweenx(
+                    np.arange(y_lower, y_upper), 0, 
+                    ith_cluster_silhouette_values,
+                    facecolor=color, edgecolor=color, alpha=0.7
+                )
+
+                ax1_silho.text(
+                    0.0, y_lower + 0.5 * size_cluster_i, str(i),
+                    fontdict={'size': 20 / np.log(n_clusters)}
+                )
+
+                # compute the new y_lower for next plot
+                y_lower = y_upper + silhouette_spacer
+
+            silhouette_avg = silhouette_score(
+                silho_subset[embed_cols], 
+                silho_subset[f'cluster_{self.dimensionEmbedding}d']
+            )
+
+            ax1_silho.set_title('Silhouette Plot')
+            ax1_silho.set_xlabel('Silhouette Coefficients')
+            ax1_silho.set_ylabel('Cluster label')
+
+            ax1_silho.axvline(
+                x=silhouette_avg, color='r', lw=0.75, linestyle='--'
+            )
+
+            ax1_silho.set_yticks([])
+
+            if embedding.shape[1] == 2:
+                ax2_silho.scatter(
+                    silho_subset['emb1'], silho_subset['emb2'], marker='.',
+                    s=30, edgecolor='k', lw=0, alpha=1.0,
+                    c=[cmap.colors[i] for i in
+                       silho_subset[f'cluster_{self.dimensionEmbedding}d']]
+                )
+
+                ax2_silho.scatter(
+                    cluster_centers['emb1'], cluster_centers['emb2'],
+                    marker='o', c='white', alpha=1, s=125, edgecolor='k'
+                )
+
+                for i in cluster_centers.iterrows():
+                    ax2_silho.scatter(
+                        i[1]['emb1'], i[1]['emb2'], marker='$%d$' % i[0],
+                        alpha=1, s=40, edgecolor='k'
+                    )
+
+            elif embedding.shape[1] == 3:
+                ax2_silho.scatter(
+                    silho_subset['emb1'], silho_subset['emb2'],
+                    silho_subset['emb3'], marker='.', s=30, edgecolor='k',
+                    lw=0, alpha=1.0,
+                    c=[cmap.colors[i] for i in
+                       silho_subset[f'cluster_{self.dimensionEmbedding}d']]
+                )
+
+                ax2_silho.scatter(
+                    cluster_centers['emb1'], cluster_centers['emb2'],
+                    cluster_centers['emb3'], marker='o', c='white',
+                    alpha=1, s=125, edgecolor='k'
+                )
+
+                for i in cluster_centers.iterrows():
+                    ax2_silho.scatter(
+                        i[1]['emb1'], i[1]['emb2'], i[1]['emb3'],
+                        marker='$%d$' % i[0], zorder=100, alpha=1, s=40,
+                        edgecolor='k'
+                    )
+
+            ax2_silho.set_title('Clustering')
+            ax2_silho.set_xlabel('Feature Space 1')
+            ax2_silho.set_ylabel('Feature Space 2')
+
+            total_clusters = len(
+                silho_input[f'cluster_{self.dimensionEmbedding}d'].unique()
+            )
+
+            fig_silho.suptitle(
+                ('MCS=%d, average silhouette score for %d/%d clusters '
+                 'in silhouette data subset is %f'
+                 % (MCS, n_clusters, total_clusters, silhouette_avg)),
+                fontsize=14, fontweight='bold'
+            )
+
+            # show silhouette plot after cluster widget
+            # is added to Napari window (below)
             
             ###################################################
 
@@ -1171,7 +1174,7 @@ def clustering(data, self, args):
             )
             cluster_layout.addWidget(cluster_canvas)
 
-            if not all_minus_one:
+            if len(labels) >= 2:
                 fig_silho.show()
 
             if embedding.shape[1] == 2:

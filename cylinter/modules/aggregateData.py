@@ -41,7 +41,7 @@ def aggregateData(data, self, args):
         if sample not in self.samplesToExclude:
 
             logger.info(f'IMPORTING sample {key}')
-            
+
             file_path = get_filepath(self, check, sample, 'CSV')
             csv = pd.read_csv(file_path)
 
