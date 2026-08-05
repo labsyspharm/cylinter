@@ -130,7 +130,6 @@ def selectROIs(data, self, args):
 
         viewer = napari.Viewer(title='CyLinter')
         viewer.scale_bar.visible = True
-        viewer.scale_bar.unit = 'um'
 
         ###################################################################
         # Load data for the data layer(s), i.e., polygon dicts, and potentially
@@ -238,7 +237,7 @@ def selectROIs(data, self, args):
                     layer = viewer.add_image(
                         img, rgb=False, blending='additive',
                         colormap='green', visible=False, name=ch,
-                        contrast_limits=(min, max)
+                        units=('µm', 'µm'), contrast_limits=(min, max)
                     )
                     global_state.loaded_ims[ch] = img
                     global_state.abx_layers[ch] = layer
@@ -252,7 +251,7 @@ def selectROIs(data, self, args):
             viewer.add_image(
                 seg, rgb=False, blending='additive', opacity=1.0,
                 colormap='gray', visible=False, name='segmentation',
-                contrast_limits=(min, max)
+                units=('µm', 'µm'), contrast_limits=(min, max)
             )
 
             # DNA1 channel
@@ -266,7 +265,7 @@ def selectROIs(data, self, args):
             viewer.add_image(
                 dna, rgb=False, blending='additive', colormap='gray',
                 visible=True, name=self.counterstainChannel, 
-                contrast_limits=(min, max)
+                units=('µm', 'µm'), contrast_limits=(min, max)
             )
 
             # ROI selection channel, as well as ROI2 and labeled artifacts
@@ -297,7 +296,8 @@ def selectROIs(data, self, args):
                     viewer.add_shapes(
                         data=polygons, shape_type=shapes, ndim=2,
                         face_color=[1.0, 1.0, 1.0, 0.3], edge_color=edge_color,
-                        edge_width=5.0, name=layer_name[varname]
+                        edge_width=5.0, name=layer_name[varname],
+                        units=('µm', 'µm')
                     )
                 
                 elif layer_type[varname] == 'image':
@@ -342,7 +342,7 @@ def selectROIs(data, self, args):
                         viewer.add_points(
                             points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
                             edge_width=0.0, name=layer_name[varname], 
-                            size=10.0,
+                            size=10.0, units=('µm', 'µm'),
                             face_color_cycle={
                                 1: 'white', 2: 'red', 3: 'blue',
                                 4: 'green', 5: 'cyan', 6: 'magenta'},

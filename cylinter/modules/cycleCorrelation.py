@@ -71,7 +71,8 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
         viewer.add_image(
             seg, rgb=False, blending='additive',
             opacity=0.5, colormap='gray', visible=False,
-            name='segmentation', contrast_limits=(min, max)
+            name='segmentation', units=('µm', 'µm'), 
+            contrast_limits=(min, max)
         )
  
         # add last DNA image to Napari viewer
@@ -83,7 +84,7 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
         viewer.add_image(
             dna_last, rgb=False, blending='additive', 
             colormap='magenta', name=last_dna,
-            contrast_limits=(min, max)
+            units=('µm', 'µm'), contrast_limits=(min, max)
         )
 
         # add first DNA image to Napari viewer
@@ -95,7 +96,7 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
         viewer.add_image(
             dna_first, rgb=False, blending='additive',
             colormap='green', name=first_dna,
-            contrast_limits=(min, max)
+            units=('µm', 'µm'), contrast_limits=(min, max)
         )
 
         # remove hist_widget dock and layout attributes from layout if exist
@@ -253,6 +254,7 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
                     properties=None,
                     face_color='yellow',
                     border_color='k',
+                    units=('µm', 'µm'),
                     border_width=0.0, size=7.0)
 
         # add button functionality
@@ -512,10 +514,8 @@ def cycleCorrelation(data, self, args):
     # generate distribution Qt widget
     hist_widget = QtWidgets.QWidget()
     hist_layout = QtWidgets.QVBoxLayout(hist_widget)
-    hist_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Fixed,
-        QtWidgets.QSizePolicy.Fixed
-    )
+    hist_widget.setFixedHeight(550)
+    hist_widget.setMinimumWidth(550)
     
     # make a list of all samples in batch, select the first one
     # for which cutoffs have not been previously assigned,
@@ -560,7 +560,6 @@ def cycleCorrelation(data, self, args):
         )
         
         viewer.scale_bar.visible = True
-        viewer.scale_bar.unit = 'um'
 
         napari.run()
 

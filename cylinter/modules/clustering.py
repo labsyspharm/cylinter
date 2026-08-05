@@ -436,11 +436,8 @@ def clustering(data, self, args):
 
         # generate vertical widget layout
         cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
-
-        cluster_widget.setSizePolicy(
-            QtWidgets.QSizePolicy.Fixed,
-            QtWidgets.QSizePolicy.Maximum,
-        )
+        cluster_widget.setFixedHeight(700)
+        cluster_widget.setFixedWidth(900)
 
         ###################################################################
         @magicgui(
@@ -659,20 +656,24 @@ def clustering(data, self, args):
 
                 # placeholder for lasso selection
                 selector = None
-
-                plt.close('all')
                 
                 sns.set_style('whitegrid')
+                fig = plt.figure(figsize=(11, 6))
 
-                fig = plt.figure()
                 matplotlib_warnings(fig)
 
-                # adjust position of 2D subplots on canvas
-                width = 0.28
-                height = 0.45
-                bottom = 0.5
+                width = 0.30
+                height = 0.55
 
-                x_positions = [0.03, 0.36, 0.69]
+                left_margin = 0.03
+                gap = 0.015
+                bottom = 0.38
+
+                x_positions = [
+                    left_margin,
+                    left_margin + width + gap,
+                    left_margin + 2 * (width + gap)
+                ]
 
                 ax_cluster = fig.add_axes(
                     [x_positions[0], bottom, width, height]
@@ -1262,6 +1263,7 @@ def clustering(data, self, args):
                                 viewer.add_image(
                                     img, rgb=False, blending='additive',
                                     colormap='green', visible=False, name=ch,
+                                    units=('µm', 'µm'), 
                                     contrast_limits=(min, max)
                                 )
 
@@ -1272,7 +1274,8 @@ def clustering(data, self, args):
 
                         viewer.add_points(
                             centroids, name='lassoed cells', visible=True,
-                            face_color='yellow', border_width=0.0, size=4.0
+                            face_color='yellow', border_width=0.0, size=4.0,
+                            units=('µm', 'µm')
                         )
 
                         # read segmentation outlines, add to Napari
@@ -1283,7 +1286,8 @@ def clustering(data, self, args):
                         viewer.add_image(
                             seg, rgb=False, blending='additive',
                             colormap='gray', visible=False,
-                            name='segmentation', contrast_limits=(min, max)
+                            name='segmentation', units=('µm', 'µm'),
+                            contrast_limits=(min, max)
                         )
 
                         # read first DNA, add to Napari
@@ -1297,8 +1301,8 @@ def clustering(data, self, args):
                         viewer.add_image(
                             dna_first, rgb=False, blending='additive',
                             opacity=0.5, colormap='gray', visible=True,
-                            name=self.counterstainChannel,
-                            contrast_limits=(min, max)
+                            name=self.counterstainChannel, units=('µm', 'µm'),
+                            contrast_limits=(min, max),
                         )
 
                         # apply contrast limits if they exist
@@ -1548,7 +1552,6 @@ def clustering(data, self, args):
         )
 
         viewer.scale_bar.visible = True
-        viewer.scale_bar.unit = 'um'
 
         napari.run()
 
