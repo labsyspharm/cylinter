@@ -232,12 +232,12 @@ def selectROIs(data, self, args):
                 for ch in reversed(abx_channels):
                     channel_number = marker_channel_number(self, markers, ch)
                     file_path = get_filepath(self, check, sample, 'TIF')
-                    img, min, max = single_channel_pyramid(
+                    img, min, max, scale, units = single_channel_pyramid(
                         file_path, channel=channel_number)
                     layer = viewer.add_image(
                         img, rgb=False, blending='additive',
                         colormap='green', visible=False, name=ch,
-                        units=('µm', 'µm'), contrast_limits=(min, max)
+                        scale=scale, units=units, contrast_limits=(min, max)
                     )
                     global_state.loaded_ims[ch] = img
                     global_state.abx_layers[ch] = layer
@@ -247,11 +247,11 @@ def selectROIs(data, self, args):
 
             # cell segmentation outlines channel
             file_path = get_filepath(self, check, sample, 'SEG')
-            seg, min, max = single_channel_pyramid(file_path, channel=0)
+            seg, min, max, _, _ = single_channel_pyramid(file_path, channel=0)
             viewer.add_image(
                 seg, rgb=False, blending='additive', opacity=1.0,
                 colormap='gray', visible=False, name='segmentation',
-                units=('µm', 'µm'), contrast_limits=(min, max)
+                scale=scale, units=units, contrast_limits=(min, max)
             )
 
             # DNA1 channel
@@ -259,13 +259,13 @@ def selectROIs(data, self, args):
             channel_number = marker_channel_number(
                 self, markers, self.counterstainChannel
             )
-            dna, min, max = single_channel_pyramid(
+            dna, min, max, _, _ = single_channel_pyramid(
                 file_path, channel=channel_number
             )
             viewer.add_image(
                 dna, rgb=False, blending='additive', colormap='gray',
                 visible=True, name=self.counterstainChannel, 
-                units=('µm', 'µm'), contrast_limits=(min, max)
+                scale=scale, units=units, contrast_limits=(min, max)
             )
 
             # ROI selection channel, as well as ROI2 and labeled artifacts
@@ -297,7 +297,7 @@ def selectROIs(data, self, args):
                         data=polygons, shape_type=shapes, ndim=2,
                         face_color=[1.0, 1.0, 1.0, 0.3], edge_color=edge_color,
                         edge_width=5.0, name=layer_name[varname],
-                        units=('µm', 'µm')
+                        scale=scale, units=units
                     )
                 
                 elif layer_type[varname] == 'image':
@@ -342,7 +342,7 @@ def selectROIs(data, self, args):
                         viewer.add_points(
                             points, ndim=2, edge_color=[0.0, 0.0, 0.0, 0.0],
                             edge_width=0.0, name=layer_name[varname], 
-                            size=10.0, units=('µm', 'µm'),
+                            size=10.0, scale=scale, units=units,
                             face_color_cycle={
                                 1: 'white', 2: 'red', 3: 'blue',
                                 4: 'green', 5: 'cyan', 6: 'magenta'},
@@ -894,7 +894,7 @@ def selectROIs(data, self, args):
                 channel_number = marker_channel_number(
                     self, markers, self.counterstainChannel
                 )
-                dna, min, max = single_channel_pyramid(
+                dna, min, max, _, _ = single_channel_pyramid(
                     file_path, channel=channel_number
                 )
 
@@ -1049,7 +1049,7 @@ def selectROIs(data, self, args):
             channel_number = marker_channel_number(
                 self, markers, self.counterstainChannel
             )
-            dna, min, max = single_channel_pyramid(
+            dna, min, max, _, _ = single_channel_pyramid(
                 file_path, channel=channel_number
             )
 

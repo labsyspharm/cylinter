@@ -54,10 +54,11 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         
         # read segmentation outlines and add to Napari viewer
         file_path = get_filepath(self, check, sample, 'SEG')
-        seg, min, max = single_channel_pyramid(file_path, channel=0)
+        seg, min, max, scale, units = single_channel_pyramid(file_path, channel=0)
         viewer.add_image(
             seg, rgb=False, visible=False, colormap='gray', opacity=0.5,
-            name='segmentation', units=('µm', 'µm'), contrast_limits=(min, max)
+            name='segmentation', scale=scale, units=units, 
+            contrast_limits=(min, max)
         )
 
         # read DNA1 and add to Napari viewer
@@ -65,12 +66,12 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         channel_number = marker_channel_number(
                 self, markers, self.counterstainChannel
         )
-        dna, min, max = single_channel_pyramid(
+        dna, min, max, _, _ = single_channel_pyramid(
             file_path, channel=channel_number
         )
         viewer.add_image(
             dna, rgb=False, blending='additive',
-            name=self.counterstainChannel, units=('µm', 'µm'),
+            name=self.counterstainChannel, scale=scale, units=units,
             contrast_limits=(min, max)
         )
         
@@ -232,7 +233,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                     properties=point_properties,
                     face_color='dna_intensity',
                     face_colormap='viridis',
-                    units=('µm', 'µm'),
+                    scale=scale, units=units,
                     border_width=0.0, size=4.0)
 
         # add button functionality

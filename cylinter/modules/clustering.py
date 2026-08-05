@@ -446,6 +446,9 @@ def clustering(data, self, args):
             MCS={'label': 'Min Cluster Size (MCS)', 'step': 1},
         )
         def cluster_and_plot(MCS: int = 200):
+            
+            # prevent accumulation of matplotlib figures during GUI exploration
+            plt.close('all')
 
             clustering = hdbscan.HDBSCAN(
                 min_cluster_size=MCS,
@@ -1257,13 +1260,15 @@ def clustering(data, self, args):
                                 file_path = get_filepath(
                                     self, check, value, 'TIF'
                                 )
-                                img, min, max = single_channel_pyramid(
-                                    file_path, channel=channel_number
+                                img, min, max, scale, units = (
+                                    single_channel_pyramid(
+                                        file_path, channel=channel_number
+                                    )
                                 )
                                 viewer.add_image(
                                     img, rgb=False, blending='additive',
                                     colormap='green', visible=False, name=ch,
-                                    units=('µm', 'µm'), 
+                                    scale=scale, units=units, 
                                     contrast_limits=(min, max)
                                 )
 
@@ -1275,18 +1280,18 @@ def clustering(data, self, args):
                         viewer.add_points(
                             centroids, name='lassoed cells', visible=True,
                             face_color='yellow', border_width=0.0, size=4.0,
-                            units=('µm', 'µm')
+                            scale=scale, units=units
                         )
 
                         # read segmentation outlines, add to Napari
                         file_path = get_filepath(self, check, value, 'SEG')
-                        seg, min, max = single_channel_pyramid(
+                        seg, min, max, _, _ = single_channel_pyramid(
                             file_path, channel=0
                         )
                         viewer.add_image(
                             seg, rgb=False, blending='additive',
                             colormap='gray', visible=False,
-                            name='segmentation', units=('µm', 'µm'),
+                            name='segmentation', scale=scale, units=units,
                             contrast_limits=(min, max)
                         )
 
@@ -1295,14 +1300,15 @@ def clustering(data, self, args):
                         channel_number = marker_channel_number(
                             self, markers, self.counterstainChannel
                         )
-                        dna_first, min, max = single_channel_pyramid(
+                        dna_first, min, max, _, _ = single_channel_pyramid(
                             file_path, channel=channel_number
                         )
                         viewer.add_image(
                             dna_first, rgb=False, blending='additive',
                             opacity=0.5, colormap='gray', visible=True,
-                            name=self.counterstainChannel, units=('µm', 'µm'),
-                            contrast_limits=(min, max),
+                            name=self.counterstainChannel, 
+                            scale=scale, units=units,
+                            contrast_limits=(min, max)
                         )
 
                         # apply contrast limits if they exist

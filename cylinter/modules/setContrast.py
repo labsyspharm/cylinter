@@ -57,23 +57,18 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
                 widget.setParent(None)
 
     # read segmentation outlines, add to Napari
-    file_path = get_filepath(self, check, sample, 'SEG')
-    seg, min, max = single_channel_pyramid(file_path, channel=0)
-    viewer.add_image(
-        seg, rgb=False, blending='additive', colormap='gray',
-        visible=False, name='segmentation', units=('µm', 'µm'),
-        contrast_limits=(min, max)
-    )
-    
+
     # read DNA1 channel
     file_path = get_filepath(self, check, sample, 'TIF')
     channel_number = marker_channel_number(
         self, markers, self.counterstainChannel
     )
-    dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
+    dna, min, max, scale, units = single_channel_pyramid(
+        file_path, channel=channel_number
+    )
     viewer.add_image(
         dna, rgb=False, blending='additive', colormap='gray',
-        name=self.counterstainChannel, units=('µm', 'µm'),
+        name=self.counterstainChannel, scale=scale, units=units,
         contrast_limits=(min, max)
     )
 
@@ -81,14 +76,22 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     if channel != self.counterstainChannel:
         channel_number = marker_channel_number(self, markers, channel)
         file_path = get_filepath(self, check, sample, 'TIF')
-        img, min, max = single_channel_pyramid(
+        img, min, max, _, _ = single_channel_pyramid(
             file_path, channel=channel_number
         )
         viewer.add_image(
             img, rgb=False, blending='additive', colormap='green',
-            visible=True, name=channel, units=('µm', 'µm'),
+            visible=True, name=channel, scale=scale, units=units,
             contrast_limits=(min, max)
         )
+
+    file_path = get_filepath(self, check, sample, 'SEG')
+    seg, min, max, _, _ = single_channel_pyramid(file_path, channel=0)
+    viewer.add_image(
+        seg, rgb=False, blending='additive', colormap='gray',
+        visible=False, name='segmentation', scale=scale, units=units,
+        contrast_limits=(min, max)
+    )
 
     # apply previously defined contrast limits if they exist 
     try:
@@ -97,10 +100,6 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
                 self.counterstainChannel][0], qc_report['setContrast'][
                 self.counterstainChannel][1]
         )
-    except KeyError:
-        pass
-
-    try:
         viewer.layers[channel].contrast_limits = (
             qc_report['setContrast'][channel][0], qc_report['setContrast'][
                 channel][1])

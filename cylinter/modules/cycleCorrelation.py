@@ -64,39 +64,39 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
         cycle_data = group[group['cycle'] == cycle_ratio]
         first_dna = cycle_ratio.split('/')[0]
         last_dna = cycle_ratio.split('/')[1]
-
-        # add cell segmentation outlines to Napari viewer
-        file_path = get_filepath(self, check, sample, 'SEG')
-        seg, min, max = single_channel_pyramid(file_path, channel=0)
-        viewer.add_image(
-            seg, rgb=False, blending='additive',
-            opacity=0.5, colormap='gray', visible=False,
-            name='segmentation', units=('µm', 'µm'), 
-            contrast_limits=(min, max)
-        )
  
         # add last DNA image to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
         channel_number = marker_channel_number(self, markers, last_dna)
-        dna_last, min, max = single_channel_pyramid(
+        dna_last, min, max, scale, units = single_channel_pyramid(
             file_path, channel=channel_number
         )
         viewer.add_image(
             dna_last, rgb=False, blending='additive', 
             colormap='magenta', name=last_dna,
-            units=('µm', 'µm'), contrast_limits=(min, max)
+            scale=scale, units=units, contrast_limits=(min, max)
         )
 
         # add first DNA image to Napari viewer
         file_path = get_filepath(self, check, sample, 'TIF')
         channel_number = marker_channel_number(self, markers, first_dna)
-        dna_first, min, max = single_channel_pyramid(
+        dna_first, min, max, _, _ = single_channel_pyramid(
             file_path, channel=channel_number
         )
         viewer.add_image(
             dna_first, rgb=False, blending='additive',
             colormap='green', name=first_dna,
-            units=('µm', 'µm'), contrast_limits=(min, max)
+            scale=scale, units=units, contrast_limits=(min, max)
+        )
+
+        # add cell segmentation outlines to Napari viewer
+        file_path = get_filepath(self, check, sample, 'SEG')
+        seg, min, max, _, _ = single_channel_pyramid(file_path, channel=0)
+        viewer.add_image(
+            seg, rgb=False, blending='additive',
+            opacity=0.5, colormap='gray', visible=False,
+            name='segmentation', scale=scale, units=units,
+            contrast_limits=(min, max)
         )
 
         # remove hist_widget dock and layout attributes from layout if exist
@@ -254,7 +254,7 @@ def callback(self, viewer, sample, samples_to_run, data, ratios_melt, initial_ca
                     properties=None,
                     face_color='yellow',
                     border_color='k',
-                    units=('µm', 'µm'),
+                    scale=scale, units=units,
                     border_width=0.0, size=7.0)
 
         # add button functionality

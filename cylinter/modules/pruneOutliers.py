@@ -513,33 +513,33 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             channel_number = marker_channel_number(
                 self, markers, self.counterstainChannel
             )
-            dna, min, max = single_channel_pyramid(
+            dna, min, max, scale, units = single_channel_pyramid(
                 file_path, channel=channel_number
             )
             viewer.add_image(
                 dna, rgb=False, opacity=1.0, name=self.counterstainChannel,
-                units=('µm', 'µm'), contrast_limits=(min, max)
+                scale=scale, units=units, contrast_limits=(min, max)
             )
 
             # read antibody channel
             file_path = get_filepath(self, check, sample, 'TIF')
             channel_number = marker_channel_number(self, markers, ch)
-            channel, min, max = single_channel_pyramid(
+            channel, min, max, _, _ = single_channel_pyramid(
                 file_path, channel=channel_number
             )
             viewer.add_image(
                 channel, rgb=False, blending='additive', colormap='green',
-                visible=False, name=ch, units=('µm', 'µm'), 
+                visible=False, name=ch, scale=scale, units=units, 
                 contrast_limits=(min, max)
             )
 
             # read segmentation outlines
             file_path = get_filepath(self, check, sample, 'SEG')
-            seg, min, max = single_channel_pyramid(file_path, channel=0)
+            seg, min, max, _, _ = single_channel_pyramid(file_path, channel=0)
             viewer.add_image(
                 seg, rgb=False, blending='additive', opacity=1.0,
                 colormap='gray', visible=False, name='segmentation',
-                units=('µm', 'µm'), contrast_limits=(min, max)
+                scale=scale, units=units, contrast_limits=(min, max)
             )
 
             # grab centroids of low signal intensity outliers
@@ -556,12 +556,12 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             viewer.add_points(
                 low_centroids, name='low centroids', properties=None,
-                face_color='magenta', border_color='k', units=('µm', 'µm'),
-                border_width=0.0, size=8.0)
+                face_color='magenta', border_color='k', 
+                scale=scale, units=units, border_width=0.0, size=8.0)
 
             viewer.add_points(
                 high_centroids, name='high centroids', properties=None,
-                face_color='cyan', border_color='k', units=('µm', 'µm'), 
+                face_color='cyan', border_color='k', scale=scale, units=units,
                 border_width=0.0, size=8.0
             )
 
