@@ -210,21 +210,25 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
         channel_number = marker_channel_number(
                 self, markers, self.counterstainChannel
         )
-        dna, min, max = single_channel_pyramid(
+        dna, min, max, scale, units = single_channel_pyramid(
                 file_path, channel=channel_number
         )
         viewer.add_image(
             dna, rgb=False, blending='additive',
             colormap='gray', visible=False,
-            name='DNA', contrast_limits=(min, max)
+            name=self.counterstainChannel, scale=scale, units=units, 
+            contrast_limits=(min, max)
         )
             
         # read segmentation outlines
         file_path = get_filepath(self, check, sample, 'SEG')
-        seg, min, max = single_channel_pyramid(file_path, channel=0)
+        seg, min, max, _, _ = single_channel_pyramid(
+            file_path, channel=0
+        )
         viewer.add_image(
             seg, rgb=False, blending='additive', opacity=1.0, colormap='gray',
-            visible=False, name='segmentation', contrast_limits=(min, max)
+            visible=False, name='segmentation', scale=scale, units=units, 
+            contrast_limits=(min, max)
         )
 
         # read marker channel
@@ -236,7 +240,7 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             channel_number = marker_channel_number(self, markers, ch)
             file_path = get_filepath(self, check, sample, 'TIF')
-            img, min, max = single_channel_pyramid(
+            img, min, max, _, _ = single_channel_pyramid(
                     file_path, channel=channel_number
             )
 
@@ -247,17 +251,23 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             viewer.add_image(
                 img, rgb=False, blending='additive', colormap='green', 
-                visible=visible, name=ch, contrast_limits=(min, max)
+                visible=visible, name=ch, scale=scale, units=units, 
+                contrast_limits=(min, max)
             )
 
             ###################################################################
             # apply previously defined contrast limits if they exist
-
             try:
+                viewer.layers[self.counterstainChannel].contrast_limits = (
+                    qc_report['setContrast'][
+                        self.counterstainChannel][0], 
+                    qc_report['setContrast'][self.counterstainChannel][1]
+                )
                 viewer.layers[ch].contrast_limits = (
                     qc_report['setContrast'][
                         ch][0], qc_report['setContrast'][ch][1]
-                ) 
+                )
+                logger.info('Existing contrast settings applied.') 
             except KeyError:
                 pass
 
@@ -277,7 +287,8 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
 
             viewer.add_points(
                 centroids, name='Reference gate', face_color='#00aaff', 
-                size=7.0, opacity=1.0, blending='opaque', visible=True
+                size=7.0, opacity=1.0, blending='opaque', visible=True,
+                scale=scale, units=units
             ).edge_width = 0
 
         try:
@@ -426,7 +437,7 @@ def callback(self, viewer, data, hist_widget, hist_layout, selection_widget, sel
             viewer.add_points(
                 centroids, name='adjusted gate', face_color='yellow',
                 border_color='k', border_width=0.0, size=7.0,
-                opacity=1.0, blending='opaque'
+                opacity=1.0, scale=scale, units=units, blending='opaque'
             )
 
         button.on_clicked(apply_cutoff)
@@ -808,7 +819,6 @@ def gating(data, self, args):
             )
 
             viewer.scale_bar.visible = True
-            viewer.scale_bar.unit = 'um'
 
             napari.run()
 

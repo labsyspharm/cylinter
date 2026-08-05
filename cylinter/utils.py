@@ -451,7 +451,34 @@ def reorganize_dfcolumns(data, markers, cluster_dim):
 def single_channel_pyramid(tiff_path, channel):
 
     tiff = tifffile.TiffFile(tiff_path)
+    
+    # get pixel metadata
+    scale = None
+    units = None
+    if tiff.ome_metadata is not None:
 
+        ome = tifffile.xml2dict(tiff.ome_metadata)
+        images = ome['OME']['Image']
+
+        # OME can store Image as dict or list
+        if isinstance(images, list):
+            pixels = images[0]['Pixels']
+        else:
+            pixels = images['Pixels']
+
+        try:
+            scale = (
+                float(pixels['PhysicalSizeY']),
+                float(pixels['PhysicalSizeX'])
+            )
+            units = (
+                pixels.get('PhysicalSizeYUnit', 'µm'),
+                pixels.get('PhysicalSizeXUnit', 'µm')
+            )
+
+        except (KeyError, TypeError):
+            pass
+    
     if 'Faas' not in tiff.pages[0].software:
 
         if len(tiff.series[0].levels) > 1:
@@ -477,7 +504,7 @@ def single_channel_pyramid(tiff_path, channel):
         max_val = max(max_val, min_val + 1)
         vmin, vmax = da.compute(min_val, max_val)
         
-        return pyramid, vmin, vmax
+        return pyramid, vmin, vmax, scale, units
 
     else:  # support legacy OME-TIFF format
 
@@ -503,7 +530,7 @@ def single_channel_pyramid(tiff_path, channel):
         max_val = max(max_val, min_val + 1)
         vmin, vmax = da.compute(min_val, max_val)
         
-        return pyramid, vmin, vmax
+        return pyramid, vmin, vmax, scale, units
 
 
 def matplotlib_warnings(fig):

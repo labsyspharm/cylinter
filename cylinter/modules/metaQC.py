@@ -1166,16 +1166,18 @@ def metaQC(data, self, args):
                                                 file_path = get_filepath(
                                                     self, check, value, 'TIF'
                                                 )
-                                                img, min, max = single_channel_pyramid(
-                                                    file_path,
-                                                    channel=channel_number
+                                                img, min, max, scale, units = (
+                                                    single_channel_pyramid(
+                                                        file_path,
+                                                        channel=channel_number
+                                                    )
                                                 )
                                                 viewer.add_image(
                                                     img, rgb=False, 
                                                     blending='additive',
                                                     colormap='green', 
                                                     visible=False, name=ch,
-                                                    units=('µm', 'µm'),
+                                                    scale=scale, units=units,
                                                     contrast_limits=(min, max)
                                                 )
                                         
@@ -1210,7 +1212,7 @@ def metaQC(data, self, args):
                                             viewer.add_points(
                                                 centroids, name=module,
                                                 visible=True, face_color=color,
-                                                units=('µm', 'µm'),
+                                                scale=scale, units=units,
                                                 border_width=0.0, size=4.0)
 
                                         # read segmentation outlines,
@@ -1218,15 +1220,17 @@ def metaQC(data, self, args):
                                         file_path = get_filepath(
                                             self, check, value, 'SEG'
                                         )
-                                        seg, min, max = single_channel_pyramid(
-                                            file_path, channel=0
+                                        seg, min, max, _, _ = (
+                                            single_channel_pyramid(
+                                                file_path, channel=0
+                                            )
                                         )
                                         viewer.add_image(
                                             seg, rgb=False,
                                             blending='additive',
                                             colormap='gray',
                                             visible=False, name='segmentation',
-                                            units=('µm', 'µm'), 
+                                            scale=scale, units=units, 
                                             contrast_limits=(min, max)
                                         )
                                         
@@ -1249,15 +1253,18 @@ def metaQC(data, self, args):
                                         file_path = get_filepath(
                                             self, check, value, 'TIF'
                                         )
-                                        dna_last, min, max = single_channel_pyramid(
-                                            file_path, channel=channel_number
+                                        dna_last, min, max, _, _ = (
+                                            single_channel_pyramid(
+                                                file_path, 
+                                                channel=channel_number
+                                            )
                                         )
                                         viewer.add_image(
                                             dna_last, rgb=False,
                                             blending='additive',
                                             opacity=0.5, colormap='gray',
                                             visible=False, name=last_dna,
-                                            units=('µm', 'µm'),
+                                            scale=scale, units=units,
                                             contrast_limits=(min, max)
                                         )
 
@@ -1269,15 +1276,18 @@ def metaQC(data, self, args):
                                         file_path = get_filepath(
                                             self, check, value, 'TIF'
                                         )
-                                        dna_first, min, max = single_channel_pyramid(
-                                            file_path, channel=channel_number
+                                        dna_first, min, max, _, _ = (
+                                            single_channel_pyramid(
+                                                file_path, 
+                                                channel=channel_number
+                                            )
                                         )
                                         viewer.add_image(
                                             dna_first, rgb=False,
                                             blending='additive',
                                             opacity=0.5, colormap='gray',
                                             visible=True, name=first_dna,
-                                            units=('µm', 'µm'),
+                                            scale=scale, units=units,
                                             contrast_limits=(min, max)
                                         )
 
