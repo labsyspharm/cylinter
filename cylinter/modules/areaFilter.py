@@ -57,7 +57,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         seg, min, max = single_channel_pyramid(file_path, channel=0)
         viewer.add_image(
             seg, rgb=False, visible=False, colormap='gray', opacity=0.5,
-            name='segmentation', contrast_limits=(min, max)
+            name='segmentation', units=('µm', 'µm'), contrast_limits=(min, max)
         )
 
         # read DNA1 and add to Napari viewer
@@ -70,7 +70,8 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
         )
         viewer.add_image(
             dna, rgb=False, blending='additive',
-            name=self.counterstainChannel, contrast_limits=(min, max)
+            name=self.counterstainChannel, units=('µm', 'µm'), 
+            contrast_limits=(min, max)
         )
         
         # remove hist_widget and layout attributes from Napari if they exist
@@ -226,6 +227,7 @@ def callback(self, viewer, sample, samples_to_run, data, initial_callback, selec
                     properties=point_properties,
                     face_color='cell_area',
                     face_colormap='viridis',
+                    units=('µm', 'µm'),
                     border_width=0.0, size=4.0)
 
         # add button functionality
@@ -428,10 +430,8 @@ def areaFilter(data, self, args):
     # generate histogram Qt widget
     hist_widget = QtWidgets.QWidget()
     hist_layout = QtWidgets.QVBoxLayout(hist_widget)
-    hist_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Fixed,
-        QtWidgets.QSizePolicy.Fixed
-    )
+    hist_widget.setFixedHeight(550)
+    hist_widget.setMinimumWidth(550)
     
     # make a list of all samples in batch, select the first one for which
     # cutoffs have not been previously assigned, and pass it to the callback
@@ -473,7 +473,6 @@ def areaFilter(data, self, args):
         )
         
         viewer.scale_bar.visible = True
-        viewer.scale_bar.unit = 'um'
 
         napari.run()
 

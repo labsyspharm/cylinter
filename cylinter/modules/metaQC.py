@@ -477,10 +477,12 @@ def metaQC(data, self, args):
         # otherwise cluster all data at once
         if len(QCData) < (batch_size) * 2:
             num_chunks = 1
-            chunks = np.array_split(QCData, num_chunks)
+            chunks = np.array_split(QCData.index, num_chunks)
+            chunks = [QCData.loc[idx].copy() for idx in chunks]
         else:
             num_chunks = math.ceil(len(QCData) / batch_size)
-            chunks = np.array_split(QCData, num_chunks)
+            chunks = np.array_split(QCData.index, num_chunks)
+            chunks = [QCData.loc[idx].copy() for idx in chunks]
         
         #######################################################################
         # loop over QCData chunks
@@ -671,11 +673,8 @@ def metaQC(data, self, args):
 
                         # generate vertical widget layout
                         cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
-
-                        cluster_widget.setSizePolicy(
-                            QtWidgets.QSizePolicy.Fixed,
-                            QtWidgets.QSizePolicy.Maximum,
-                        )
+                        cluster_widget.setFixedHeight(800)
+                        cluster_widget.setFixedWidth(1100)
 
                         #######################################################
                         @magicgui(
@@ -690,25 +689,63 @@ def metaQC(data, self, args):
 
                             sns.set_style('whitegrid')
 
-                            fig = plt.figure(figsize=(3.5, 3.5))
+                            fig = plt.figure(figsize=(12, 6))
                             matplotlib_warnings(fig)
 
-                            gs = plt.GridSpec(2, 4, figure=fig)
+                            # predictable spacing
+                            plot_width = 0.22
+                            plot_height = 0.52
 
-                            # define axes
-                            ax_cluster = fig.add_subplot(gs[0, 0])
-                            ax_status = fig.add_subplot(gs[0, 1])
-                            ax_reclass = fig.add_subplot(gs[0, 2])
-                            ax_sample = fig.add_subplot(gs[0, 3])
+                            left_margin = 0.025
+                            gap = 0.025
 
-                            ax_cluster_lbs = fig.add_subplot(gs[1, 0])
-                            ax_status_lbs = fig.add_subplot(gs[1, 1])
-                            ax_reclass_lbs = fig.add_subplot(gs[1, 2])
-                            ax_sample_lbs = fig.add_subplot(gs[1, 3])
+                            x_positions = [
+                                left_margin,
+                                left_margin + plot_width + gap,
+                                left_margin + 2 * (plot_width + gap),
+                                left_margin + 3 * (plot_width + gap)
+                            ]
+                            
+                            # vertical layout (shifted upward)
+                            plot_bottom = 0.40
+                            legend_bottom = 0.17
+                            legend_height = 0.23  # 0.17+0.23=0.40->touch plot
 
-                            plt.subplots_adjust(
-                                left=0.01, right=0.99, bottom=0.0,
-                                top=0.9, wspace=0.0, hspace=0.0)
+                            # plots
+                            ax_cluster = fig.add_axes(
+                                [x_positions[0], plot_bottom, 
+                                 plot_width, plot_height]
+                            )
+                            ax_status = fig.add_axes(
+                                [x_positions[1], plot_bottom, 
+                                 plot_width, plot_height]
+                            )
+                            ax_reclass = fig.add_axes(
+                                [x_positions[2], plot_bottom, 
+                                 plot_width, plot_height]
+                            )
+                            ax_sample = fig.add_axes(
+                                [x_positions[3], plot_bottom, 
+                                 plot_width, plot_height]
+                            )
+
+                            # legends directly below plots
+                            ax_cluster_lbs = fig.add_axes(
+                                [x_positions[0], legend_bottom, 
+                                 plot_width, legend_height]
+                            )
+                            ax_status_lbs = fig.add_axes(
+                                [x_positions[1], legend_bottom, 
+                                 plot_width, legend_height]
+                            )
+                            ax_reclass_lbs = fig.add_axes(
+                                [x_positions[2], legend_bottom, 
+                                 plot_width, legend_height]
+                            )
+                            ax_sample_lbs = fig.add_axes(
+                                [x_positions[3], legend_bottom, 
+                                 plot_width, legend_height]
+                            )
 
                             clustering = hdbscan.HDBSCAN(
                                 min_cluster_size=MCS,
@@ -1138,6 +1175,7 @@ def metaQC(data, self, args):
                                                     blending='additive',
                                                     colormap='green', 
                                                     visible=False, name=ch,
+                                                    units=('µm', 'µm'),
                                                     contrast_limits=(min, max)
                                                 )
                                         
@@ -1172,6 +1210,7 @@ def metaQC(data, self, args):
                                             viewer.add_points(
                                                 centroids, name=module,
                                                 visible=True, face_color=color,
+                                                units=('µm', 'µm'),
                                                 border_width=0.0, size=4.0)
 
                                         # read segmentation outlines,
@@ -1186,7 +1225,8 @@ def metaQC(data, self, args):
                                             seg, rgb=False,
                                             blending='additive',
                                             colormap='gray',
-                                            visible=False, name='segmentation', 
+                                            visible=False, name='segmentation',
+                                            units=('µm', 'µm'), 
                                             contrast_limits=(min, max)
                                         )
                                         
@@ -1217,6 +1257,7 @@ def metaQC(data, self, args):
                                             blending='additive',
                                             opacity=0.5, colormap='gray',
                                             visible=False, name=last_dna,
+                                            units=('µm', 'µm'),
                                             contrast_limits=(min, max)
                                         )
 
@@ -1236,6 +1277,7 @@ def metaQC(data, self, args):
                                             blending='additive',
                                             opacity=0.5, colormap='gray',
                                             visible=True, name=first_dna,
+                                            units=('µm', 'µm'),
                                             contrast_limits=(min, max)
                                         )
 
@@ -1491,7 +1533,6 @@ def metaQC(data, self, args):
                         )
 
                         viewer.scale_bar.visible = True
-                        viewer.scale_bar.unit = 'um'
 
                         napari.run()
                     

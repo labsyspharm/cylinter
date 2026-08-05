@@ -61,7 +61,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     seg, min, max = single_channel_pyramid(file_path, channel=0)
     viewer.add_image(
         seg, rgb=False, blending='additive', colormap='gray',
-        visible=False, name='segmentation', contrast_limits=(min, max)
+        visible=False, name='segmentation', units=('µm', 'µm'),
+        contrast_limits=(min, max)
     )
     
     # read DNA1 channel
@@ -72,7 +73,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
     dna, min, max = single_channel_pyramid(file_path, channel=channel_number)
     viewer.add_image(
         dna, rgb=False, blending='additive', colormap='gray',
-        name=self.counterstainChannel, contrast_limits=(min, max)
+        name=self.counterstainChannel, units=('µm', 'µm'),
+        contrast_limits=(min, max)
     )
 
     # read target antibody image
@@ -84,7 +86,8 @@ def callback(self, viewer, channel, sample, data, initial_callback, next_widget,
         )
         viewer.add_image(
             img, rgb=False, blending='additive', colormap='green',
-            visible=True, name=channel, contrast_limits=(min, max)
+            visible=True, name=channel, units=('µm', 'µm'),
+            contrast_limits=(min, max)
         )
 
     # apply previously defined contrast limits if they exist 
@@ -330,7 +333,6 @@ def setContrast(data, self, args):
     )
     
     viewer.scale_bar.visible = True
-    viewer.scale_bar.unit = 'um'
 
     napari.run()
 

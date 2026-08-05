@@ -518,7 +518,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             )
             viewer.add_image(
                 dna, rgb=False, opacity=1.0, name=self.counterstainChannel,
-                contrast_limits=(min, max)
+                units=('µm', 'µm'), contrast_limits=(min, max)
             )
 
             # read antibody channel
@@ -529,7 +529,8 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             )
             viewer.add_image(
                 channel, rgb=False, blending='additive', colormap='green',
-                visible=False, name=ch, contrast_limits=(min, max)
+                visible=False, name=ch, units=('µm', 'µm'), 
+                contrast_limits=(min, max)
             )
 
             # read segmentation outlines
@@ -538,7 +539,7 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
             viewer.add_image(
                 seg, rgb=False, blending='additive', opacity=1.0,
                 colormap='gray', visible=False, name='segmentation',
-                contrast_limits=(min, max)
+                units=('µm', 'µm'), contrast_limits=(min, max)
             )
 
             # grab centroids of low signal intensity outliers
@@ -555,12 +556,12 @@ def callback(self, viewer, channel, dfTrim, data, initial_callback, percentiles_
 
             viewer.add_points(
                 low_centroids, name='low centroids', properties=None,
-                face_color='magenta', border_color='k',
+                face_color='magenta', border_color='k', units=('µm', 'µm'),
                 border_width=0.0, size=8.0)
 
             viewer.add_points(
                 high_centroids, name='high centroids', properties=None,
-                face_color='cyan', border_color='k', 
+                face_color='cyan', border_color='k', units=('µm', 'µm'), 
                 border_width=0.0, size=8.0
             )
 
@@ -809,12 +810,12 @@ def pruneOutliers(data, self, args):
     )
     
     # generate Qt widget for plotting marker signal distributions
-    plot_widget = QtWidgets.QWidget()
-    plot_layout = QtWidgets.QVBoxLayout(plot_widget)
-    plot_widget.setSizePolicy(
-        QtWidgets.QSizePolicy.Preferred,
-        QtWidgets.QSizePolicy.Fixed
-    )
+    plot_widget_inner = QtWidgets.QWidget()
+    plot_layout = QtWidgets.QVBoxLayout(plot_widget_inner)
+
+    plot_widget = QtWidgets.QScrollArea()
+    plot_widget.setWidgetResizable(True)
+    plot_widget.setWidget(plot_widget_inner)
     
     # generate Qt widget for specifying arbitrary marker selections
     arbitrary_widget = QtWidgets.QWidget()
@@ -910,7 +911,6 @@ def pruneOutliers(data, self, args):
             )
             
             viewer.scale_bar.visible = True
-            viewer.scale_bar.unit = 'um'
 
             napari.run()
 
