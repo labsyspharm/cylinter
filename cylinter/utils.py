@@ -1001,8 +1001,13 @@ def compute_gmm(data, x_min, x_max, ax):
                 category=RuntimeWarning,
                 module="sklearn.cluster._kmeans"
             )
+            warnings.filterwarnings(
+                "ignore",
+                category=RuntimeWarning,
+                module="sklearn.mixture._gaussian_mixture"
+            )
             gmm.fit(data)
-        
+
         bic = gmm.bic(data)  # calculate BIC
 
         if bic < best_bic:
@@ -1019,6 +1024,11 @@ def compute_gmm(data, x_min, x_max, ax):
             "ignore",
             category=RuntimeWarning,
             module="sklearn.cluster._kmeans"
+        )
+        warnings.filterwarnings(
+            "ignore",
+            category=RuntimeWarning,
+            module="sklearn.mixture._gaussian_mixture"
         )
         gmm.fit(data)
 

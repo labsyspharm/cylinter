@@ -1,29 +1,32 @@
 [build-system]
-requires = ["poetry-core>=1.0.0", "setuptools>=80.0.0", "wheel>=0.45.0"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "CyLinter"
-version = "0.0.56"
+version = "0.0.57"
 description = "CyLinter: An Interactive Image Segmentation Filter for Multiplex Microscopy"
 readme = "README.md"
 license = "MIT"
-keywords =['CyLinter multiplex microscopy quality control']
-classifiers=[
-    'Development Status :: 4 - Beta',
-    'Intended Audience :: End Users/Desktop',
-    'Intended Audience :: Science/Research',
-    'Framework :: napari',
-    'License :: OSI Approved :: MIT License',
-    'Natural Language :: English',
-    'Operating System :: OS Independent',
-    'Programming Language :: Python :: 3',
-    'Topic :: Scientific/Engineering :: Visualization'
+keywords = ["CyLinter", "multiplex microscopy", "quality control"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Science/Research",
+    "Framework :: napari",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Visualization"
 ]
 authors = ["Gregory J. Baker <gregory_baker2@hms.harvard.edu>"]
 homepage = "https://github.com/labsyspharm/cylinter"
 
 [tool.poetry.dependencies]
+# Restrict Python to versions compatible with the legacy Zarr 2 stack.
+python = ">=3.9,<=3.14"
+
 cellcutter = "*"
 hdbscan = "*"
 joblib = "*"
@@ -35,8 +38,7 @@ natsort = "*"
 numba = "*"
 pandas = "*"
 pyarrow = "*"
-pyqt5 = ">=5.15,<5.16"  # ensuring PyQT5
-ffmpeg = "*"
+pyqt6 = "*"
 pyyaml = "*"
 qtpy = "*"
 scikit-image = "*"
@@ -45,11 +47,10 @@ seaborn = "*"
 tifffile = "<2023.7"
 umap-learn = "*"
 zarr = "<3"
-numcodecs = "*" # = "<0.12"  # ensuring compatibility with Zarr2
 svglib = "*"
 pypdf2 = "*"
-imagecodecs = "*"  # MIBI data fails to be read without this
-opencv-python = "4.8.*"  # ensuring PyQT5 build
+imagecodecs = "*"
+opencv-python = "*"
 
 [tool.poetry.scripts]
 cylinter = "cylinter.cylinter:main"

@@ -2,6 +2,7 @@ import os
 import sys
 import yaml
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -437,7 +438,7 @@ def clustering(data, self, args):
         # generate vertical widget layout
         cluster_layout = QtWidgets.QVBoxLayout(cluster_widget)
         cluster_widget.setFixedHeight(700)
-        cluster_widget.setFixedWidth(900)
+        cluster_widget.setFixedWidth(800)
 
         ###################################################################
         @magicgui(
@@ -545,10 +546,16 @@ def clustering(data, self, args):
                  len(silho_subset) + (n_clusters + 1) * silhouette_spacer]
             )
 
-            sample_silhouette_values = silhouette_samples(
-                silho_subset[embed_cols], 
-                silho_subset[f'cluster_{self.dimensionEmbedding}d']
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    category=RuntimeWarning,
+                    module=r"sklearn\.utils\.extmath"
+                )
+                sample_silhouette_values = silhouette_samples(
+                    silho_subset[embed_cols], 
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                )
 
             y_lower = silhouette_spacer
             for i in cluster_centers.index.unique():
@@ -579,10 +586,16 @@ def clustering(data, self, args):
                 # compute the new y_lower for next plot
                 y_lower = y_upper + silhouette_spacer
 
-            silhouette_avg = silhouette_score(
-                silho_subset[embed_cols], 
-                silho_subset[f'cluster_{self.dimensionEmbedding}d']
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    category=RuntimeWarning,
+                    module=r"sklearn\.utils\.extmath"
+                )
+                silhouette_avg = silhouette_score(
+                    silho_subset[embed_cols], 
+                    silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                )
 
             ax1_silho.set_title('Silhouette Plot')
             ax1_silho.set_xlabel('Silhouette Coefficients')
@@ -661,16 +674,16 @@ def clustering(data, self, args):
                 selector = None
                 
                 sns.set_style('whitegrid')
-                fig = plt.figure(figsize=(11, 6))
+                fig = plt.figure(figsize=(16, 10))
 
                 matplotlib_warnings(fig)
 
-                width = 0.30
-                height = 0.55
+                width = 0.31
+                height = 0.5
 
-                left_margin = 0.03
+                left_margin = 0.02
                 gap = 0.015
-                bottom = 0.38
+                bottom = 0.48
 
                 x_positions = [
                     left_margin,
@@ -1458,6 +1471,7 @@ def clustering(data, self, args):
             QtWidgets.QSizePolicy.Fixed,
             QtWidgets.QSizePolicy.Maximum,
         )
+        cluster_and_plot.native.setFixedWidth(400)
 
         ###################################################################
         @magicgui(
@@ -1516,10 +1530,16 @@ def clustering(data, self, args):
                         i for i in silho_subset.columns if 'emb' in i
                     ]
 
-                    silhouette_avg = silhouette_score(
-                        silho_subset[embed_cols],
-                        silho_subset[f'cluster_{self.dimensionEmbedding}d']
-                    )
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore",
+                            category=RuntimeWarning,
+                            module=r"sklearn\.utils\.extmath"
+                        )
+                        silhouette_avg = silhouette_score(
+                            silho_subset[embed_cols],
+                            silho_subset[f'cluster_{self.dimensionEmbedding}d']
+                        )
 
                     total_clusters = len(
                         silho_input[
@@ -1545,11 +1565,11 @@ def clustering(data, self, args):
                     )
 
         #######################################################################
-
         sweep_MCS.native.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Fixed,
             QtWidgets.QSizePolicy.Maximum,
         )
+        sweep_MCS.native.setFixedWidth(550)
 
         viewer.window.add_dock_widget(
             cluster_and_plot, name='Plot Single MCS', area='right'

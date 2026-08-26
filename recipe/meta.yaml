@@ -7,7 +7,7 @@ package:
 
 source:
   git_url: https://github.com/labsyspharm/cylinter.git
-  git_tag: v0.0.56
+  git_tag: v0.0.57
 
 build:
   number: 0
@@ -38,7 +38,7 @@ requirements:
     - numba
     - pandas
     - pyarrow
-    - pyqt==5.15.11  # ensuring PyQT5
+    - pyqt6
     - ffmpeg
     - pyyaml
     - qtpy
@@ -48,11 +48,10 @@ requirements:
     - tifffile
     - umap-learn
     - zarr <3
-    - numcodecs <0.12  # ensuring compatibility with Zarr2
     - svglib
     - pypdf2
     - imagecodecs  # MIBI data fails to be read without this
-    - opencv==4.8.*  # ensuring PyQT5 build
+    - opencv
 
 test:
   imports:

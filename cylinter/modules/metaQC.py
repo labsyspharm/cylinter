@@ -1490,6 +1490,7 @@ def metaQC(data, self, args):
                             QtWidgets.QSizePolicy.Fixed,
                             QtWidgets.QSizePolicy.Maximum,
                         )
+                        cluster_and_plot.native.setFixedWidth(400)
 
                         #######################################################
                         @magicgui(
@@ -1530,9 +1531,10 @@ def metaQC(data, self, args):
                         #######################################################
 
                         sweep_MCS.native.setSizePolicy(
-                            QtWidgets.QSizePolicy.Maximum,
+                            QtWidgets.QSizePolicy.Fixed,
                             QtWidgets.QSizePolicy.Maximum,
                         )
+                        sweep_MCS.native.setFixedWidth(550)
 
                         viewer.window.add_dock_widget(
                             cluster_and_plot, name='Plot Single MCS',
