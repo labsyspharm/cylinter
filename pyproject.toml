@@ -24,16 +24,14 @@ authors = ["Gregory J. Baker <gregory_baker2@hms.harvard.edu>"]
 homepage = "https://github.com/labsyspharm/cylinter"
 
 [tool.poetry.dependencies]
-# Restrict Python to versions compatible with the legacy Zarr 2 stack.
-python = ">=3.9,<=3.14"
-
+python = ">=3.11,<3.14"
 cellcutter = "*"
 hdbscan = "*"
 joblib = "*"
 magicgui = "*"
 matplotlib = "*"
-napari = "*"
-numpy = "<2"
+napari = ">=0.9.0"  # newer napari versions handle scalebar metadata differently
+numpy = "*"
 natsort = "*"
 numba = "*"
 pandas = "*"
@@ -44,12 +42,12 @@ qtpy = "*"
 scikit-image = "*"
 scikit-learn = "*"
 seaborn = "*"
-tifffile = "<2023.7"
 umap-learn = "*"
-zarr = "<3"
+zarr = "*"
+tifffile = "*"
 svglib = "*"
 pypdf2 = "*"
-imagecodecs = "*"
+imagecodecs = "*"  # MIBI data fails to be read without this
 opencv-python = "*"
 
 [tool.poetry.scripts]

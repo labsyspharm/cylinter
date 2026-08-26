@@ -11,18 +11,20 @@ source:
 
 build:
   number: 0
-  noarch: python
-  script:
-    - "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv"
+  script: 
+    - "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv "
   entry_points:
     - cylinter=cylinter.cylinter:main
-
+  noarch: python
+channels:
+  - conda-forge
 requirements:
+  build:
+    - poetry
   host:
     - pip
-    - python >=3.11,<3.14
-    - poetry-core >=1.0.0
-
+    - python
+    - poetry
   run:
     - python >=3.11,<3.14
     - cellcutter
@@ -30,7 +32,7 @@ requirements:
     - joblib
     - magicgui
     - matplotlib
-    - napari >=0.9.0  # newer napari versions handle scalebar metadata differently
+    - napari >0.8.0,<0.9.0  # newer napari versions handle scalebar metadata differently
     - numpy
     - natsort
     - numba
@@ -44,8 +46,9 @@ requirements:
     - scikit-learn
     - seaborn
     - umap-learn
-    - zarr
-    - tifffile
+    - zarr >=2.18,<3  # CyLinter is written using the Zarr 2 API
+    - tifffile <2023.7 # ensuring Zarr 2 compatibility
+    - numcodecs
     - svglib
     - pypdf2
     - imagecodecs  # MIBI data fails to be read without this
@@ -58,4 +61,5 @@ test:
 about:
   home: https://labsyspharm.github.io/cylinter/
   license: MIT
+  license_family: BSD
   summary: Quality Control Software for Multiplex Microscopy
