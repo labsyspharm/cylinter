@@ -25,25 +25,26 @@ homepage = "https://github.com/labsyspharm/cylinter"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14"
-cellcutter = "*"
+cellcutter = "=0.2.13"  # this version is compatible with Zarr3
 hdbscan = "*"
 joblib = "*"
 magicgui = "*"
 matplotlib = "*"
-napari = ">=0.9.0"  # newer napari versions handle scalebar metadata differently
+napari = ">=0.9.0"  # cylinter code compatible with newer napari versions that handle scalebar metadata differently
 numpy = "*"
 natsort = "*"
 numba = "*"
 pandas = "*"
 pyarrow = "*"
 pyqt6 = "*"
+pyqt6-qt6 = "*"  # 6.8.4 leads to frozen widget window sliders, but conda solve fails with 6.8.2
 pyyaml = "*"
 qtpy = "*"
 scikit-image = "*"
 scikit-learn = "*"
 seaborn = "*"
 umap-learn = "*"
-zarr = "*"
+zarr = ">=3"
 tifffile = "*"
 svglib = "*"
 pypdf2 = "*"
